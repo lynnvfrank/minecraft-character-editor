@@ -106,6 +106,7 @@ function resolveSkinByName(name: string): string | undefined {
 }
 
 function initScene() {
+  if (!container) throw new Error('Missing #three-canvas-container element in DOM.');
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x050710);
 
@@ -712,6 +713,7 @@ function highlightActiveButton(charId: string, action: THREE.AnimationAction) {
 }
 
 function onWindowResize() {
+  if (!container) return;
   const width = container.clientWidth;
   const height = container.clientHeight;
   camera.aspect = width / height;
