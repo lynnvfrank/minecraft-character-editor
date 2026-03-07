@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import { preprocessSkinTexture } from './skinPreprocess';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { createSocketManager } from './socketManager';
+import { createAnimationManager, type SequenceStep, type CharacterStateLike } from './animationManager';
+import { createFakeChatUI } from './fakeChatUI';
 
 type SkinEntry = {
   path: string;
@@ -27,6 +30,8 @@ const FALLBACK_ANIMATIONS: AnimationEntry[] = [
 
 type CharacterState = {
   id: string;
+  /** Root container we move during walkTo (model is child at 0,0,0) — isolates root motion */
+  container: THREE.Group;
   model: THREE.Group;
   mixer: THREE.AnimationMixer;
   actions: Record<string, THREE.AnimationAction>;
@@ -85,6 +90,12 @@ const characters: Record<string, CharacterState> = {};
 const clock = new THREE.Clock();
 let skinsList: SkinEntry[] = [];
 let animationsList: AnimationEntry[] = [];
+
+/** Composite sequences loaded from /sequences/index.json */
+type Sequence = { id: string; label: string; steps: SequenceStep[] };
+let sequencesList: Sequence[] = [];
+let socketManager: ReturnType<typeof createSocketManager> | null = null;
+let animationManager: ReturnType<typeof createAnimationManager> | null = null;
 
 async function apiPost(path: string, params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
@@ -443,7 +454,7 @@ function applySkinToModel(
 }
 
 function fadeToAction(
-  char: CharacterState,
+  char: CharacterStateLike,
   next: THREE.AnimationAction,
   duration: number = 0.5
 ): void {
@@ -478,7 +489,7 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
         console.info('Loaded:', config.label);
 
         model.scale.setScalar(0.01);
-        model.position.copy(config.position);
+        model.position.set(0, 0, 0);
         if (LOG_MODEL_INFO) {
           logMeshNames(model, config.label);
           logModelUVInfo(model, config.label);
@@ -488,7 +499,11 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
           applySkinToModel(model, texToUse, config.texturePreset, config.alphaMode);
         }
         applyShadowToModel(model);
-        scene.add(model);
+
+        const container = new THREE.Group();
+        container.position.copy(config.position);
+        container.add(model);
+        scene.add(container);
 
         const mixer = new THREE.AnimationMixer(model);
         const actions: Record<string, THREE.AnimationAction> = {};
@@ -510,6 +525,7 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
             const idleAction = idleKey ? actions[idleKey] : Object.values(actions)[0];
             characters[config.id] = {
               id: config.id,
+              container,
               model,
               mixer,
               actions,
@@ -532,6 +548,7 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
             if (Object.keys(characters).length === 1) {
               setupAnimationButtons(animationsList);
               setupSkinPreviews(skins);
+              setupSequenceButtons(sequencesList);
             }
           }
         };
@@ -635,7 +652,10 @@ function setupSkinPreviews(skins: SkinEntry[]) {
     img.loading = 'lazy';
     wrap.appendChild(img);
 
-    wrap.addEventListener('click', () => apiPost('/api/skin', { name: skin.path }));
+    wrap.addEventListener('click', () => {
+      if (socketManager) socketManager.emitSkin(skin.path);
+      else apiPost('/api/skin', { name: skin.path });
+    });
     container.appendChild(wrap);
   });
 
@@ -658,7 +678,10 @@ function setupAnimationButtons(animations: AnimationEntry[]) {
     btn.dataset.action = anim.key;
     btn.textContent = anim.label;
     btn.setAttribute('aria-label', `Play animation: ${anim.label}`);
-    btn.addEventListener('click', () => apiPost('/api/animation', { name: anim.key }));
+    btn.addEventListener('click', () => {
+      if (socketManager) socketManager.emitAnimation(anim.key);
+      else apiPost('/api/animation', { name: anim.key });
+    });
     container.appendChild(btn);
   });
 
@@ -666,33 +689,48 @@ function setupAnimationButtons(animations: AnimationEntry[]) {
   if (char?.idleAction) highlightActiveButton(charId, char.idleAction);
 }
 
-function setupApiEvents() {
-  const es = new EventSource('/api/events');
-  es.onmessage = (e) => {
-    try {
-      const { type, name } = JSON.parse(e.data);
-      const charId = 'runningboy';
-      const char = characters[charId];
+function setupSequenceButtons(sequences: Sequence[]) {
+  const container = document.getElementById('sequence-selector');
+  if (!container || !animationManager) return;
 
-      if (type === 'skin') {
-        const skinPath = resolveSkinByName(name) ?? name;
-        if (char) switchSkin(charId, skinPath);
-      } else if (type === 'animation' && char) {
-        if (name === 'back-to-idle') {
-          if (char.idleAction) fadeToAction(char, char.idleAction, 0.5);
-          return;
-        }
-        const action = getAction(charId, name);
-        if (action) fadeToAction(char, action, 0.5);
-      }
-    } catch (err) {
-      console.warn('[API] Failed to parse event:', err);
+  container.innerHTML = '';
+
+  sequences.forEach((seq) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sequence-button';
+    btn.dataset.sequence = seq.id;
+    btn.textContent = seq.label;
+    btn.setAttribute('aria-label', `Play sequence: ${seq.label}`);
+    btn.addEventListener('click', () => {
+      animationManager!.setLastActivity();
+      animationManager!.playSequence(seq.steps);
+    });
+    container.appendChild(btn);
+  });
+}
+
+function setupSocketEvents() {
+  if (!socketManager) return;
+
+  socketManager.on('skin', (data) => {
+    const skinPath = resolveSkinByName(data.name) ?? data.name;
+    const char = characters['runningboy'];
+    if (char) switchSkin('runningboy', skinPath);
+  });
+
+  socketManager.on('animation', (data) => {
+    const char = characters['runningboy'];
+    if (!char) return;
+    animationManager?.stop();
+    animationManager?.setLastActivity();
+    if (data.name === 'back-to-idle') {
+      if (char.idleAction) fadeToAction(char, char.idleAction, 0.5);
+      return;
     }
-  };
-  es.onerror = () => {
-    es.close();
-    setTimeout(setupApiEvents, 3000);
-  };
+    const action = getAction('runningboy', data.name);
+    if (action) fadeToAction(char, action, 0.5);
+  });
 }
 
 function highlightActiveButton(charId: string, action: THREE.AnimationAction) {
@@ -725,6 +763,10 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   Object.values(characters).forEach((char) => char.mixer.update(delta));
+  if (animationManager) {
+    animationManager.tick(delta);
+    animationManager.checkIdleTimers();
+  }
   controls.update();
   renderer.render(scene, camera);
 }
@@ -752,10 +794,36 @@ async function main() {
   }
   animationsList = animations;
 
+  let sequences: Sequence[] = [];
+  try {
+    const seqRes = await fetch('/sequences/index.json');
+    const seqData = await seqRes.json();
+    sequences = Array.isArray(seqData?.sequences) ? seqData.sequences : [];
+  } catch {
+    console.warn('[Sequences] Could not load /sequences/index.json');
+  }
+  sequencesList = sequences;
+
+  socketManager = createSocketManager();
+  animationManager = createAnimationManager({
+    getCharacter: (id) => characters[id],
+    fadeToAction,
+    getAction,
+    clock
+  });
+  setupSocketEvents();
+
+  createFakeChatUI({
+    onPlaySequence: (seq) => animationManager!.playSequence(seq),
+    onMessageSent: () => animationManager!.setLastActivity(),
+    getExampleSequences: () => sequencesList.map((s) => s.steps),
+    setLastActivity: () => animationManager!.setLastActivity(),
+    checkIdleTimers: () => animationManager!.checkIdleTimers()
+  });
+
   const config = buildCharacterConfig(skins[0].path, animations);
   loadCharacter(config, skins);
 
-  setupApiEvents();
   window.addEventListener('resize', onWindowResize);
   animate();
 }

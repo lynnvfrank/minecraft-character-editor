@@ -1,0 +1,86 @@
+{
+  "sequences": [
+    {
+      "id": "wave-and-happy",
+      "label": "Wave & Happy",
+      "steps": [
+        { "type": "animation", "name": "waving", "duration": 1.5 },
+        { "type": "animation", "name": "happy", "duration": 1 }
+      ]
+    },
+    {
+      "id": "walk-in-clap-walk-back",
+      "label": "Walk In, Clap, Walk Back",
+      "steps": [
+        { "type": "walkTo", "target": [0, 0, 1.5], "speed": 1.2 },
+        { "type": "animation", "name": "clapping", "duration": 2 },
+        { "type": "walkTo", "target": [0, 0, 0], "speed": 1.2 }
+      ]
+    },
+    {
+      "id": "excited-then-thinking",
+      "label": "Excited → Thinking",
+      "steps": [
+        { "type": "animation", "name": "excited", "duration": 2 },
+        { "type": "animation", "name": "thinking", "duration": 1.5 }
+      ]
+    },
+    {
+      "id": "greet-wave",
+      "label": "Greet Wave",
+      "steps": [
+        { "type": "animation", "name": "waving", "duration": 1.5 }
+      ]
+    },
+    {
+      "id": "wave-thumbs-up",
+      "label": "Wave + Thumbs Up",
+      "steps": [
+        { "type": "animation", "name": "waving", "duration": 1 },
+        { "type": "animation", "name": "standing-thumbs-up", "duration": 1.5 }
+      ]
+    },
+    {
+      "id": "walk-forward-bow",
+      "label": "Walk Forward & Bow",
+      "steps": [
+        { "type": "walkTo", "target": [0, 0, 1.2], "speed": 1 },
+        { "type": "animation", "name": "quick-informal-bow", "duration": 1.5 }
+      ]
+    },
+    {
+      "id": "excited-surprised",
+      "label": "Excited → Surprised",
+      "steps": [
+        { "type": "animation", "name": "excited", "duration": 2 },
+        { "type": "animation", "name": "surprised", "duration": 1 }
+      ]
+    },
+    {
+      "id": "thinking-nod",
+      "label": "Thinking → Nod",
+      "steps": [
+        { "type": "animation", "name": "thinking", "duration": 2 },
+        { "type": "animation", "name": "hard-head-nod", "duration": 1 }
+      ]
+    },
+    {
+      "id": "shy-then-wave",
+      "label": "Shy → Wave",
+      "steps": [
+        { "type": "animation", "name": "bashful", "duration": 1 },
+        { "type": "animation", "name": "acknowledging", "duration": 1 }
+      ]
+    },
+    {
+      "id": "walk-closer-wave-walk-back",
+      "label": "Walk Closer, Wave, Walk Back",
+      "steps": [
+        { "type": "walkTo", "target": [0, 0, 1.2], "speed": 1 },
+        { "type": "animation", "name": "acknowledging", "duration": 1.2 },
+        { "type": "animation", "name": "happy", "duration": 1 },
+        { "type": "walkTo", "target": [0, 0, 0], "speed": 1 }
+      ]
+    }
+  ]
+}

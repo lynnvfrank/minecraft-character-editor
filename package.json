@@ -14,7 +14,9 @@
     "set-animation": "node scripts/set-animation.js"
   },
   "dependencies": {
+    "@tweenjs/tween.js": "^25.0.0",
     "express": "^4.21.0",
+    "socket.io-client": "^4.8.3",
     "three": "^0.165.0"
   },
   "devDependencies": {
