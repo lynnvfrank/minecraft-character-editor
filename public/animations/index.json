@@ -5,6 +5,11 @@
     "label": "Acknowledging"
   },
   {
+    "path": "/animations/Arm-Stretching-RunningboyRig.fbx",
+    "key": "arm-stretching",
+    "label": "Arm Stretching"
+  },
+  {
     "path": "/animations/Bashful-RunningboyRig.fbx",
     "key": "bashful",
     "label": "Bashful"
@@ -55,6 +60,11 @@
     "label": "Happy"
   },
   {
+    "path": "/animations/Hard-Head-Nod-RunningboyRig.fbx",
+    "key": "hard-head-nod",
+    "label": "Hard Head Nod"
+  },
+  {
     "path": "/animations/Laughing-RunningboyRig.fbx",
     "key": "laughing",
     "label": "Laughing"
@@ -63,6 +73,21 @@
     "path": "/animations/Laying-RunningboyRig.fbx",
     "key": "laying",
     "label": "Laying"
+  },
+  {
+    "path": "/animations/Look-Around-RunningboyRig.fbx",
+    "key": "look-around",
+    "label": "Look Around"
+  },
+  {
+    "path": "/animations/Pointing-RunningboyRig.fbx",
+    "key": "pointing",
+    "label": "Pointing"
+  },
+  {
+    "path": "/animations/Quick-Informal-Bow-RunningboyRig.fbx",
+    "key": "quick-informal-bow",
+    "label": "Quick Informal Bow"
   },
   {
     "path": "/animations/Shrugging-RunningboyRig.fbx",
@@ -95,9 +120,44 @@
     "label": "Stand To Sit"
   },
   {
+    "path": "/animations/Standing-Thumbs-Up-RunningboyRig.fbx",
+    "key": "standing-thumbs-up",
+    "label": "Standing Thumbs Up"
+  },
+  {
+    "path": "/animations/Surprised-RunningboyRig.fbx",
+    "key": "surprised",
+    "label": "Surprised"
+  },
+  {
+    "path": "/animations/Texting-RunningboyRig.fbx",
+    "key": "texting",
+    "label": "Texting"
+  },
+  {
+    "path": "/animations/Thinking-RunningboyRig.fbx",
+    "key": "thinking",
+    "label": "Thinking"
+  },
+  {
+    "path": "/animations/Thoughtful-Head-Shake-RunningboyRig.fbx",
+    "key": "thoughtful-head-shake",
+    "label": "Thoughtful Head Shake"
+  },
+  {
     "path": "/animations/Walk-In-Circle-RunningboyRig.fbx",
     "key": "walk-in-circle",
     "label": "Walk In Circle"
+  },
+  {
+    "path": "/animations/Walking-Backwards-RunningboyRig.fbx",
+    "key": "walking-backwards",
+    "label": "Walking Backwards"
+  },
+  {
+    "path": "/animations/Waving-RunningboyRig.fbx",
+    "key": "waving",
+    "label": "Waving"
   },
   {
     "path": "/animations/Yawn-RunningboyRig.fbx",
