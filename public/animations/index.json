@@ -1,0 +1,167 @@
+[
+  {
+    "path": "/animations/Acknowledging-RunningboyRig.fbx",
+    "key": "acknowledging",
+    "label": "Acknowledging"
+  },
+  {
+    "path": "/animations/Bashful-RunningboyRig.fbx",
+    "key": "bashful",
+    "label": "Bashful"
+  },
+  {
+    "path": "/animations/BlowAKiss-RunningboyRig.fbx",
+    "key": "blow-akiss",
+    "label": "BlowAKiss"
+  },
+  {
+    "path": "/animations/Bored-RunningboyRig.fbx",
+    "key": "bored",
+    "label": "Bored"
+  },
+  {
+    "path": "/animations/Clapping-RunningboyRig.fbx",
+    "key": "clapping",
+    "label": "Clapping"
+  },
+  {
+    "path": "/animations/Crying-RunningboyRig.fbx",
+    "key": "crying",
+    "label": "Crying"
+  },
+  {
+    "path": "/animations/Dancing-Twerk-RunningboyRig.fbx",
+    "key": "dancing-twerk",
+    "label": "Dancing Twerk"
+  },
+  {
+    "path": "/animations/Excited-RunningboyRig.fbx",
+    "key": "excited",
+    "label": "Excited"
+  },
+  {
+    "path": "/animations/Female-Walk-RunningboyRig.fbx",
+    "key": "female-walk",
+    "label": "Female Walk"
+  },
+  {
+    "path": "/animations/Happy-Idle-RunningboyRig.fbx",
+    "key": "happy-idle",
+    "label": "Happy Idle"
+  },
+  {
+    "path": "/animations/Happy-RunningboyRig.fbx",
+    "key": "happy",
+    "label": "Happy"
+  },
+  {
+    "path": "/animations/Laughing-RunningboyRig.fbx",
+    "key": "laughing",
+    "label": "Laughing"
+  },
+  {
+    "path": "/animations/Laying-RunningboyRig.fbx",
+    "key": "laying",
+    "label": "Laying"
+  },
+  {
+    "path": "/animations/Shrugging-RunningboyRig.fbx",
+    "key": "shrugging",
+    "label": "Shrugging"
+  },
+  {
+    "path": "/animations/Sit-To-Stand-RunningboyRig.fbx",
+    "key": "sit-to-stand",
+    "label": "Sit To Stand"
+  },
+  {
+    "path": "/animations/Sitting-Clap-RunningboyRig.fbx",
+    "key": "sitting-clap",
+    "label": "Sitting Clap"
+  },
+  {
+    "path": "/animations/Sitting-Talking-RunningboyRig.fbx",
+    "key": "sitting-talking",
+    "label": "Sitting Talking"
+  },
+  {
+    "path": "/animations/Sitting-Yell-RunningboyRig.fbx",
+    "key": "sitting-yell",
+    "label": "Sitting Yell"
+  },
+  {
+    "path": "/animations/Stand-To-Sit-RunningboyRig.fbx",
+    "key": "stand-to-sit",
+    "label": "Stand To Sit"
+  },
+  {
+    "path": "/animations/Walk-In-Circle-RunningboyRig.fbx",
+    "key": "walk-in-circle",
+    "label": "Walk In Circle"
+  },
+  {
+    "path": "/animations/Yawn-RunningboyRig.fbx",
+    "key": "yawn",
+    "label": "Yawn"
+  },
+  {
+    "path": "/animations/idle-RunningboyRig.fbx",
+    "key": "idle",
+    "label": "idle"
+  },
+  {
+    "path": "/animations/jump-RunningboyRig.fbx",
+    "key": "jump",
+    "label": "jump"
+  },
+  {
+    "path": "/animations/left-strafe-RunningboyRig.fbx",
+    "key": "left-strafe",
+    "label": "left strafe"
+  },
+  {
+    "path": "/animations/left-strafe-walk-RunningboyRig.fbx",
+    "key": "left-strafe-walk",
+    "label": "left strafe walk"
+  },
+  {
+    "path": "/animations/left-turn-2-RunningboyRig.fbx",
+    "key": "left-turn-2",
+    "label": "left turn 2"
+  },
+  {
+    "path": "/animations/left-turn-RunningboyRig.fbx",
+    "key": "left-turn",
+    "label": "left turn"
+  },
+  {
+    "path": "/animations/right-strafe-RunningboyRig.fbx",
+    "key": "right-strafe",
+    "label": "right strafe"
+  },
+  {
+    "path": "/animations/right-strafe-walk-RunningboyRig.fbx",
+    "key": "right-strafe-walk",
+    "label": "right strafe walk"
+  },
+  {
+    "path": "/animations/right-turn-2-RunningboyRig.fbx",
+    "key": "right-turn-2",
+    "label": "right turn 2"
+  },
+  {
+    "path": "/animations/right-turn-RunningboyRig.fbx",
+    "key": "right-turn",
+    "label": "right turn"
+  },
+  {
+    "path": "/animations/running-RunningboyRig.fbx",
+    "key": "running",
+    "label": "running"
+  },
+  {
+    "path": "/animations/walking-RunningboyRig.fbx",
+    "key": "walking",
+    "label": "walking"
+  }
+]

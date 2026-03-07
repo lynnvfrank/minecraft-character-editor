@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>3D Character Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="three-canvas-container"></div>
+      <div id="controls-bar">
+        <div class="control-group skin-control-group">
+          <span class="group-label">Skin</span>
+          <div id="skin-selector" class="skin-selector" role="listbox" aria-label="Available skins"></div>
+        </div>
+        <div class="control-group anim-control-group">
+          <span class="group-label">Animation</span>
+          <div id="anim-selector" class="button-row" role="group" aria-label="Available animations"></div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
