@@ -36,8 +36,8 @@
       "id": "wave-thumbs-up",
       "label": "Wave + Thumbs Up",
       "steps": [
-        { "type": "animation", "name": "waving", "duration": 1 },
-        { "type": "animation", "name": "standing-thumbs-up", "duration": 1.5 }
+        { "type": "animation", "name": "waving", "duration": 4 },
+        { "type": "animation", "name": "standing-thumbs-up", "duration": 3 }
       ]
     },
     {

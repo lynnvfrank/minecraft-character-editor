@@ -145,11 +145,6 @@
     "label": "Thoughtful Head Shake"
   },
   {
-    "path": "/animations/Walk-In-Circle-RunningboyRig.fbx",
-    "key": "walk-in-circle",
-    "label": "Walk In Circle"
-  },
-  {
     "path": "/animations/Walking-Backwards-RunningboyRig.fbx",
     "key": "walking-backwards",
     "label": "Walking Backwards"
@@ -175,16 +170,6 @@
     "label": "jump"
   },
   {
-    "path": "/animations/left-strafe-RunningboyRig.fbx",
-    "key": "left-strafe",
-    "label": "left strafe"
-  },
-  {
-    "path": "/animations/left-strafe-walk-RunningboyRig.fbx",
-    "key": "left-strafe-walk",
-    "label": "left strafe walk"
-  },
-  {
     "path": "/animations/left-turn-2-RunningboyRig.fbx",
     "key": "left-turn-2",
     "label": "left turn 2"
@@ -195,16 +180,6 @@
     "label": "left turn"
   },
   {
-    "path": "/animations/right-strafe-RunningboyRig.fbx",
-    "key": "right-strafe",
-    "label": "right strafe"
-  },
-  {
-    "path": "/animations/right-strafe-walk-RunningboyRig.fbx",
-    "key": "right-strafe-walk",
-    "label": "right strafe walk"
-  },
-  {
     "path": "/animations/right-turn-2-RunningboyRig.fbx",
     "key": "right-turn-2",
     "label": "right turn 2"
@@ -213,11 +188,6 @@
     "path": "/animations/right-turn-RunningboyRig.fbx",
     "key": "right-turn",
     "label": "right turn"
-  },
-  {
-    "path": "/animations/running-RunningboyRig.fbx",
-    "key": "running",
-    "label": "running"
   },
   {
     "path": "/animations/walking-RunningboyRig.fbx",

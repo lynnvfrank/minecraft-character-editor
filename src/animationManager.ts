@@ -105,7 +105,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     });
   }
 
-  /** Move character to target over time using clock-driven lerp. Uses idle animation during move. */
+  /** Move character to target over time using clock-driven lerp. Plays walking animation (in-place) during move. */
   function walkTo(
     target: THREE.Vector3 | [number, number, number],
     speed = 1
@@ -124,7 +124,12 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
       const distance = start.distanceTo(end);
       const durationSec = Math.max(distance / Math.max(speed, 0.1), 0.1);
 
-      if (char.idleAction) fadeToAction(char, char.idleAction, 0.2);
+      const walkAction = getAction(CHAR_ID, 'walking');
+      if (walkAction) {
+        fadeToAction(char, walkAction, 0.2);
+      } else if (char.idleAction) {
+        fadeToAction(char, char.idleAction, 0.2);
+      }
 
       activeWalk = {
         root,
