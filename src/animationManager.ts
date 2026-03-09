@@ -4,6 +4,7 @@
  * Uses clock-driven lerp for movement (no TWEEN) so it runs in sync with the render loop.
  */
 import * as THREE from 'three';
+import { logger } from './logger';
 
 /** Minimal character state required for animation manager (main's CharacterState extends this) */
 export type CharacterStateLike = {
@@ -24,7 +25,7 @@ type AnimationManagerDeps = {
   getCharacter: (id: string) => CharacterStateLike | undefined;
   fadeToAction: (char: CharacterStateLike, action: THREE.AnimationAction, duration: number) => void;
   getAction: (charId: string, name: string) => THREE.AnimationAction | undefined;
-  clock: THREE.Clock;
+  clock?: THREE.Clock;
 };
 
 /** Small emotes for idle wanderer — quick, non-disruptive */
@@ -50,7 +51,7 @@ const WAYPOINTS: THREE.Vector3[] = [
 ];
 
 export function createAnimationManager(deps: AnimationManagerDeps) {
-  const { getCharacter, fadeToAction, getAction, clock } = deps;
+  const { getCharacter, fadeToAction, getAction } = deps;
   const CHAR_ID = 'runningboy';
 
   let queue: SequenceStep[] = [];
@@ -77,6 +78,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   /** Stop current sequence and clear queue */
   function stop() {
     sequenceGeneration++;
+    logger.info('animation', 'Sequence cancelled', { generation: sequenceGeneration });
     queue = [];
     isPlaying = false;
     if (activeWalk) {
@@ -124,6 +126,13 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
       const distance = start.distanceTo(end);
       const durationSec = Math.max(distance / Math.max(speed, 0.1), 0.1);
 
+      logger.info('animation', 'Walk start', {
+        start: [start.x, start.y, start.z],
+        end: [end.x, end.y, end.z],
+        durationSec,
+        speed
+      });
+
       const walkAction = getAction(CHAR_ID, 'walking');
       if (walkAction) {
         fadeToAction(char, walkAction, 0.2);
@@ -138,6 +147,9 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
         durationSec,
         elapsed: 0,
         resolve: () => {
+          logger.info('animation', 'Walk end', {
+            pos: [root.position.x, root.position.y, root.position.z]
+          });
           if (char.idleAction) fadeToAction(char, char.idleAction!, 0.3);
           resolve();
         }
@@ -164,12 +176,22 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     }
 
     if (step.type === 'animation') {
+      logger.info('animation', 'Sequence step', {
+        type: 'animation',
+        name: step.name,
+        duration: step.duration ?? 2
+      });
       await playAnimationForDuration(char, step.name, step.duration ?? 2);
     } else if (step.type === 'walkTo') {
       const target =
         step.target instanceof THREE.Vector3
           ? step.target
           : new THREE.Vector3(...step.target);
+      logger.info('animation', 'Sequence step', {
+        type: 'walkTo',
+        target: Array.isArray(step.target) ? step.target : [target.x, target.y, target.z],
+        speed: step.speed ?? 1
+      });
       await walkTo(target, step.speed ?? 1);
     }
 
@@ -189,6 +211,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     sequenceGeneration++;
     queue = [...sequence];
     isPlaying = true;
+    logger.info('animation', 'Sequence started', { generation: sequenceGeneration, steps: sequence.length });
     runNextStep(sequenceGeneration);
   }
 
@@ -211,6 +234,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   function startIdleWanderer() {
     if (wanderIntervalId) return;
     idleWanderEnabled = true;
+    logger.info('stateMachine', 'Idle wanderer start', {});
     wanderIntervalId = setInterval(() => {
       if (!idleWanderEnabled || isPlaying) return;
       doOneWanderStep();
@@ -218,6 +242,9 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   }
 
   function stopIdleWanderer() {
+    if (idleWanderEnabled || wanderIntervalId) {
+      logger.info('stateMachine', 'Idle wanderer stop', {});
+    }
     idleWanderEnabled = false;
     if (wanderIntervalId) {
       clearInterval(wanderIntervalId);
@@ -229,6 +256,12 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     if (activeWalk) {
       activeWalk.elapsed += deltaSec;
       const t = Math.min(activeWalk.elapsed / activeWalk.durationSec, 1);
+      logger.trace('position', 'Walk tick', {
+        t,
+        x: activeWalk.root.position.x,
+        y: activeWalk.root.position.y,
+        z: activeWalk.root.position.z
+      });
       activeWalk.root.position.lerpVectors(activeWalk.start, activeWalk.end, t);
       if (t >= 1) {
         activeWalk.root.position.copy(activeWalk.end);
@@ -241,6 +274,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
 
   function setLastActivity() {
     lastActivityTime = Date.now();
+    logger.debug('stateMachine', 'User activity', { explicit: true });
   }
 
   /** 30s no messages → idle anim. 60s no messages → start wanderer. */
@@ -248,6 +282,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     const now = Date.now();
     const idleSec = (now - lastActivityTime) / 1000;
 
+    logger.trace('stateMachine', 'Timer check', { idleSec });
     if (idleSec >= 60) {
       if (!idleWanderEnabled) startIdleWanderer();
     } else if (idleSec >= 30) {

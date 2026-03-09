@@ -6,6 +6,7 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { createSocketManager } from './socketManager';
 import { createAnimationManager, type SequenceStep, type CharacterStateLike } from './animationManager';
 import { createFakeChatUI } from './fakeChatUI';
+import { logger } from './logger';
 
 type SkinEntry = {
   path: string;
@@ -401,7 +402,8 @@ function applySkinToModel(
   model: THREE.Group,
   texture: THREE.Texture,
   preset: TexturePreset = 'clamped',
-  alphaMode: AlphaMode = 'none'
+  alphaMode: AlphaMode = 'none',
+  skinPath?: string
 ) {
   configureTexture(texture, preset);
 
@@ -450,7 +452,7 @@ function applySkinToModel(
       });
     }
   });
-  console.info('[Skin] Applied texture to', appliedCount, 'material slot(s)', 'alpha=' + alphaMode);
+  logger.info('messaging', 'Skin change', { path: skinPath, appliedCount, alphaMode });
 }
 
 function fadeToAction(
@@ -459,6 +461,9 @@ function fadeToAction(
   duration: number = 0.5
 ): void {
   if (char.currentAction === next) return;
+
+  const clipName = (next as unknown as { _clip?: { name?: string } })._clip?.name ?? 'unknown';
+  logger.debug('animation', 'Fade to action', { action: clipName, duration });
 
   next.reset();
   next.enabled = true;
@@ -486,7 +491,7 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
     fbxLoader.load(
       config.model,
       (model) => {
-        console.info('Loaded:', config.label);
+        logger.info('general', 'Model loaded', { label: config.label });
 
         model.scale.setScalar(0.01);
         model.position.set(0, 0, 0);
@@ -496,7 +501,7 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
         }
         if (texture) {
           const texToUse = USE_DEBUG_TEXTURE ? createDebugTexture(64, 64) : texture;
-          applySkinToModel(model, texToUse, config.texturePreset, config.alphaMode);
+          applySkinToModel(model, texToUse, config.texturePreset, config.alphaMode, config.skin);
         }
         applyShadowToModel(model);
 
@@ -521,6 +526,10 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
           });
           loadedCount++;
           if (loadedCount === config.animations.length) {
+            logger.info('animation', 'Actions loaded', {
+              count: Object.keys(actions).length,
+              keys: Object.keys(actions).join(', ')
+            });
             const idleKey = ['bored', 'shrugging', 'crying', 'laughing'].find((k) => actions[k]) ?? Object.keys(actions)[0];
             const idleAction = idleKey ? actions[idleKey] : Object.values(actions)[0];
             characters[config.id] = {
@@ -559,12 +568,12 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
             path,
             (animFbx) => onClipLoaded(animFbx, key),
             undefined,
-            (err) => console.error('FBX load error:', path, err)
+            (err) => logger.error('general', 'FBX load failed', { path, error: String(err) })
           );
         }
       },
       undefined,
-      (err) => console.error('Model load error:', config.model, err)
+      (err) => logger.error('general', 'Model load error', { model: config.model, error: String(err) })
     );
   };
 
@@ -614,12 +623,12 @@ function switchSkin(charId: string, skinPath: string) {
     skinPath,
     (texture) => {
       const processed = preprocessSkinTexture(texture);
-      applySkinToModel(char.model, processed, char.texturePreset, char.alphaMode);
+      applySkinToModel(char.model, processed, char.texturePreset, char.alphaMode, skinPath);
       char.currentSkin = skinPath;
       highlightActiveSkin(charId, skinPath);
     },
     undefined,
-    (err) => console.error('Skin load error:', skinPath, err)
+    (err) => logger.error('general', 'Skin load error', { path: skinPath, error: String(err) })
   );
 }
 
@@ -653,6 +662,7 @@ function setupSkinPreviews(skins: SkinEntry[]) {
     wrap.appendChild(img);
 
     wrap.addEventListener('click', () => {
+      logger.debug('input', 'Skin button click', { skin: skin.path, label: skin.label });
       if (socketManager) socketManager.emitSkin(skin.path);
       else apiPost('/api/skin', { name: skin.path });
     });
@@ -679,6 +689,7 @@ function setupAnimationButtons(animations: AnimationEntry[]) {
     btn.textContent = anim.label;
     btn.setAttribute('aria-label', `Play animation: ${anim.label}`);
     btn.addEventListener('click', () => {
+      logger.debug('input', 'Animation button click', { animation: anim.key, label: anim.label });
       if (socketManager) socketManager.emitAnimation(anim.key);
       else apiPost('/api/animation', { name: anim.key });
     });
@@ -703,6 +714,7 @@ function setupSequenceButtons(sequences: Sequence[]) {
     btn.textContent = seq.label;
     btn.setAttribute('aria-label', `Play sequence: ${seq.label}`);
     btn.addEventListener('click', () => {
+      logger.debug('input', 'Sequence button click', { sequence: seq.id, label: seq.label });
       animationManager!.setLastActivity();
       animationManager!.playSequence(seq.steps);
     });
@@ -715,6 +727,7 @@ function setupSocketEvents() {
 
   socketManager.on('skin', (data) => {
     const skinPath = resolveSkinByName(data.name) ?? data.name;
+    logger.info('messaging', 'Skin change (socket)', { path: skinPath });
     const char = characters['runningboy'];
     if (char) switchSkin('runningboy', skinPath);
   });
@@ -724,6 +737,7 @@ function setupSocketEvents() {
     if (!char) return;
     animationManager?.stop();
     animationManager?.setLastActivity();
+    logger.info('messaging', 'Animation command', { name: data.name });
     if (data.name === 'back-to-idle') {
       if (char.idleAction) fadeToAction(char, char.idleAction, 0.5);
       return;
@@ -757,6 +771,7 @@ function onWindowResize() {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   renderer.setSize(width, height);
+  logger.debug('renderer', 'Resize', { width, height });
 }
 
 function animate() {
@@ -772,6 +787,7 @@ function animate() {
 }
 
 async function main() {
+  logger.info('general', 'App started');
   initScene();
 
   let skins: SkinEntry[];

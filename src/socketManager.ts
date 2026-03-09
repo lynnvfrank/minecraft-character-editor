@@ -6,6 +6,7 @@
  * otherwise it skips the connection attempt and avoids WebSocket console errors.
  */
 import { io, Socket } from 'socket.io-client';
+import { logger } from './logger';
 
 type SocketEventHandler = (data: { type: string; name: string }) => void;
 
@@ -47,7 +48,7 @@ export function createSocketManager(): SocketManager {
 
       socket.on('connect', () => {
         fakeMode = false;
-        console.info('[Socket] Connected to server');
+        logger.info('messaging', 'Socket connect', {});
       });
 
       socket.on('skin', (name: string) => emit('skin', name));
@@ -56,16 +57,17 @@ export function createSocketManager(): SocketManager {
       socket.on('connect_error', () => {
         if (!fakeMode) {
           fakeMode = true;
-          console.warn('[Socket] Connection failed — running in fake mode (local events only)');
+          logger.warn('messaging', 'Socket connection failed — fake mode', {});
         }
       });
 
       socket.on('disconnect', () => {
         fakeMode = true;
+        logger.info('messaging', 'Socket disconnect', {});
       });
     } catch (e) {
       fakeMode = true;
-      console.warn('[Socket] Failed to initialize — running in fake mode', e);
+      logger.warn('messaging', 'Socket init failed — fake mode', { error: String(e) });
     }
   }
 

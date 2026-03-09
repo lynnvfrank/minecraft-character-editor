@@ -4,6 +4,7 @@
  * 60s no messages → start idle wandering.
  */
 import type { SequenceStep } from './animationManager';
+import { logger } from './logger';
 
 const CANNED_RESPONSES = [
   "Hey! 👋",
@@ -69,6 +70,7 @@ export function createFakeChatUI(callbacks: FakeChatUICallbacks) {
     const text = (inputEl.value || '').trim();
     if (!text) return;
 
+    logger.info('messaging', 'User message', { text: text.length > 50 ? text.slice(0, 50) + '…' : text });
     addMessage(text, true);
     inputEl.value = '';
 
@@ -76,17 +78,29 @@ export function createFakeChatUI(callbacks: FakeChatUICallbacks) {
     callbacks.onMessageSent();
 
     const reply = pickRandom(CANNED_RESPONSES);
+    logger.debug('messaging', 'Fake reply', { text: reply });
     addMessage(reply, false);
     callbacks.onFakeReply?.(reply);
 
     const sequences = getExampleSequences();
     const seq = sequences.length > 0 ? pickRandom(sequences) : null;
-    if (seq) onPlaySequence(seq);
+    if (seq) {
+      logger.debug('input', 'Sequence auto-play after reply', {
+        steps: seq.map((s) => (s as { type: string; name?: string }).type + ((s as { name?: string }).name ? ':' + (s as { name?: string }).name : '')).join(' → ')
+      });
+      onPlaySequence(seq);
+    }
   }
 
-  sendBtn.addEventListener('click', handleSend);
+  sendBtn.addEventListener('click', () => {
+    logger.debug('input', 'Explicit activity', { type: 'click', target: 'send' });
+    handleSend();
+  });
   inputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleSend();
+    if (e.key === 'Enter') {
+      logger.debug('input', 'Explicit activity', { type: 'key', key: 'Enter' });
+      handleSend();
+    }
   });
 
   document.getElementById('app')?.appendChild(container);
