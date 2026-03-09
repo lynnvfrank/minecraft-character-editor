@@ -81,6 +81,33 @@
         { "type": "animation", "name": "happy", "duration": 1 },
         { "type": "walkTo", "target": [0, 0, 0], "speed": 1 }
       ]
+    },
+    {
+      "id": "greet-walk-happy",
+      "label": "Acknowledging → Walk → Happy-Idle",
+      "steps": [
+        { "type": "animation", "name": "acknowledging", "duration": 1.2 },
+        { "type": "walkTo", "target": [0, 0, 1.2], "speed": 1 },
+        { "type": "animation", "name": "happy-idle", "duration": 2 }
+      ]
+    },
+    {
+      "id": "excited-approach-clap",
+      "label": "Excited → Approach → Clapping",
+      "steps": [
+        { "type": "animation", "name": "excited", "duration": 1.5 },
+        { "type": "walkTo", "target": [0, 0, 1.5], "speed": 1.2 },
+        { "type": "animation", "name": "clapping", "duration": 2 }
+      ]
+    },
+    {
+      "id": "happy-walk-laugh",
+      "label": "Happy → Walk → Laughing",
+      "steps": [
+        { "type": "animation", "name": "happy", "duration": 1 },
+        { "type": "walkTo", "target": [0, 0, 1], "speed": 1 },
+        { "type": "animation", "name": "laughing", "duration": 2 }
+      ]
     }
   ]
 }

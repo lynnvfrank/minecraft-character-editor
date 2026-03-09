@@ -5,7 +5,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { createSocketManager } from './socketManager';
 import { createAnimationManager, type SequenceStep, type CharacterStateLike } from './animationManager';
+import { createCharacterAI } from './characterAI';
 import { createFakeChatUI } from './fakeChatUI';
+import { setFacingLogContextProvider } from './debugFacing';
 
 type SkinEntry = {
   path: string;
@@ -96,6 +98,7 @@ type Sequence = { id: string; label: string; steps: SequenceStep[] };
 let sequencesList: Sequence[] = [];
 let socketManager: ReturnType<typeof createSocketManager> | null = null;
 let animationManager: ReturnType<typeof createAnimationManager> | null = null;
+let characterAI: ReturnType<typeof createCharacterAI> | null = null;
 
 async function apiPost(path: string, params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
@@ -653,6 +656,7 @@ function setupSkinPreviews(skins: SkinEntry[]) {
     wrap.appendChild(img);
 
     wrap.addEventListener('click', () => {
+      characterAI?.onUserActivity(true);
       if (socketManager) socketManager.emitSkin(skin.path);
       else apiPost('/api/skin', { name: skin.path });
     });
@@ -679,6 +683,7 @@ function setupAnimationButtons(animations: AnimationEntry[]) {
     btn.textContent = anim.label;
     btn.setAttribute('aria-label', `Play animation: ${anim.label}`);
     btn.addEventListener('click', () => {
+      characterAI?.onUserActivity(true);
       if (socketManager) socketManager.emitAnimation(anim.key);
       else apiPost('/api/animation', { name: anim.key });
     });
@@ -703,11 +708,26 @@ function setupSequenceButtons(sequences: Sequence[]) {
     btn.textContent = seq.label;
     btn.setAttribute('aria-label', `Play sequence: ${seq.label}`);
     btn.addEventListener('click', () => {
+      characterAI?.onUserActivity(true);
       animationManager!.setLastActivity();
       animationManager!.playSequence(seq.steps);
     });
     container.appendChild(btn);
   });
+}
+
+/** Throttled user activity. Mousemove = non-explicit (doesn't block wandering). Keys/clicks = explicit. */
+function setupUserActivityListeners() {
+  let lastMouseReport = 0;
+  const MOUSE_THROTTLE_MS = 200;
+
+  document.addEventListener('mousemove', () => {
+    const now = Date.now();
+    if (now - lastMouseReport < MOUSE_THROTTLE_MS) return;
+    lastMouseReport = now;
+    characterAI?.onUserActivity(false);
+  });
+  document.addEventListener('keydown', () => characterAI?.onUserActivity(true));
 }
 
 function setupSocketEvents() {
@@ -722,6 +742,7 @@ function setupSocketEvents() {
   socketManager.on('animation', (data) => {
     const char = characters['runningboy'];
     if (!char) return;
+    characterAI?.onUserActivity(true);
     animationManager?.stop();
     animationManager?.setLastActivity();
     if (data.name === 'back-to-idle') {
@@ -763,10 +784,8 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   Object.values(characters).forEach((char) => char.mixer.update(delta));
-  if (animationManager) {
-    animationManager.tick(delta);
-    animationManager.checkIdleTimers();
-  }
+  if (animationManager) animationManager.tick(delta);
+  characterAI?.update(delta);
   controls.update();
   renderer.render(scene, camera);
 }
@@ -811,14 +830,29 @@ async function main() {
     getAction,
     clock
   });
+  characterAI = createCharacterAI({
+    getCharacter: (id) => characters[id],
+    fadeToAction,
+    getAction,
+    getCamera: () => camera,
+    getClock: () => clock,
+    animationManager: animationManager!
+  });
+  setFacingLogContextProvider(() => ({
+    state: characterAI?.getState(),
+    isWalking: animationManager?.isWalking?.(),
+    isInWalkToPhase: animationManager?.isInWalkToPhase?.(),
+    isBusy: animationManager?.isBusy?.()
+  }));
+  setupUserActivityListeners();
   setupSocketEvents();
 
   createFakeChatUI({
     onPlaySequence: (seq) => animationManager!.playSequence(seq),
-    onMessageSent: () => animationManager!.setLastActivity(),
+    onMessageSent: () => characterAI!.onUserActivity(true),
     getExampleSequences: () => sequencesList.map((s) => s.steps),
-    setLastActivity: () => animationManager!.setLastActivity(),
-    checkIdleTimers: () => animationManager!.checkIdleTimers()
+    setLastActivity: () => characterAI!.setLastActivity(),
+    checkIdleTimers: () => {} // characterAI.update handles idle/wander every frame
   });
 
   const config = buildCharacterConfig(skins[0].path, animations);

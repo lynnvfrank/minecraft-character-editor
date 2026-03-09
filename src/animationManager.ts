@@ -4,6 +4,7 @@
  * Uses clock-driven lerp for movement (no TWEEN) so it runs in sync with the render loop.
  */
 import * as THREE from 'three';
+import { logFacingChange } from './debugFacing';
 
 /** Minimal character state required for animation manager (main's CharacterState extends this) */
 export type CharacterStateLike = {
@@ -66,21 +67,27 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     end: THREE.Vector3;
     durationSec: number;
     elapsed: number;
+    /** Delay before position starts moving so walk animation can blend in (reduces sliding) */
+    startDelaySec: number;
     resolve: () => void;
   } | null = null;
+
+  /** True from start of walkTo until it resolves (includes turn phase). Lets characterAI avoid overwriting rotation. */
+  let isInWalkTo = false;
 
   /** Check if a sequence is currently playing */
   function isBusy(): boolean {
     return isPlaying;
   }
 
-  /** Stop current sequence and clear queue */
+  /** Stop current sequence and clear queue. Leaves character at current position (no teleport). */
   function stop() {
     sequenceGeneration++;
     queue = [];
     isPlaying = false;
+    isInWalkTo = false;
     if (activeWalk) {
-      activeWalk.root.position.copy(activeWalk.end);
+      // Don't copy end position — leave character where they are
       activeWalk.resolve();
       activeWalk = null;
     }
@@ -105,39 +112,116 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     });
   }
 
-  /** Move character to target over time using clock-driven lerp. Plays walking animation (in-place) during move. */
-  function walkTo(
-    target: THREE.Vector3 | [number, number, number],
-    speed = 1
+  /**
+   * Face the target before walking. Uses turn animation only when angle ≤ 90°.
+   * For larger angles: procedural rotation (avoids double-turn snap/pop).
+   */
+  async function playTurnToFace(
+    char: CharacterStateLike,
+    targetFacing: number,
+    distance: number,
+    gen: number
   ): Promise<void> {
-    return new Promise((resolve) => {
-      const char = getCharacter(CHAR_ID);
-      if (!char) {
-        resolve();
-        return;
+    const MIN_DISTANCE_FOR_TURN = 0.5;
+    const TURN_THRESHOLD = 0.3; // ~17° — skip turn when already roughly facing
+    const MAX_TURN_ANIM_RAD = Math.PI / 2; // Use turn animation only for ≤90°
+
+    if (distance < MIN_DISTANCE_FOR_TURN) return;
+
+    let currentFacing = char.model.rotation.y;
+    let angleDiff = targetFacing - currentFacing;
+    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+    if (Math.abs(angleDiff) < TURN_THRESHOLD) return;
+
+    // For angles > 90°: smooth procedural turn (no turn anim) — avoids snap
+    if (Math.abs(angleDiff) > MAX_TURN_ANIM_RAD) {
+      const startYaw = char.model.rotation.y;
+      const SMOOTH_TURN_DURATION_SEC = 0.45;
+      const STEPS = 12;
+      const stepMs = (SMOOTH_TURN_DURATION_SEC * 1000) / STEPS;
+      for (let i = 1; i <= STEPS; i++) {
+        if (gen !== sequenceGeneration) return;
+        await new Promise<void>((r) => setTimeout(r, stepMs));
+        const t = i / STEPS;
+        const yaw = startYaw + angleDiff * t;
+        char.model.rotation.y = yaw;
       }
+      logFacingChange('turnToFace (smooth)', startYaw, targetFacing);
+      return;
+    }
 
-      const root = char.container;
-      const start = root.position.clone();
-      const end =
-        target instanceof THREE.Vector3 ? target.clone() : new THREE.Vector3(...target);
-      const distance = start.distanceTo(end);
-      const durationSec = Math.max(distance / Math.max(speed, 0.1), 0.1);
+    // Single turn animation for angles ≤ 90°
+    const turnName = angleDiff > 0 ? 'left-turn' : 'right-turn';
+    const turnAction = getAction(CHAR_ID, turnName);
+    if (!turnAction) {
+      char.model.rotation.y = targetFacing;
+      return;
+    }
 
-      const walkAction = getAction(CHAR_ID, 'walking');
-      if (walkAction) {
-        fadeToAction(char, walkAction, 0.2);
-      } else if (char.idleAction) {
-        fadeToAction(char, char.idleAction, 0.2);
-      }
+    const clip = turnAction.getClip();
+    const turnDurationSec = clip?.duration ?? 0.8;
 
+    turnAction.reset();
+    turnAction.setLoop(THREE.LoopOnce, 0);
+    turnAction.clampWhenFinished = true;
+    fadeToAction(char, turnAction, 0.15);
+
+    await new Promise<void>((r) => setTimeout(r, turnDurationSec * 1000));
+    if (gen !== sequenceGeneration) return;
+
+    const prevYaw = char.model.rotation.y;
+    char.model.rotation.y = targetFacing;
+    logFacingChange('turnToFace (final)', prevYaw, targetFacing);
+  }
+
+  /** Move character to target over time. Turns to face target first (using turn animations), then walks. */
+  async function walkTo(
+    target: THREE.Vector3 | [number, number, number],
+    speed = 1,
+    gen = sequenceGeneration
+  ): Promise<void> {
+    const char = getCharacter(CHAR_ID);
+    if (!char) return;
+
+    isInWalkTo = true;
+
+    const root = char.container;
+    const start = root.position.clone();
+    const end =
+      target instanceof THREE.Vector3 ? target.clone() : new THREE.Vector3(...target);
+    const distance = start.distanceTo(end);
+
+    const targetFacing = Math.atan2(end.x - start.x, end.z - start.z);
+    await playTurnToFace(char, targetFacing, distance, gen);
+    if (gen !== sequenceGeneration) {
+      isInWalkTo = false;
+      return;
+    }
+
+    const durationSec = Math.max(distance / Math.max(speed, 0.1), 0.1);
+    const walkAction = getAction(CHAR_ID, 'walking');
+    if (walkAction) {
+      walkAction.reset();
+      walkAction.setLoop(THREE.LoopRepeat, Infinity);
+      fadeToAction(char, walkAction, 0.4);
+    } else if (char.idleAction) {
+      fadeToAction(char, char.idleAction, 0.2);
+    }
+
+    const WALK_START_DELAY_SEC = 0.2;
+
+    return new Promise<void>((resolve) => {
       activeWalk = {
         root,
         start,
         end,
         durationSec,
-        elapsed: 0,
+        elapsed: -WALK_START_DELAY_SEC,
+        startDelaySec: WALK_START_DELAY_SEC,
         resolve: () => {
+          isInWalkTo = false;
           if (char.idleAction) fadeToAction(char, char.idleAction!, 0.3);
           resolve();
         }
@@ -170,7 +254,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
         step.target instanceof THREE.Vector3
           ? step.target
           : new THREE.Vector3(...step.target);
-      await walkTo(target, step.speed ?? 1);
+      await walkTo(target, step.speed ?? 1, gen);
     }
 
     if (gen !== sequenceGeneration) return;
@@ -192,17 +276,40 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     runNextStep(sequenceGeneration);
   }
 
+  /** Only pick waypoints within 90° of current facing. If none, pick smallest angle. */
+  function pickWanderWaypoint(): THREE.Vector3 {
+    const char = getCharacter(CHAR_ID);
+    const currentFacing = char?.model.rotation.y ?? 0;
+    const pos = char?.container.position ?? { x: 0, z: 0 };
+
+    const withAngles = WAYPOINTS.map((wp) => {
+      const dx = wp.x - pos.x;
+      const dz = wp.z - pos.z;
+      if (dx === 0 && dz === 0) return { wp, angle: 0 };
+      const targetFacing = Math.atan2(dx, dz);
+      let diff = targetFacing - currentFacing;
+      while (diff > Math.PI) diff -= 2 * Math.PI;
+      while (diff < -Math.PI) diff += 2 * Math.PI;
+      return { wp, angle: Math.abs(diff) };
+    }).filter(({ wp }) => wp.x !== pos.x || wp.z !== pos.z);
+
+    const within90 = withAngles.filter(({ angle }) => angle <= Math.PI / 2);
+    const pool = within90.length > 0 ? within90 : withAngles;
+    if (pool.length === 0) return WAYPOINTS[0].clone();
+    const byAngle = [...pool].sort((a, b) => a.angle - b.angle);
+    return byAngle[0].wp.clone();
+  }
+
   function doOneWanderStep(): void {
     const char = getCharacter(CHAR_ID);
     if (!char || !idleWanderEnabled || isPlaying) return;
 
-    const idx = Math.floor(Math.random() * WAYPOINTS.length);
-    const target = WAYPOINTS[idx];
+    const target = pickWanderWaypoint();
     const emote =
       WANDER_EMOTES[Math.floor(Math.random() * WANDER_EMOTES.length)];
 
     playSequence([
-      { type: 'walkTo', target, speed: 0.8 },
+      { type: 'walkTo', target: target, speed: 0.8 },
       { type: 'animation', name: emote, duration: 1.5 },
       { type: 'walkTo', target: new THREE.Vector3(0, 0, 0), speed: 0.8 }
     ]);
@@ -228,8 +335,28 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   function tick(deltaSec: number) {
     if (activeWalk) {
       activeWalk.elapsed += deltaSec;
-      const t = Math.min(activeWalk.elapsed / activeWalk.durationSec, 1);
+      // Wait for start delay so walk animation blends in before position moves (reduces sliding)
+      if (activeWalk.elapsed < 0) return;
+
+      const t = Math.min(
+        (activeWalk.elapsed - activeWalk.startDelaySec) / activeWalk.durationSec,
+        1
+      );
       activeWalk.root.position.lerpVectors(activeWalk.start, activeWalk.end, t);
+
+      // Model already faces target from turn animations; keep facing during walk
+      const char = getCharacter(CHAR_ID);
+      if (char) {
+        const dx = activeWalk.end.x - activeWalk.root.position.x;
+        const dz = activeWalk.end.z - activeWalk.root.position.z;
+        if (dx !== 0 || dz !== 0) {
+          const prevYaw = char.model.rotation.y;
+          const newYaw = Math.atan2(dx, dz);
+          char.model.rotation.y = newYaw;
+          logFacingChange('walkTo tick', prevYaw, newYaw);
+        }
+      }
+
       if (t >= 1) {
         activeWalk.root.position.copy(activeWalk.end);
         const { resolve } = activeWalk;
@@ -259,15 +386,28 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     }
   }
 
+  function isWalking(): boolean {
+    return activeWalk !== null;
+  }
+
+  /** True during turn phase and walk (so characterAI does not override rotation) */
+  function isInWalkToPhase(): boolean {
+    return isInWalkTo;
+  }
+
   return {
     playSequence,
     walkTo,
     isBusy,
+    isWalking,
+    isInWalkToPhase,
     stop,
     tick,
     setLastActivity,
     checkIdleTimers,
     startIdleWanderer,
-    stopIdleWanderer
+    stopIdleWanderer,
+    /** Run one wander step immediately (walk to waypoint + emote). Used by characterAI. */
+    runOneWanderStep: doOneWanderStep
   };
 }
