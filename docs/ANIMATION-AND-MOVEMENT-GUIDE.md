@@ -133,15 +133,16 @@ Match character pose to a motion database in real time. Produces very smooth tra
 ### Requirements
 
 1. **Same skeleton** — All animation FBXs must target the same rig as the base model (e.g., RunningboyRig).
-2. **In-place for walks** — Walking clips should have no root translation. Use Mixamo “In Place” or Blender (see below).
-3. **Naming** — Filename/key in `animations/index.json` (e.g. `walking`, `left-turn`, `right-turn`, `acknowledging`). Keys are matched by `resolveAnimationByName`.
+2. **Frame rate** — All FBX clips in this project are 30 fps. Use 30 fps when exporting or editing animations so frame counts (e.g. 16 frames ≈ 0.53 s, 57 frames ≈ 1.9 s) are consistent.
+3. **In-place for walks** — Walking clips should have no root translation. Use Mixamo “In Place” or Blender (see below).
+4. **Naming** — Filename/key in `animations/index.json` (e.g. `walking`, `left-turn`, `right-turn`, `acknowledging`). Keys are matched by `resolveAnimationByName`.
 
 ### Recommended Clip Properties
 
 | Property      | Recommendation | Notes                                                                 |
 |---------------|----------------|----------------------------------------------------------------------|
 | **Length**    | 0.5–3 s for emotes; 1–2 s for loops | Short emotes feel snappy; long clips can stall sequences.            |
-| **Frames**    | 24 or 30 fps typical | Mixamo exports at 30; Blender can use 24. Match your playback intent. |
+| **Frames**    | 30 fps | All FBX clips in this project are 30 fps. 57 frames ≈ 1.9 s; 47 frames ≈ 1.57 s. |
 | **Looping**   | Emotes: once; idle/walk: loop | `setLoop(THREE.LoopOnce, 0)` for one-shots; `LoopRepeat` for cycles. |
 | **Start/end** | Matching poses for loops | Idle/walk should loop seamlessly (same pose at frame 0 and last).    |
 | **Root motion** | None for walk/run | Strip in Blender if Mixamo “In Place” is not available.              |
@@ -271,11 +272,11 @@ Match character pose to a motion database in real time. Produces very smooth tra
 
 To log when the model's facing (rotation.y) changes abruptly:
 
-1. Add `?debugFacing=1` to the URL (e.g. `http://localhost:5173/?debugFacing=1`).
+1. Add `?log=position:debug` to the URL (e.g. `http://localhost:5173/?log=position:debug`).
 2. Open the browser console.
 3. Logs appear when facing changes by more than ~3° in one assignment.
 
-**Format:** `[time] [Facing] <source> | <prev>° → <new>° (Δ <delta>°) | dir <prevDir> → <newDir> | state=… | walking | inWalkTo | busy`
+**Format:** `[time] [position] [debug] facing | source=… prevYawDeg=… newYawDeg=… deltaDeg=… dirPrev=… dirNew=… state=… walking=… inWalkTo=… busy=…`
 
 **Fields:**
 - **time** — Seconds since page load
@@ -292,7 +293,7 @@ To log when the model's facing (rotation.y) changes abruptly:
 - `walkTo tick` — during walk (when direction to target changes)
 - `updateBodyTurn` — procedural body turn toward camera (characterAI)
 
-Throttled to at most one log per 50ms.
+Throttled via shared logger (position:debug). Relay to server with `?logRelay=1` when using `npm run dev:log`.
 
 ---
 

@@ -4,10 +4,12 @@ import { preprocessSkinTexture } from './skinPreprocess';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { createSocketManager } from './socketManager';
-import { createAnimationManager, type SequenceStep, type CharacterStateLike } from './animationManager';
+import { createAnimationManager, type SequenceStep, type CharacterStateLike, type TurnStrategy } from './animationManager';
 import { createCharacterAI } from './characterAI';
 import { createFakeChatUI } from './fakeChatUI';
+import { setupTestControls } from './setupTestControls';
 import { logger } from './logger';
+import { setFacingLogContextProvider } from './debugFacing';
 
 type SkinEntry = {
   path: string;
@@ -78,6 +80,15 @@ const OVERLAY_SCALE = {
 const LOG_MODEL_INFO = false;
 
 const params = typeof window !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+const isTestMode = params.get('movementcontrols') === '1';
+
+const TURN_STRATEGIES: TurnStrategy[] = ['lerp', 'snap', 'reset'];
+function parseTurnStrategy(p: URLSearchParams): TurnStrategy {
+  const v = p.get('turn');
+  if (v === 'snap' || v === 'lerp' || v === 'reset') return v;
+  return 'lerp';
+}
+let turnStrategy: TurnStrategy = parseTurnStrategy(params);
 const container = document.getElementById('three-canvas-container');
 
 if (!container) {
@@ -99,6 +110,9 @@ let sequencesList: Sequence[] = [];
 let socketManager: ReturnType<typeof createSocketManager> | null = null;
 let animationManager: ReturnType<typeof createAnimationManager> | null = null;
 let characterAI: ReturnType<typeof createCharacterAI> | null = null;
+
+/** Debug: pause animation loop (used when ?movementcontrols=1). */
+let paused = false;
 
 async function apiPost(path: string, params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
@@ -549,9 +563,10 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
 
             mixer.addEventListener('finished', () => {
               const char = characters[config.id];
-              if (char && char.idleAction && char.currentAction !== char.idleAction) {
-                fadeToAction(char, char.idleAction!, 0.3);
-              }
+              if (!char || !char.idleAction || char.currentAction === char.idleAction) return;
+              // Don't override walk/sequence — animation manager is controlling
+              if (animationManager?.isInWalkToPhase?.() || animationManager?.isBusy?.()) return;
+              fadeToAction(char, char.idleAction!, 0.3);
             });
 
             if (idleAction) fadeToAction(characters[config.id], idleAction, 0);
@@ -793,12 +808,97 @@ function onWindowResize() {
 
 function animate() {
   requestAnimationFrame(animate);
+  if (paused) return;
   const delta = clock.getDelta();
   Object.values(characters).forEach((char) => char.mixer.update(delta));
   if (animationManager) animationManager.tick(delta);
   characterAI?.update(delta);
   controls.update();
   renderer.render(scene, camera);
+}
+
+/** Pause/resume animation loop (movement controls mode debug tools). */
+function setPaused(value: boolean) {
+  paused = value;
+}
+
+function isPaused(): boolean {
+  return paused;
+}
+
+/** Advance one frame when paused. Uses fixed delta (1/60s) for predictable stepping. */
+function stepOneFrame() {
+  const delta = 1 / 60;
+  Object.values(characters).forEach((char) => char.mixer.update(delta));
+  if (animationManager) animationManager.tick(delta);
+  characterAI?.update(delta);
+  controls.update();
+  renderer.render(scene, camera);
+
+  logStepFrame(delta);
+}
+
+/** Log step-frame diagnostics to each enabled system. Respects ?log=animation:debug etc. */
+function logStepFrame(delta: number) {
+  const char = Object.values(characters)[0] as CharacterState | undefined;
+  const debug = animationManager?.getDebugState?.();
+
+  if (logger.isEnabled('animation', 'debug') && debug) {
+    const actionName =
+      char?.currentAction && char.actions
+        ? Object.entries(char.actions).find(([, a]) => a === char.currentAction)?.[0] ?? 'unknown'
+        : 'none';
+    const clipDuration = char?.currentAction?.getClip()?.duration ?? null;
+    const actionTime = char?.currentAction?.time ?? null;
+
+    const data: Record<string, unknown> = {
+      action: actionName,
+      actionTime: actionTime != null ? actionTime.toFixed(3) : null,
+      clipDuration: clipDuration != null ? clipDuration.toFixed(3) : null,
+      delta
+    };
+    if (debug.activeTurn) {
+      data.turnProgress = debug.activeTurn.progress.toFixed(3);
+      data.turnActionTime = debug.activeTurn.actionTime.toFixed(3);
+    }
+    if (debug.activeWalk) {
+      data.walkT = debug.activeWalk.t.toFixed(3);
+      data.walkPos = debug.activeWalk.pos;
+    }
+    if (debug.turnStartLerpState) {
+      data.turnStartT = debug.turnStartLerpState.t.toFixed(3);
+      data.turnStartElapsed = debug.turnStartLerpState.elapsed.toFixed(3);
+    }
+    if (debug.turnLerpState) {
+      data.turnLerpRemaining = debug.turnLerpState.remainingSec.toFixed(3);
+    }
+    logger.debug('animation', 'Step frame', data);
+  }
+
+  if (logger.isEnabled('position', 'debug') && debug) {
+    const visualYaw =
+      debug.modelYawDeg != null && debug.bonesCharYawDeg != null
+        ? debug.modelYawDeg + debug.bonesCharYawDeg
+        : debug.modelYawDeg;
+    logger.debug('position', 'Step frame', {
+      modelYawDeg: debug.modelYawDeg?.toFixed(1) ?? 'n/a',
+      bonesCharYawDeg: debug.bonesCharYawDeg?.toFixed(1) ?? 'n/a',
+      visualYawDeg: visualYaw != null ? visualYaw.toFixed(1) : 'n/a',
+      containerPos: debug.containerPos
+    });
+  }
+
+  if (logger.isEnabled('stateMachine', 'debug') && debug) {
+    logger.debug('stateMachine', 'Step frame', {
+      isInWalkToPhase: debug.isInWalkToPhase,
+      isWalking: debug.isWalking,
+      isBusy: debug.isBusy
+    });
+  }
+
+  if (logger.isEnabled('renderer', 'debug')) {
+    logger.debug('renderer', 'Step frame', { delta, deltaMs: (delta * 1000).toFixed(1) });
+  }
 }
 
 async function main() {
@@ -840,32 +940,48 @@ async function main() {
     getCharacter: (id) => characters[id],
     fadeToAction,
     getAction,
-    clock
-  });
-  characterAI = createCharacterAI({
-    getCharacter: (id) => characters[id],
-    fadeToAction,
-    getAction,
     getCamera: () => camera,
-    getClock: () => clock,
-    animationManager: animationManager!
+    clock,
+    getTurnStrategy: () => turnStrategy
   });
-  setFacingLogContextProvider(() => ({
-    state: characterAI?.getState(),
-    isWalking: animationManager?.isWalking?.(),
-    isInWalkToPhase: animationManager?.isInWalkToPhase?.(),
-    isBusy: animationManager?.isBusy?.()
-  }));
-  setupUserActivityListeners();
-  setupSocketEvents();
 
-  createFakeChatUI({
-    onPlaySequence: (seq) => animationManager!.playSequence(seq),
-    onMessageSent: () => characterAI!.onUserActivity(true),
-    getExampleSequences: () => sequencesList.map((s) => s.steps),
-    setLastActivity: () => characterAI!.setLastActivity(),
-    checkIdleTimers: () => {} // characterAI.update handles idle/wander every frame
-  });
+  if (isTestMode) {
+    setupTestControls({
+      animationManager,
+      getCharacter: (id) => characters[id],
+      getCamera: () => camera,
+      setPaused,
+      isPaused,
+      stepOneFrame,
+      turnStrategy,
+      setTurnStrategy: (s) => { turnStrategy = s; },
+      turnStrategies: TURN_STRATEGIES
+    });
+  } else {
+    characterAI = createCharacterAI({
+      getCharacter: (id) => characters[id],
+      fadeToAction,
+      getAction,
+      getCamera: () => camera,
+      getClock: () => clock,
+      animationManager: animationManager!
+    });
+    setFacingLogContextProvider(() => ({
+      state: characterAI?.getState(),
+      isWalking: animationManager?.isWalking?.(),
+      isInWalkToPhase: animationManager?.isInWalkToPhase?.(),
+      isBusy: animationManager?.isBusy?.()
+    }));
+    setupUserActivityListeners();
+    setupSocketEvents();
+    createFakeChatUI({
+      onPlaySequence: (seq) => animationManager!.playSequence(seq),
+      onMessageSent: () => characterAI!.onUserActivity(true),
+      getExampleSequences: () => sequencesList.map((s) => s.steps),
+      setLastActivity: () => characterAI!.setLastActivity(),
+      checkIdleTimers: () => {} // characterAI.update handles idle/wander every frame
+    });
+  }
 
   const config = buildCharacterConfig(skins[0].path, animations);
   loadCharacter(config, skins);

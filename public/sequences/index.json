@@ -13,7 +13,9 @@
       "label": "Walk In, Clap, Walk Back",
       "steps": [
         { "type": "walkTo", "target": [0, 0, 1.5], "speed": 1.2 },
+        { "type": "pause", "min": 0.5, "max": 1.2 },
         { "type": "animation", "name": "clapping", "duration": 2 },
+        { "type": "pause", "min": 0.6, "max": 1.5 },
         { "type": "walkTo", "target": [0, 0, 0], "speed": 1.2 }
       ]
     },
@@ -45,6 +47,7 @@
       "label": "Walk Forward & Bow",
       "steps": [
         { "type": "walkTo", "target": [0, 0, 1.2], "speed": 1 },
+        { "type": "pause", "min": 0.5, "max": 1.2 },
         { "type": "animation", "name": "quick-informal-bow", "duration": 1.5 }
       ]
     },
@@ -77,8 +80,10 @@
       "label": "Walk Closer, Wave, Walk Back",
       "steps": [
         { "type": "walkTo", "target": [0, 0, 1.2], "speed": 1 },
+        { "type": "pause", "min": 0.5, "max": 1.2 },
         { "type": "animation", "name": "acknowledging", "duration": 1.2 },
         { "type": "animation", "name": "happy", "duration": 1 },
+        { "type": "pause", "min": 0.6, "max": 1.5 },
         { "type": "walkTo", "target": [0, 0, 0], "speed": 1 }
       ]
     },
@@ -88,6 +93,7 @@
       "steps": [
         { "type": "animation", "name": "acknowledging", "duration": 1.2 },
         { "type": "walkTo", "target": [0, 0, 1.2], "speed": 1 },
+        { "type": "pause", "min": 0.5, "max": 1.2 },
         { "type": "animation", "name": "happy-idle", "duration": 2 }
       ]
     },
@@ -97,6 +103,7 @@
       "steps": [
         { "type": "animation", "name": "excited", "duration": 1.5 },
         { "type": "walkTo", "target": [0, 0, 1.5], "speed": 1.2 },
+        { "type": "pause", "min": 0.5, "max": 1.2 },
         { "type": "animation", "name": "clapping", "duration": 2 }
       ]
     },
@@ -106,6 +113,7 @@
       "steps": [
         { "type": "animation", "name": "happy", "duration": 1 },
         { "type": "walkTo", "target": [0, 0, 1], "speed": 1 },
+        { "type": "pause", "min": 0.5, "max": 1.2 },
         { "type": "animation", "name": "laughing", "duration": 2 }
       ]
     }

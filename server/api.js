@@ -20,6 +20,19 @@ function getLogRelayConfig() {
   return { relay, level, systems };
 }
 
+/** Build URL query string for client log config matching server relay settings */
+function buildLogUrlParams() {
+  const { relay, level, systems } = getLogRelayConfig();
+  if (!relay) return '';
+  const params = new URLSearchParams();
+  const logVal = systems.includes('*')
+    ? `*:${level}`
+    : systems.map((s) => `${s}:${level}`).join(',');
+  params.set('log', logVal);
+  params.set('logRelay', '1');
+  return params.toString();
+}
+
 function broadcast(data) {
   const msg = `data: ${JSON.stringify(data)}\n\n`;
   sseClients.forEach((res) => {
@@ -118,4 +131,4 @@ function handleApi(req, res, next) {
   next?.();
 }
 
-module.exports = { handleApi, broadcast };
+module.exports = { handleApi, broadcast, getLogRelayConfig, buildLogUrlParams };

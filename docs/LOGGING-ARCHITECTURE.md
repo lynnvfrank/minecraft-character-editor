@@ -77,7 +77,7 @@ A comprehensive, configurable logging system for troubleshooting the Minecraft 3
 
 ### Default
 
-- No `log` param and no localStorage → minimal logging (errors only, or match existing `debugFacing`-style opt-in).
+- No `log` param and no localStorage → minimal logging (errors only).
 - `?log=1` or `?log=on` → Enable common systems (animation, stateMachine, messaging) at info.
 
 ---
@@ -182,7 +182,7 @@ This helps when troubleshooting with Cursor or other tools: errors and debug out
 
 | File | Integration |
 |------|-------------|
-| `debugFacing.ts` | Replace or wrap with logger; `logFacingChange` becomes `logger.debug('position', 'facing', { prevYaw, newYaw, source })` |
+| `debugFacing.ts` | Uses `logger.debug('position', 'facing', { ... })`; enable with `?log=position:debug` |
 | `animationManager.ts` | Log at sequence/step/fade/walk boundaries |
 | `characterAI.ts` | Log at state transitions, user activity, emote |
 | `main.ts` | Log model load, skin apply, socket setup |
@@ -223,7 +223,7 @@ logger.trace('position', 'tick', { t, x, z })
 
 - Add logger calls at the integration points above.
 - Start with animation and stateMachine (highest value for troubleshooting).
-- Keep `debugFacing` behavior available via `?debugFacing=1` until logger fully replaces it; then deprecate.
+- ~~`debugFacing`~~ — Migrated to logger; use `?log=position:debug`.
 
 ### 4. Throttling
 
@@ -354,4 +354,4 @@ When relay is enabled, the client sends every log that passes its own system/lev
 | Throttling | trace/debug high-frequency; 50–100ms per (system, event) |
 | Output | browser console; optional overlay; **optional server relay** (dual output) |
 | Server relay | `POST /api/log` endpoint; env/runtime params for dev server (`LOG_RELAY`, `LOG_LEVEL`, `LOG_SYSTEMS`) |
-| Integration | Replace/extend debugFacing; add calls in animationManager, characterAI, main, fakeChatUI, socketManager |
+| Integration | debugFacing uses logger; add calls in animationManager, characterAI, main, fakeChatUI, socketManager |

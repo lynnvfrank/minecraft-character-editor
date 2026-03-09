@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <title>3D Character Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        var p = new URLSearchParams(location.search);
+        var show = function (v) { return v === '1' || v === 'on' || v === 'true'; };
+        if (!show(p.get('chat'))) document.documentElement.dataset.chatHidden = '1';
+        if (!show(p.get('controls'))) document.documentElement.dataset.controlsHidden = '1';
+        if (p.get('movementcontrols') === '1') document.documentElement.dataset.testMode = '1';
+      })();
+    </script>
   </head>
   <body>
     <div id="app">
@@ -22,6 +31,7 @@
           <div id="sequence-selector" class="button-row" role="group" aria-label="Composite sequences"></div>
         </div>
       </div>
+      <div id="test-controls" class="test-controls" aria-label="Debug test controls"></div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

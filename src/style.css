@@ -39,6 +39,90 @@ body {
   height: 100%;
 }
 
+/* Hide panels when URL params chat=0|off|false or controls=0|off|false */
+[data-chat-hidden="1"] #fake-chat-container { display: none !important; }
+[data-controls-hidden="1"] #controls-bar { display: none !important; }
+
+/* Test mode: hide normal controls, show test panel */
+#test-controls {
+  display: none;
+  flex: 0 0 auto;
+}
+[data-test-mode="1"] #controls-bar,
+[data-test-mode="1"] #fake-chat-container { display: none !important; }
+[data-test-mode="1"] #test-controls {
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7));
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.test-controls-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.test-controls-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.test-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.test-controls-custom input[type="number"] {
+  width: 3.5em;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f5f5;
+  font-size: 0.85rem;
+}
+
+.test-control-btn {
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f5f5f5;
+  font-size: 0.85rem;
+  cursor: pointer;
+  background: rgba(63, 140, 255, 0.2);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.test-control-btn:hover {
+  background: rgba(63, 140, 255, 0.35);
+  border-color: rgba(63, 140, 255, 0.5);
+}
+
+.test-control-btn:active {
+  background: rgba(63, 140, 255, 0.25);
+}
+
+.test-control-strategy-btn.active {
+  border-color: rgba(143, 212, 255, 0.6);
+  background: rgba(63, 140, 255, 0.4);
+}
+
+.test-control-strategy-label {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-right: 0.35rem;
+}
+
 #controls-bar {
   flex: 0 0 auto;
   display: flex;

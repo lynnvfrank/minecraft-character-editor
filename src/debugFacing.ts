@@ -1,19 +1,14 @@
 /**
  * Debug logging for model facing (rotation.y) snaps.
- * Enable with: ?debugFacing=1 in the URL
+ * Enable with: ?log=position:debug or ?log=position:trace
  *
- * Logs: time, source, prev→new yaw, delta, direction facing, state machine state, walk/turn phase.
+ * Logs: source, prevYaw→newYaw, delta, direction facing, state machine state, walk/turn phase.
+ * Uses the shared logger (see docs/LOGGING-ARCHITECTURE.md).
  */
-
-const DEBUG =
-  typeof window !== 'undefined' &&
-  new URLSearchParams(location.search).get('debugFacing') !== null;
+import { logger } from './logger';
 
 /** Log when facing changes by more than this (radians). ~0.05 = 3°, ~0.15 = 8.5° */
 const SNAP_THRESHOLD = 0.05;
-
-let lastLogTime = 0;
-const LOG_THROTTLE_MS = 50;
 
 export type FacingLogContext = {
   state?: string;
@@ -53,51 +48,33 @@ function yawToDirection(yaw: number): string {
   return '+X+Z';
 }
 
-function formatTime(): string {
-  const elapsedSec =
-    typeof performance !== 'undefined' ? performance.now() / 1000 : 0;
-  return `${elapsedSec.toFixed(2)}s`;
-}
-
-function buildLogLine(
-  source: string,
-  prevYaw: number,
-  newYaw: number,
-  delta: number
-): string {
-  const ctx = contextProvider?.() ?? {};
-  const parts: string[] = [];
-
-  parts.push(`[${formatTime()}]`);
-  parts.push(`[Facing] ${source}`);
-  parts.push(`| ${radToDeg(prevYaw).toFixed(1)}° → ${radToDeg(newYaw).toFixed(1)}° (Δ ${radToDeg(delta).toFixed(1)}°)`);
-  parts.push(`| dir ${yawToDirection(prevYaw)} → ${yawToDirection(newYaw)}`);
-
-  if (ctx.state != null) parts.push(`| state=${ctx.state}`);
-  if (ctx.isWalking) parts.push(`| walking`);
-  if (ctx.isInWalkToPhase) parts.push(`| inWalkTo`);
-  if (ctx.isBusy) parts.push(`| busy`);
-
-  return parts.join(' ');
-}
-
 /**
  * Call when setting model.rotation.y. Logs if the change exceeds SNAP_THRESHOLD
- * and we haven't logged recently (throttle).
+ * and position:debug (or trace) is enabled. Uses shared logger + throttle.
  */
 export function logFacingChange(
   source: string,
   prevYaw: number,
   newYaw: number
 ): void {
-  if (!DEBUG) return;
-
-  const now = Date.now();
-  if (now - lastLogTime < LOG_THROTTLE_MS) return;
+  if (!logger.isEnabled('position', 'debug')) return;
 
   const delta = angleDiff(newYaw, prevYaw);
   if (Math.abs(delta) < SNAP_THRESHOLD) return;
 
-  lastLogTime = now;
-  console.log(buildLogLine(source, prevYaw, newYaw, delta));
+  const ctx = contextProvider?.() ?? {};
+  const data: Record<string, unknown> = {
+    source,
+    prevYawDeg: radToDeg(prevYaw).toFixed(1),
+    newYawDeg: radToDeg(newYaw).toFixed(1),
+    deltaDeg: radToDeg(delta).toFixed(1),
+    dirPrev: yawToDirection(prevYaw),
+    dirNew: yawToDirection(newYaw)
+  };
+  if (ctx.state != null) data.state = ctx.state;
+  if (ctx.isWalking) data.walking = true;
+  if (ctx.isInWalkToPhase) data.inWalkTo = true;
+  if (ctx.isBusy) data.busy = true;
+
+  logger.debug('position', 'facing', data);
 }

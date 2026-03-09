@@ -5,8 +5,11 @@
   "scripts": {
     "dev": "npm run generate-skins && npm run generate-animations && vite",
     "dev:log": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=info LOG_SYSTEMS=animation,stateMachine,messaging VITE_LOG_RELAY=true vite",
-    "dev:debug": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=debug LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
-    "dev:trace": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=trace LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
+    "dev:log:info": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=info LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
+    "dev:log:debug": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=debug LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
+    "dev:log:trace": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=trace LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
+    "dev:debug": "npm run dev:log:debug",
+    "dev:trace": "npm run dev:log:trace",
     "build": "npm run generate-skins && npm run generate-animations && vite build",
     "start": "node server/index.js",
     "preview": "vite preview",
