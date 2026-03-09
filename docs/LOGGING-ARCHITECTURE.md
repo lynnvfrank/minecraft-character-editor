@@ -6,6 +6,8 @@ A comprehensive, configurable logging system for troubleshooting the Minecraft 3
 
 ## Table of Contents
 
+- [Troubleshooting Guide](./TROUBLESHOOTING.md) — Quick links and npm scripts for debug modes
+
 1. [Goals](#goals)
 2. [Log Categories and Systems](#log-categories-and-systems)
 3. [Log Levels](#log-levels)
