@@ -199,7 +199,7 @@ When switching between creator and viewer, a transition can reduce the sense of 
 - **`@tweenjs/tween.js`** — Already in `package.json`.
 - **Use case:** Animate numeric values (opacity, x, y). `new TWEEN.Tween({ opacity: 1 }).to({ opacity: 0 }, 300).onUpdate(...)`.
 - **Fit:** Lightweight. Can drive opacity/transform for simple crossfade or slide. **Recommended** — no new dep.
-- **Note:** SEQUENCES-WALKING-RETROSPECTIVE mentions TWEEN had issues for character movement (timing). For UI transitions (DOM opacity), it should work fine.
+- **Note:** ANIMATION-ING-RETROSPECTIVE mentions TWEEN had issues for character movement (timing). For UI transitions (DOM opacity), it should work fine.
 
 ### Framer Motion
 

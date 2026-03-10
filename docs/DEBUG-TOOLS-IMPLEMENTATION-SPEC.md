@@ -254,7 +254,7 @@ Vite: add a second entry in `vite.config.ts` or use a simple client-side router.
 
 - **`docs/ANIMATION-AND-MOVEMENT-GUIDE.md`** — Turn, walk, facing
 - **`docs/ANIMATION-IMPROVEMENT-STRATEGIES.md`** — Pain points, turn→walk smoothness
-- **`docs/SEQUENCES-WALKING-RETROSPECTIVE.md`** — Root motion, lerp, sliding
+- **`docs/ANIMATION-SEQUENCES-WALKING-RETROSPECTIVE.md`** — Root motion, lerp, sliding
 - **`docs/LOGGING-ARCHITECTURE.md`** — Log config, `?log=...`
 - **`docs/TROUBLESHOOTING.md`** — Debug modes, npm scripts
 

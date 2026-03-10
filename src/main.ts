@@ -1,5 +1,17 @@
 import './style.css';
 import * as THREE from 'three';
+import {
+  initCreator,
+  getCreatorSkinCanvas,
+  loadSkinFromPath,
+  getEditMode3D,
+  uvToWorkingCoords,
+  paintStartFrom3D,
+  paintMoveFrom3D,
+  paintEndFrom3D,
+  sampleColorAt,
+  applySampledColor
+} from './creator';
 import { preprocessSkinTexture } from './skinPreprocess';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
@@ -89,6 +101,79 @@ function parseTurnStrategy(p: URLSearchParams): TurnStrategy {
   return 'lerp';
 }
 let turnStrategy: TurnStrategy = parseTurnStrategy(params);
+/** Animation keys excluded from creator preview cycle (locomotion only) */
+const CREATOR_LOCOMOTION_KEYS = new Set([
+  'walking', 'walk', 'run', 'running',
+  'start-walking', 'stop-walking', 'start-walking-movement', 'stop-walking-movement',
+  'walking-backwards', 'female-walk',
+  'left-turn', 'right-turn', 'turn-left', 'turn-right'
+]);
+
+function getCreatorAnimationKeys(): string[] {
+  return animationsList
+    .filter((a) => !CREATOR_LOCOMOTION_KEYS.has(a.key.toLowerCase()))
+    .map((a) => a.key);
+}
+
+let creatorCyclerIndex = 0;
+
+function startCreatorAnimationCycler() {
+  animationManager?.stop();
+  animationManager?.stopIdleWanderer?.();
+  const char = characters['runningboy'];
+  const keys = getCreatorAnimationKeys();
+  if (!char || keys.length === 0) return;
+  creatorCyclerIndex = 0;
+  const key = keys[0]!;
+  const action = getAction('runningboy', key);
+  if (!action) return;
+  action.setLoop(THREE.LoopOnce, 0);
+  action.clampWhenFinished = true;
+  action.reset();
+  fadeToAction(char, action, 0.3);
+}
+
+function advanceCreatorCycler() {
+  if (getRoute() !== 'creator') return;
+  const char = characters['runningboy'];
+  const keys = getCreatorAnimationKeys();
+  if (!char || keys.length === 0) return;
+  creatorCyclerIndex = (creatorCyclerIndex + 1) % keys.length;
+  const key = keys[creatorCyclerIndex]!;
+  const action = getAction('runningboy', key);
+  if (!action) return;
+  action.setLoop(THREE.LoopOnce, 0);
+  action.clampWhenFinished = true;
+  action.reset();
+  fadeToAction(char, action, 0.3);
+}
+
+/** Hash-based routing: #/creator = character creator, #/ or #/home = viewer */
+function getRoute(): 'creator' | 'viewer' {
+  const hash = (location.hash || '#/').toLowerCase().replace(/\/$/, '') || '#/';
+  if (hash === '#/creator') return 'creator';
+  return 'viewer';
+}
+
+function applyRoute(): void {
+  const route = getRoute();
+  document.body.dataset.route = route;
+  if (route === 'creator') {
+    initCreator();
+    window.setTimeout(() => {
+      startCreatorAnimationCycler();
+    }, 0);
+    window.setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+      const char = characters['runningboy'];
+      if (char?.currentSkin) loadSkinFromPath(char.currentSkin);
+    }, 0);
+  }
+}
+
+applyRoute();
+window.addEventListener('hashchange', applyRoute);
+
 const container = document.getElementById('three-canvas-container');
 
 if (!container) {
@@ -563,13 +648,21 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
 
             mixer.addEventListener('finished', () => {
               const char = characters[config.id];
-              if (!char || !char.idleAction || char.currentAction === char.idleAction) return;
+              if (!char) return;
+              // In creator: cycle through non-locomotion animations
+              if (getRoute() === 'creator') {
+                advanceCreatorCycler();
+                return;
+              }
+              if (!char.idleAction || char.currentAction === char.idleAction) return;
               // Don't override walk/sequence — animation manager is controlling
               if (animationManager?.isInWalkToPhase?.() || animationManager?.isBusy?.()) return;
               fadeToAction(char, char.idleAction!, 0.3);
             });
 
             if (idleAction) fadeToAction(characters[config.id], idleAction, 0);
+
+            if (getRoute() === 'creator') startCreatorAnimationCycler();
 
             if (Object.keys(characters).length === 1) {
               setupAnimationButtons(animationsList);
@@ -806,13 +899,119 @@ function onWindowResize() {
   logger.debug('renderer', 'Resize', { width, height });
 }
 
+let creatorPreviewTexture: THREE.CanvasTexture | null = null;
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let is3DPainting = false;
+
+function getCharacterMeshes(): THREE.Object3D[] {
+  const char = characters['runningboy'];
+  if (!char) return [];
+  const meshes: THREE.Object3D[] = [];
+  char.model.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) meshes.push(obj);
+  });
+  return meshes;
+}
+
+function raycastToSkinUV(clientX: number, clientY: number): { u: number; v: number } | null {
+  const canvas = renderer.domElement;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = getCharacterMeshes();
+  const intersects = raycaster.intersectObjects(meshes, false);
+  if (intersects.length === 0) return null;
+  const hit = intersects[0];
+  const uv = (hit as THREE.Intersection<THREE.Object3D> & { uv?: THREE.Vector2 }).uv;
+  if (!uv) return null;
+  return { u: uv.x, v: uv.y };
+}
+
+function updateOrbitControlsForEditMode() {
+  if (getRoute() !== 'creator') return;
+  if (getEditMode3D()) {
+    controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  } else {
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+  }
+}
+
+function setupCreator3DPaint() {
+  const canvas = renderer.domElement;
+
+  function handlePointerDown(e: MouseEvent) {
+    if (getRoute() !== 'creator' || !getEditMode3D()) return;
+    if (e.button !== 0) return; // left only
+    const uv = raycastToSkinUV(e.clientX, e.clientY);
+    if (!uv) return;
+    const { x, y } = uvToWorkingCoords(uv.u, uv.v);
+    if (e.altKey) {
+      const hex = sampleColorAt(x, y);
+      if (hex) applySampledColor(hex);
+      return;
+    }
+    paintStartFrom3D(x, y);
+    is3DPainting = true;
+    e.preventDefault();
+  }
+
+  function handlePointerMove(e: MouseEvent) {
+    if (!is3DPainting) return;
+    const uv = raycastToSkinUV(e.clientX, e.clientY);
+    if (!uv) return;
+    const { x, y } = uvToWorkingCoords(uv.u, uv.v);
+    paintMoveFrom3D(x, y);
+    e.preventDefault();
+  }
+
+  function handlePointerUp(e: MouseEvent) {
+    if (e.button !== 0) return;
+    if (is3DPainting) {
+      paintEndFrom3D();
+      is3DPainting = false;
+      e.preventDefault();
+    }
+  }
+
+  canvas.addEventListener('mousedown', handlePointerDown);
+  canvas.addEventListener('mousemove', handlePointerMove);
+  canvas.addEventListener('mouseup', handlePointerUp);
+  canvas.addEventListener('mouseleave', handlePointerUp);
+
+  document.addEventListener('creator-edit-mode-change', () => updateOrbitControlsForEditMode());
+  updateOrbitControlsForEditMode();
+}
+
+function updateCreatorPreviewTexture() {
+  if (getRoute() !== 'creator') return;
+  const canvas = getCreatorSkinCanvas();
+  const char = characters['runningboy'];
+  if (!canvas || !char) return;
+  if (!creatorPreviewTexture) {
+    creatorPreviewTexture = new THREE.CanvasTexture(canvas);
+    creatorPreviewTexture.colorSpace = THREE.SRGBColorSpace;
+    creatorPreviewTexture.magFilter = THREE.NearestFilter;
+    creatorPreviewTexture.minFilter = THREE.NearestFilter;
+    creatorPreviewTexture.generateMipmaps = false;
+    creatorPreviewTexture.wrapS = creatorPreviewTexture.wrapT = THREE.ClampToEdgeWrapping;
+    creatorPreviewTexture.flipY = true;
+  }
+  creatorPreviewTexture.source.data = canvas;
+  creatorPreviewTexture.needsUpdate = true;
+  applySkinToModel(char.model, creatorPreviewTexture, 'clamped-flip' as TexturePreset, 'transparent' as AlphaMode);
+}
+
 function animate() {
   requestAnimationFrame(animate);
+  if (getRoute() === 'creator') updateCreatorPreviewTexture();
   if (paused) return;
   const delta = clock.getDelta();
   Object.values(characters).forEach((char) => char.mixer.update(delta));
   if (animationManager) animationManager.tick(delta);
-  characterAI?.update(delta);
+  if (getRoute() !== 'creator') characterAI?.update(delta);
   controls.update();
   renderer.render(scene, camera);
 }
@@ -983,8 +1182,14 @@ async function main() {
     });
   }
 
-  const config = buildCharacterConfig(skins[0].path, animations);
+  const initialSkin = skins[Math.floor(Math.random() * skins.length)]!;
+  const config = buildCharacterConfig(initialSkin.path, animations);
   loadCharacter(config, skins);
+  if (getRoute() === 'creator') {
+    await loadSkinFromPath(initialSkin.path);
+  }
+
+  setupCreator3DPaint();
 
   window.addEventListener('resize', onWindowResize);
   animate();

@@ -15,6 +15,35 @@
     </script>
   </head>
   <body>
+    <div id="creator-panel" class="creator-panel" aria-label="Character creator">
+      <header class="creator-header">
+        <h1>Character Creator</h1>
+        <nav class="creator-nav">
+          <a href="#/" class="creator-nav-link">Home</a>
+        </nav>
+      </header>
+      <main class="creator-main">
+        <div class="creator-skin-gallery" aria-label="Skin gallery">
+          <span class="creator-toolbar-label">Load skin</span>
+          <div id="creator-skin-selector" class="creator-skin-selector" role="listbox" aria-label="Available skins"></div>
+        </div>
+        <div class="creator-toolbar" role="toolbar" aria-label="Editor tools"></div>
+        <div class="creator-canvas-area" id="creator-canvas-area">
+          <div class="creator-canvas-wrap" id="creator-canvas-wrap">
+            <div class="creator-ruler-corner" id="creator-ruler-corner"></div>
+            <canvas id="creator-ruler-top" class="creator-ruler-top" width="512" height="20" aria-hidden="true"></canvas>
+            <canvas id="creator-ruler-left" class="creator-ruler-left" width="20" height="512" aria-hidden="true"></canvas>
+            <div class="creator-canvas-inner">
+              <canvas id="creator-display-canvas" width="512" height="512" title="Skin canvas (64×64 zoomed)"></canvas>
+              <canvas id="creator-overlay-canvas" class="creator-overlay-canvas" width="512" height="512" aria-hidden="true"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="creator-actions">
+          <button type="button" id="creator-download-btn" class="creator-btn">Download</button>
+        </div>
+      </main>
+    </div>
     <div id="app">
       <div id="three-canvas-container"></div>
       <div id="controls-bar">

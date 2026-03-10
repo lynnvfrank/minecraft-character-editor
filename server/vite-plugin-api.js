@@ -17,7 +17,10 @@ module.exports = function apiPlugin() {
         const urlChatOnly = qs ? `${base}/?${qs}&controls=0` : `${base}/?controls=0`;
 
         console.log('\n  ➜  App: ' + url);
+        console.log('  ➜  Character creator: ' + base + '/#/creator');
         console.log('  ➜  Chat only (hide controls): ' + urlChatOnly);
+        console.log('  ➜  Movement controls (debug): ' + base + '/?movementcontrols=1');
+        console.log('  ➜  With controls + chat: ' + base + '/?controls=1&chat=1');
         const { relay } = getLogRelayConfig();
         if (relay) {
           console.log(

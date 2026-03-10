@@ -186,7 +186,7 @@ Match character pose to a motion database in real time. Produces very smooth tra
 
 ## Editing Animations in Blender
 
-*(Combined from SEQUENCES-WALKING-RETROSPECTIVE and practical use.)*
+*(Combined from ANIMATION-SEQUENCES-WALKING-RETROSPECTIVE and practical use.)*
 
 ### Making Walk/Run In-Place (In Placer Addon)
 

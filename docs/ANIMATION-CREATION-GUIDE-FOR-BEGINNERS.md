@@ -180,5 +180,5 @@ If you create a Blockbench project with the same bone names as RunningboyRig:
 
 - [ANIMATION-AND-MOVEMENT-GUIDE.md](./ANIMATION-AND-MOVEMENT-GUIDE.md) — Technical architecture, Mixamo, Blender export
 - [BLENDER-ANIMATION-TRANSITIONS.md](./BLENDER-ANIMATION-TRANSITIONS.md) — Merging FBX animations, verifying last/first frame match for smooth crossfades
-- [SEQUENCES-WALKING-RETROSPECTIVE.md](./SEQUENCES-WALKING-RETROSPECTIVE.md) — Root motion issues and fixes
+- [ANIMATION-SEQUENCES-WALKING-RETROSPECTIVE.md](./ANIMATION-SEQUENCES-WALKING-RETROSPECTIVE.md) — Root motion issues and fixes
 - [minecraft-skin-layout-specification.md](./minecraft-skin-layout-specification.md) — Skin UV regions and overlay layers
