@@ -147,7 +147,10 @@ In addition to the 2D canvas, users can **paint directly on the 3D character mod
 
 ### UI
 
-- **Edit mode toggle** — "Edit 2D" vs. "Edit 3D" (or split view: 2D canvas + 3D preview). In Edit 3D mode, the 3D view receives paint input; in Edit 2D, the canvas does.
+- **Edit mode toggle** — "2D" vs. "3D" buttons in the toolbar. Default: **3D mode** (paint on 3D model).
+- **Layout by mode:**
+  - **Edit 3D:** Large 3D view fills the right panel; 2D canvas is hidden. Left-drag paints; right-drag orbits.
+  - **Edit 2D:** Large 2D canvas fills the right panel; 3D preview moves to creator panel (after toolbar, 256px height). 2D canvas scales to fill available space.
 - **Undo/redo** — Same command stack; 3D paint strokes are recorded the same way as 2D (pixel coordinates + color).
 - **Sync** — 2D canvas and 3D texture always reflect the same skin state. No separate "apply" step.
 
@@ -156,6 +159,9 @@ In addition to the 2D canvas, users can **paint directly on the 3D character mod
 - **Mesh structure** — The model may use merged geometry (e.g., single Character mesh) or per-part meshes (head, body, arm, etc.). UV mapping must be known and consistent with `minecraft-skin-layout-specification`. If the FBX supplies UVs, use them; otherwise the UV table from `main.ts` applies.
 - **Performance** — Real-time texture updates (e.g., `texture.needsUpdate = true` on each stroke) are typically fine for 64×64. Coalesce rapid brush moves if needed.
 - **Depth buffer** — Ensure the 3D character is rendered and raycastable; avoid UI or overlay elements blocking rays.
+- **Mouse buttons in Edit 3D** — Disable OrbitControls LEFT for rotate; use LEFT for paint, RIGHT for orbit. In Edit 2D, LEFT restores orbit for the small preview.
+- **OrbitControls and DOM movement** — When the 3D view is moved in the DOM (e.g., between main area and preview slot on mode switch), OrbitControls event handling can break. **Recreate OrbitControls** (dispose + new instance) when switching back to 3D mode.
+- **Camera reset for 2D preview** — When switching to Edit 2D, re-center and zoom out the camera (e.g., position `(0, 1.5, 4)`, target `(0, 1, 0)`) so the full character fits in the small preview.
 
 ---
 
@@ -260,17 +266,20 @@ In addition to the 2D canvas, users can **paint directly on the 3D character mod
 
 ```
 /creator (route or page)
-├── Skin gallery (load from index; thumbnails; load into editor; undoable)
-├── Canvas area (scales to fit; no scrolling)
-│   ├── Rulers (toggle; top + left strips, not over image; 0–64 coord system)
-│   ├── Grid overlay (toggle; every 4 px, extensible settings)
-│   └── Display canvas (128×128 working → 64×64 export; pixelated rendering)
-├── 3D preview (right of canvas; character model; live texture from 2D canvas)
+├── Creator panel (left)
+│   ├── Skin gallery (load from index; thumbnails; load into editor; undoable)
+│   ├── Toolbar (Edit 2D/3D toggle, tools, brush size, color, View: Rulers/Grid/Template)
+│   ├── 3D preview slot (Edit 2D only; 256px; after toolbar; camera re-centered)
+│   └── Actions (Download)
+├── Creator view wrapper (right; main view area)
+│   ├── Canvas area (Edit 2D: large, scales to fill; Edit 3D: hidden)
+│   │   ├── Rulers (toggle; top + left strips)
+│   │   ├── Grid overlay (toggle; every 4 px)
+│   │   └── Display canvas + template overlay
+│   └── 3D view (Edit 3D: large, fills area; Edit 2D: moved to preview slot)
 ├── Layer selector (checkboxes/tabs)
-├── Toolbar (brush, eraser, fill, color picker)
 ├── Preset panel (per layer)
 ├── Randomize button
-├── Download button
 └── Save to webapp button
 ```
 
@@ -348,10 +357,13 @@ The character creator should merge with the app that currently displays the 3D m
 
 ### Live 3D Preview While Editing
 
-While the user edits the skin (in either 2D canvas or paint-on-3D mode), a **3D model wearing the current skin** is visible at all times. The character wears the skin texture as it is being edited; updates apply to the model in real time so the user can see changes immediately. This preview uses the same character model as the viewer and shares the texture with the editor.
+While the user edits the skin (in either 2D canvas or paint-on-3D mode), a **3D model wearing the current skin** is visible at all times. The character wears the skin texture as it is being edited; updates apply to the model in real time. This preview uses the same character model as the viewer and shares the texture with the editor.
 
-- **Layout** — In creator mode, 2D canvas on the left, 3D preview on the right (split view). The 3D view shows the character with the current 2D canvas texture applied each frame.
-- **Initial skin** — On scene load, a random skin is selected. When entering creator (initial load or switching from viewer), the 2D editor is populated with that skin so 2D and 3D stay in sync.
+- **Layout by edit mode:**
+  - **Edit 3D (default):** Creator panel (left) has toolbar, gallery, actions. Large 3D view fills the right panel. 2D canvas is hidden.
+  - **Edit 2D:** Creator panel has toolbar, gallery, small 3D preview (256px, after toolbar), actions. Large 2D canvas fills the right panel and scales to fill available space.
+- **DOM placement** — The 3D view container is moved between the main area and the creator-panel preview slot when switching modes. Call `onWindowResize()` after the move so the renderer resizes; recreate OrbitControls when switching back to 3D.
+- **Initial skin** — On scene load, a random skin is selected. When entering creator, the 2D editor is populated with that skin so 2D and 3D stay in sync.
 
 ### Integration Approach
 
@@ -380,26 +392,25 @@ While the user edits the skin (in either 2D canvas or paint-on-3D mode), a **3D 
 
 ## Toggleable Template Layer (Model-to-2D Translation)
 
-A **toggleable template overlay** helps users understand how the 2D skin texture maps to the 3D model. When enabled, it shows region boundaries, labels, or a reference diagram overlaid on the canvas.
+A **toggleable template overlay** helps users understand how the 2D skin texture maps to the 3D model. When enabled, it shows region boundaries or a reference diagram overlaid on the canvas.
 
-### Reference Images
+### Reference Images (Optional)
 
 - **`docs/minecraft-skin-layout-detailed.png`** — Annotated skin layout with face labels (TOP HEAD, FACE HEAD, etc.).
 - **`docs/minecraft-skin-64x64-detailed.png`** — 64×64 grid layout diagram.
+- **Implementation alternative** — Draw region outlines programmatically from `SKIN_LAYER_BOUNDS` (no image needed).
 
 ### Behavior
 
-- **Toggle** — Checkbox or button: "Show template" / "Hide template".
-- **Overlay** — Render the reference image as a semi-transparent layer above the canvas (e.g., `opacity: 0.3`) or draw region outlines programmatically.
-- **Non-destructive** — Template is visual only; it does not affect the canvas pixels. User draws underneath or with template visible as a guide.
-- **Region labels** — Optional: draw text labels (head, hat, body, etc.) at region centers using the bounds from [minecraft-skin-layout-specification.md](./minecraft-skin-layout-specification.md).
+- **Toggle** — "Template" button in the View section (alongside Rulers, Grid). Shows region outlines over the 2D canvas.
+- **Overlay** — Render the reference image as a semi-transparent layer (e.g., `opacity: 0.3`) or draw region rectangles from the layer bounds (semi-transparent fill + stroke).
+- **Non-destructive** — Template is visual only; it does not affect the canvas pixels.
+- **Region labels** — Optional: draw text labels (head, hat, body, etc.) at region centers.
 
 ### Implementation
 
-- **Asset location** — Copy `docs/minecraft-skin-layout-detailed.png` and `docs/minecraft-skin-64x64-detailed.png` to `public/` (e.g., `public/skin-template.png`) so they are served. The `docs/` folder is not typically served by Vite.
-- Load reference image: `new Image(); img.src = '/skin-template.png'`.
-- Draw on a separate canvas layer or as a CSS `background-image` with `mix-blend-mode` for non-destructive overlay.
-- Or: use the region bounds table to draw rectangles + labels; no image dependency.
+- **Programmatic outlines** — Use `SKIN_LAYER_BOUNDS` from `skinLayout.ts` to draw rectangles on the overlay canvas. Scale from 64×64 skin space to display size. Semi-transparent cyan stroke/fill works well.
+- **Reference image** — If available: copy layout images to `public/skin-template.png`, load with `new Image()`, draw with reduced opacity on the overlay layer.
 
 ---
 
@@ -416,7 +427,7 @@ A **toggleable template overlay** helps users understand how the 2D skin texture
 
 ### Paint Brush
 
-- **Size** — 1, 2, 4, 8 px (square block brush).
+- **Size** — 1, 2, 4, 8 px (square block brush). **Default: 2 px.**
 - **Shape** — Square block. A click fills the entire brush-size square centered at the click. Use `ctx.fillRect` for pixel-perfect blocks.
 - **Anti-aliasing** — `ctx.imageSmoothingEnabled = false` for pixel-perfect (Minecraft style).
 - **Layer mask** — Only draw on selected layer regions; ignore clicks outside.
@@ -498,16 +509,17 @@ A **toggleable template overlay** helps users understand how the 2D skin texture
 
 | Feature | Description |
 |---------|-------------|
-| Drawing | Canvas (128→64), square block brush (1/2/4/8 px), eraser, fill, color picker, pixelated rendering |
-| Paint on 3D | Raycast to UV → pixel; paint directly on 3D model; Edit 2D / Edit 3D toggle; shared texture |
-| Live 3D preview | 2D left, 3D right (split view); texture from 2D canvas applied each frame; random skin on load |
+| Drawing | Canvas (128→64), square block brush (1/2/4/8 px, default 2 px), eraser, fill, color picker, pixelated rendering |
+| Paint on 3D | Raycast to UV → pixel; paint directly on 3D model; Edit 2D/3D toggle (default: 3D); shared texture; left-drag paint, right-drag orbit |
+| Edit mode layout | 3D mode: large 3D view, 2D canvas hidden. 2D mode: large 2D canvas (scales to fill), 3D preview in creator panel after toolbar |
+| Live 3D preview | Moves between main area and preview slot by mode; camera reset when entering 2D preview; OrbitControls recreated when returning to 3D |
 | Layers | Head, hat, body, jacket, arms, sleeves, legs, pants — select to edit |
 | Presets | Per-layer template images |
 | Randomize | One-click random combination of presets |
 | Download | Explicit button → PNG file |
 | Save to webapp | POST to local API → save to `public/skins/custom/`, update index, viewer can use |
 | Integration | Same app, `/creator` route; shared skin layout, "Edit" / "Home" navigation |
-| Template overlay | Toggleable reference (`docs/minecraft-skin-layout-detailed.png`) for model-to-2D translation |
+| Template overlay | Toggle button in View section; draw region outlines from SKIN_LAYER_BOUNDS or reference image; non-destructive |
 | Skin gallery | Load skins from index; click to load into editor; undoable |
 | Rulers | Toggle; top/left strips outside image; (0,0)–(64,64); layout collapses when off |
 | Grid | Toggle; every 4 px; extensible spacing/settings |

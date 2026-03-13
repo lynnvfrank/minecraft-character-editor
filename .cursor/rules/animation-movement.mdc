@@ -1,0 +1,35 @@
+---
+description: Animation system, walk/turn, sequences
+globs: "**/animationManager.ts,**/characterAI.ts,**/main.ts,**/trapezoidBounds.ts"
+alwaysApply: false
+---
+
+# Animation and Movement
+
+## Reference
+- `docs/ANIMATION-AND-MOVEMENT-GUIDE.md`
+- `docs/ANIMATION-GLOSSARY.md`
+
+## Mixamo FBX
+- Same rig as `RunningboyRig.fbx`
+- "Without Skin"; FBX Binary format
+- In-place clips (no root motion)
+
+## Turn / Bones
+- Turn clips animate `BonesCharacter.quaternion`
+- `model.rotation.y` set separately (body facing)
+- `getBonesCharacterYawDeg`, `resetBonesCharacter`
+
+## Sequences
+- `playSequence([steps])` — steps: animation, walkTo, pause
+- `walkTo(target)` — turn → start-walking → walking → stop-walking
+- `playTurnToFace(direction)`
+
+## Trapezoid Bounds
+- `trapezoidBounds.ts` — frustum-derived walk limits in XZ
+- Math is framework-agnostic (Vector3)
+
+## Turn Strategies (URL)
+- `?turn=lerp` (default) — gradual model.rotation.y
+- `?turn=snap` — instant 90° pre-offset
+- `?turn=reset` — clear BonesCharacter after turn

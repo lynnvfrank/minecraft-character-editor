@@ -15,6 +15,11 @@ const DISPLAY_SIZE = WORK_SIZE * ZOOM;
 const SWATCH_MAX = 12;
 const DEFAULT_COLOR = '#8b7355';
 const LAYER_KEYS = ['head', 'hat', 'body', 'jacket', 'arms', 'sleeves', 'legs', 'pants'] as const;
+
+/** 3D mode: visibility per layer (hidden = not rendered, brush ignored). Default true. */
+const layer3DVisible: Record<string, boolean> = Object.fromEntries(LAYER_KEYS.map((k) => [k, true]));
+/** 3D mode: lock per layer (locked = brush ignored, part stays visible). Default false. */
+const layer3DLocked: Record<string, boolean> = Object.fromEntries(LAYER_KEYS.map((k) => [k, false]));
 const RULER_SIZE = 20;
 
 /** Ruler: 0,0 upper-left to 64,64 lower-right. Toggleable. */
@@ -24,7 +29,7 @@ let showGrid = false;
 /** Template overlay: region outlines for model-to-2D mapping. Toggleable. Non-destructive. */
 let showTemplate = false;
 /** Edit mode: true = paint on 3D model, false = paint on 2D canvas */
-let editMode3D = false;
+let editMode3D = true;
 const gridConfig = {
   spacingX: 4,
   spacingY: 4,
@@ -32,12 +37,12 @@ const gridConfig = {
   lineWidth: 1
 };
 
-type Tool = 'brush' | 'eraser' | 'fill';
+export type Tool = 'brush' | 'eraser' | 'fill' | 'navigate';
 
 let skinCanvas: HTMLCanvasElement | null = null;
 
 let currentColor = DEFAULT_COLOR;
-let brushSize = 4;
+let brushSize = 2;
 let swatchColors: string[] = [DEFAULT_COLOR];
 let isDrawing = false;
 let lastSkinX = -1;
@@ -57,7 +62,13 @@ type SkinEntry = { path: string; label: string; preview?: string };
 
 let undoStack: UndoCommand[] = [];
 let redoStack: UndoCommand[] = [];
-let currentStroke: { pixels: PixelChange[]; isEraser: boolean; newColor: string } | null = null;
+let currentStroke: {
+  pixels: PixelChange[];
+  isEraser: boolean;
+  newColor: string;
+  /** Tracks (x,y) already recorded so we only store the original value, not overwrites from overlapping dabs */
+  recorded: Set<string>;
+} | null = null;
 
 function rgbToHex(r: number, g: number, b: number): string {
   return (
@@ -78,6 +89,34 @@ function addToSwatch(hex: string): void {
 function pointInBounds(x: number, y: number, b: Bounds): boolean {
   return x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
 }
+
+/** Return which layer (head, hat, body, etc.) contains the given working coords, or null. */
+export function getLayerAtCoords(workingX: number, workingY: number): string | null {
+  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
+  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
+  for (const layer of LAYER_KEYS) {
+    const bounds = SKIN_LAYER_BOUNDS[layer];
+    if (!bounds) continue;
+    for (const b of bounds) {
+      if (pointInBounds(normX, normY, b)) return layer;
+    }
+  }
+  return null;
+}
+
+/** 3D mode: can we paint on this layer? (visible and not locked) */
+function canPaintOn3DLayer(layer: string | null): boolean {
+  if (!layer) return false;
+  if (!layer3DVisible[layer]) return false;
+  if (layer3DLocked[layer]) return false;
+  return true;
+}
+
+/** 3D mode: is the pixel at (workingX, workingY) in a paintable layer? */
+function isInPaintable3DLayer(workingX: number, workingY: number): boolean {
+  return canPaintOn3DLayer(getLayerAtCoords(workingX, workingY));
+}
+
 
 /** Check if working-canvas coord (0..WORK_SIZE-1) is in a selected layer. */
 function isInSelectedLayer(workingX: number, workingY: number): boolean {
@@ -120,7 +159,16 @@ function getRulerLeftCanvas(): HTMLCanvasElement | null {
   return document.getElementById('creator-ruler-left') as HTMLCanvasElement | null;
 }
 
-/** Returns CSS cursor value for brush: box outline, size matches on-screen brush size. Hotspot center. */
+/** Returns CSS cursor value for brush: box outline. Hotspot center. */
+function makeBrushCursorSVG(boxPx: number): string {
+  const cursorSize = 64;
+  const x = (cursorSize - boxPx) / 2;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><rect x="${x}" y="${x}" width="${boxPx}" height="${boxPx}" fill="none" stroke="white" stroke-width="1"/></svg>`;
+  const encoded = encodeURIComponent(svg).replace(/'/g, '%27');
+  return `url("data:image/svg+xml,${encoded}") ${cursorSize / 2} ${cursorSize / 2}, crosshair`;
+}
+
+/** Returns CSS cursor value for brush: box outline, size matches on-screen brush size (2D). */
 function getBrushCursorStyle(size: number): string {
   const canvas = getDisplayCanvas();
   const rect = canvas?.getBoundingClientRect();
@@ -128,11 +176,13 @@ function getBrushCursorStyle(size: number): string {
   const boxPx = rect
     ? Math.max(2, (size * (rect.width / WORK_SIZE)) / dpr)
     : size * (DISPLAY_SIZE / WORK_SIZE) / dpr;
-  const cursorSize = 64;
-  const x = (cursorSize - boxPx) / 2;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><rect x="${x}" y="${x}" width="${boxPx}" height="${boxPx}" fill="none" stroke="white" stroke-width="1"/></svg>`;
-  const encoded = encodeURIComponent(svg).replace(/'/g, '%27');
-  return `url("data:image/svg+xml,${encoded}") ${cursorSize / 2} ${cursorSize / 2}, crosshair`;
+  return makeBrushCursorSVG(boxPx);
+}
+
+/** Returns CSS cursor for 3D viewport: fixed screen-space box (8px per brush size unit). */
+export function getBrushCursorStyleFor3D(size: number): string {
+  const boxPx = Math.max(8, size * 8);
+  return makeBrushCursorSVG(boxPx);
 }
 
 function updateCanvasCursor(): void {
@@ -162,7 +212,7 @@ function brushAt(
   sx: number,
   sy: number,
   isEraser = false,
-  stroke?: { pixels: PixelChange[]; isEraser: boolean; newColor: string } | null
+  stroke?: { pixels: PixelChange[]; isEraser: boolean; newColor: string; recorded: Set<string> } | null
 ): void {
   const offset = Math.floor(brushSize / 2);
   for (let dy = 0; dy < brushSize; dy++) {
@@ -177,8 +227,12 @@ function brushAt(
         isInSelectedLayer(px, py)
       ) {
         if (stroke) {
-          const d = skinCtx.getImageData(px, py, 1, 1).data;
-          stroke.pixels.push({ x: px, y: py, r: d[0], g: d[1], b: d[2], a: d[3] });
+          const key = `${px},${py}`;
+          if (!stroke.recorded.has(key)) {
+            stroke.recorded.add(key);
+            const d = skinCtx.getImageData(px, py, 1, 1).data;
+            stroke.pixels.push({ x: px, y: py, r: d[0], g: d[1], b: d[2], a: d[3] });
+          }
         }
         if (isEraser) {
           skinCtx.clearRect(px, py, 1, 1);
@@ -419,7 +473,7 @@ function drawLine(
   x1: number,
   y1: number,
   isEraser = false,
-  stroke?: { pixels: PixelChange[]; isEraser: boolean; newColor: string } | null
+  stroke?: { pixels: PixelChange[]; isEraser: boolean; newColor: string; recorded: Set<string> } | null
 ): void {
   const dx = Math.abs(x1 - x0);
   const dy = Math.abs(y1 - y0);
@@ -667,7 +721,8 @@ function buildToolbar(): void {
 
   toolbar.querySelectorAll('.creator-tool').forEach((btn) => {
     btn.addEventListener('click', () => {
-      activeTool = (btn as HTMLElement).dataset.tool as Tool;
+      const tool = (btn as HTMLElement).dataset.tool as Tool;
+      setActiveTool(tool);
       toolbar.querySelectorAll('.creator-tool').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
     });
@@ -721,7 +776,8 @@ function buildToolbar(): void {
 
   toolbar.querySelectorAll('.creator-brush-size').forEach((btn) => {
     btn.addEventListener('click', () => {
-      brushSize = parseInt((btn as HTMLElement).dataset.size || '2', 10);
+      const size = parseInt((btn as HTMLElement).dataset.size || '2', 10);
+      setBrushSize(size);
       toolbar.querySelectorAll('.creator-brush-size').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       updateCanvasCursor();
@@ -748,6 +804,7 @@ function buildToolbar(): void {
     btn.addEventListener('click', () => {
       const m = (btn as HTMLElement).dataset.mode;
       editMode3D = m === '3d';
+      document.body.dataset.editMode = editMode3D ? '3d' : '2d';
       (document.getElementById('creator-edit-2d-btn') as HTMLElement)?.classList.toggle('active', !editMode3D);
       (document.getElementById('creator-edit-3d-btn') as HTMLElement)?.classList.toggle('active', editMode3D);
       document.dispatchEvent(new CustomEvent('creator-edit-mode-change', { detail: { is3D: editMode3D } }));
@@ -823,7 +880,7 @@ function setupCanvasEvents(): void {
         lastSkinX = x;
         lastSkinY = y;
         const isEraser = activeTool === 'eraser';
-        currentStroke = { pixels: [], isEraser, newColor: currentColor };
+        currentStroke = { pixels: [], isEraser, newColor: currentColor, recorded: new Set<string>() };
         brushAt(ctx, x, y, isEraser, currentStroke);
         renderToDisplay();
       }
@@ -885,8 +942,152 @@ function fitCanvasAreaScale(): void {
   const areaRect = area.getBoundingClientRect();
   const hasRulers = wrap.hasAttribute('data-rulers');
   const size = hasRulers ? 532 : 512;
-  const scale = Math.min(1, areaRect.width / size, areaRect.height / size);
+  const scale = Math.min(areaRect.width / size, areaRect.height / size);
   (wrap as HTMLElement).style.transform = `scale(${scale})`;
+}
+
+let layersPanel3DCollapsed = false;
+
+function buildLayersPanel3D(): void {
+  const wrapper = document.getElementById('creator-view-wrapper');
+  if (!wrapper) return;
+
+  let panel = document.getElementById('creator-layers-panel-3d');
+  if (panel) panel.remove();
+
+  panel = document.createElement('div');
+  panel.id = 'creator-layers-panel-3d';
+  panel.className = 'creator-layers-panel-3d';
+  panel.setAttribute('aria-label', '3D layers');
+  panel.innerHTML = `
+    <div class="creator-layers-panel-3d-header">
+      <span class="creator-layers-panel-3d-title">Layers</span>
+      <button type="button" class="creator-layers-panel-3d-toggle" title="Minimize panel" aria-label="Minimize panel">
+        <span class="creator-layers-panel-3d-icon creator-layers-panel-3d-icon-minimize">▼</span>
+        <span class="creator-layers-panel-3d-icon creator-layers-panel-3d-icon-expand">▲</span>
+      </button>
+    </div>
+    <div class="creator-layers-panel-3d-list" role="group">
+      ${LAYER_KEYS.map(
+        (layer) =>
+          `<div class="creator-layers-panel-3d-row" data-layer="${layer}">
+          <span class="creator-layers-panel-3d-name">${layer.charAt(0).toUpperCase() + layer.slice(1)}</span>
+          <label class="creator-layers-panel-3d-visibility" title="Visibility (eye): hide to paint underlying parts">
+            <input type="checkbox" class="creator-layer-3d-visible" data-layer="${layer}" ${layer3DVisible[layer] ? 'checked' : ''}>
+            <span class="creator-layer-eye" aria-hidden="true">👁</span>
+          </label>
+          <label class="creator-layers-panel-3d-lock" title="Lock: ignore brush/eraser/fill">
+            <input type="checkbox" class="creator-layer-3d-lock" data-layer="${layer}" ${layer3DLocked[layer] ? 'checked' : ''}>
+            <span class="creator-layer-lock" aria-hidden="true">🔒</span>
+          </label>
+        </div>`
+      ).join('')}
+    </div>
+  `;
+
+  panel.querySelectorAll('.creator-layer-3d-visible').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const layer = (cb as HTMLElement).dataset.layer;
+      if (layer) setLayer3DVisible(layer, (cb as HTMLInputElement).checked);
+    });
+  });
+  panel.querySelectorAll('.creator-layer-3d-lock').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const layer = (cb as HTMLElement).dataset.layer;
+      if (layer) setLayer3DLocked(layer, (cb as HTMLInputElement).checked);
+    });
+  });
+
+  const toggleBtn = panel.querySelector('.creator-layers-panel-3d-toggle') as HTMLButtonElement;
+  const updateCollapsedUI = () => {
+    panel.classList.toggle('creator-layers-panel-3d-collapsed', layersPanel3DCollapsed);
+    const minimizeIcon = panel.querySelector('.creator-layers-panel-3d-icon-minimize');
+    const expandIcon = panel.querySelector('.creator-layers-panel-3d-icon-expand');
+    if (minimizeIcon && expandIcon) {
+      minimizeIcon.setAttribute('aria-hidden', String(layersPanel3DCollapsed));
+      expandIcon.setAttribute('aria-hidden', String(!layersPanel3DCollapsed));
+    }
+    if (toggleBtn) {
+      toggleBtn.title = layersPanel3DCollapsed ? 'Expand panel' : 'Minimize panel';
+      toggleBtn.setAttribute('aria-label', layersPanel3DCollapsed ? 'Expand panel' : 'Minimize panel');
+    }
+  };
+  toggleBtn?.addEventListener('click', () => {
+    layersPanel3DCollapsed = !layersPanel3DCollapsed;
+    updateCollapsedUI();
+  });
+  updateCollapsedUI();
+
+  wrapper.appendChild(panel);
+}
+
+function buildToolsPanel3D(): void {
+  const wrapper = document.getElementById('creator-view-wrapper');
+  if (!wrapper) return;
+
+  let panel = document.getElementById('creator-tools-panel-3d');
+  if (panel) panel.remove();
+
+  panel = document.createElement('div');
+  panel.id = 'creator-tools-panel-3d';
+  panel.className = 'creator-tools-panel-3d';
+  panel.setAttribute('aria-label', '3D tools');
+  panel.innerHTML = `
+    <div class="creator-tools-panel-3d-row" role="group" aria-label="Drawing tools">
+      <button type="button" class="creator-tools-panel-3d-btn" data-tool="navigate" title="Navigate: orbit/zoom, no paint">Navigate</button>
+      <button type="button" class="creator-tools-panel-3d-btn" data-tool="brush" title="Brush">Brush</button>
+      <button type="button" class="creator-tools-panel-3d-btn" data-tool="eraser" title="Eraser">Eraser</button>
+      <button type="button" class="creator-tools-panel-3d-btn" data-tool="fill" title="Fill">Fill</button>
+    </div>
+    <div class="creator-tools-panel-3d-brush-row" data-only-when="brush" role="group" aria-label="Brush size">
+      <span class="creator-tools-panel-3d-label">Brush</span>
+      <div class="creator-tools-panel-3d-sizes">
+        ${[1, 2, 4, 8].map((s) => `<button type="button" class="creator-tools-panel-3d-size-btn" data-size="${s}" title="${s}px"><span class="creator-tools-panel-3d-brush-icon" style="width:${s * 3}px;height:${s * 3}px"></span></button>`).join('')}
+      </div>
+    </div>
+  `;
+
+  const updateToolActive = () => {
+    panel.querySelectorAll('.creator-tools-panel-3d-btn').forEach((btn) => {
+      btn.classList.toggle('active', (btn as HTMLElement).dataset.tool === activeTool);
+    });
+  };
+  const updateBrushActive = () => {
+    panel.querySelectorAll('.creator-tools-panel-3d-size-btn').forEach((btn) => {
+      btn.classList.toggle('active', parseInt((btn as HTMLElement).dataset.size || '0', 10) === brushSize);
+    });
+  };
+  const updateBrushRowVisibility = () => {
+    const row = panel.querySelector('.creator-tools-panel-3d-brush-row');
+    if (row) row.classList.toggle('creator-tools-panel-3d-visible', activeTool === 'brush');
+  };
+
+  panel.querySelectorAll('.creator-tools-panel-3d-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setActiveTool((btn as HTMLElement).dataset.tool as Tool);
+      updateToolActive();
+      updateBrushRowVisibility();
+    });
+  });
+  panel.querySelectorAll('.creator-tools-panel-3d-size-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const size = parseInt((btn as HTMLElement).dataset.size || '2', 10);
+      setBrushSize(size);
+      updateBrushActive();
+    });
+  });
+
+  document.addEventListener('creator-tools-3d-change', () => {
+    updateToolActive();
+    updateBrushActive();
+    updateBrushRowVisibility();
+  });
+
+  updateToolActive();
+  updateBrushActive();
+  updateBrushRowVisibility();
+
+  wrapper.appendChild(panel);
 }
 
 function setupCanvasAreaResize(): void {
@@ -915,7 +1116,10 @@ export function initCreator(): void {
   if (!ctx) return;
 
   ctx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
+  document.body.dataset.editMode = editMode3D ? '3d' : '2d';
   buildToolbar();
+  buildLayersPanel3D();
+  buildToolsPanel3D();
   renderToDisplay();
   setupCanvasEvents();
   setupCanvasAreaResize();
@@ -970,6 +1174,56 @@ export function getEditMode3D(): boolean {
   return editMode3D;
 }
 
+/** 3D layers panel: visibility state (layer hidden = not rendered, brush ignored). */
+export function getLayer3DVisible(): Record<string, boolean> {
+  return { ...layer3DVisible };
+}
+
+/** 3D layers panel: lock state (locked = brush ignored, part stays visible). */
+export function getLayer3DLocked(): Record<string, boolean> {
+  return { ...layer3DLocked };
+}
+
+/** Set visibility for a layer and dispatch change event. */
+export function setLayer3DVisible(layer: string, visible: boolean): void {
+  if (LAYER_KEYS.includes(layer as (typeof LAYER_KEYS)[number])) {
+    layer3DVisible[layer] = visible;
+    document.dispatchEvent(new CustomEvent('creator-layer3d-change'));
+  }
+}
+
+/** Set lock for a layer and dispatch change event. */
+export function setLayer3DLocked(layer: string, locked: boolean): void {
+  if (LAYER_KEYS.includes(layer as (typeof LAYER_KEYS)[number])) {
+    layer3DLocked[layer] = locked;
+    document.dispatchEvent(new CustomEvent('creator-layer3d-change'));
+  }
+}
+
+/** Active drawing tool (navigate = no paint, full orbit). */
+export function getActiveTool(): Tool {
+  return activeTool;
+}
+
+/** Set active tool and dispatch change event. */
+export function setActiveTool(tool: Tool): void {
+  activeTool = tool;
+  document.dispatchEvent(new CustomEvent('creator-tools-3d-change'));
+}
+
+/** Brush size (1, 2, 4, 8). */
+export function getBrushSize(): number {
+  return brushSize;
+}
+
+/** Set brush size and dispatch change event. */
+export function setBrushSize(size: number): void {
+  if ([1, 2, 4, 8].includes(size)) {
+    brushSize = size;
+    document.dispatchEvent(new CustomEvent('creator-tools-3d-change'));
+  }
+}
+
 /** WORK_SIZE for UV→pixel mapping (texture is WORK_SIZE×WORK_SIZE). */
 export function getCreatorWorkSize(): number {
   return WORK_SIZE;
@@ -987,6 +1241,8 @@ export function uvToWorkingCoords(u: number, v: number): { x: number; y: number 
 
 /** Start paint/eraser stroke at working coords (or do fill if fill tool). Returns true if anything was done. */
 export function paintStartFrom3D(workingX: number, workingY: number): boolean {
+  if (activeTool === 'navigate') return false;
+  if (!isInPaintable3DLayer(workingX, workingY)) return false;
   const skin = getSkinCanvas();
   const ctx = skin.getContext('2d', { willReadFrequently: true });
   if (!ctx) return false;
@@ -1004,7 +1260,7 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
   lastSkinX = workingX;
   lastSkinY = workingY;
   const isEraser = activeTool === 'eraser';
-  currentStroke = { pixels: [], isEraser, newColor: currentColor };
+  currentStroke = { pixels: [], isEraser, newColor: currentColor, recorded: new Set<string>() };
   brushAt(ctx, workingX, workingY, isEraser, currentStroke);
   renderToDisplay();
   return true;
@@ -1013,6 +1269,7 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
 /** Continue paint stroke (call during drag). */
 export function paintMoveFrom3D(workingX: number, workingY: number): void {
   if (!currentStroke || !isDrawing) return;
+  if (!isInPaintable3DLayer(workingX, workingY)) return;
   const skin = getSkinCanvas();
   const ctx = skin.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;

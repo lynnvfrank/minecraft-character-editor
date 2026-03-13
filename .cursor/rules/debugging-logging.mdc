@@ -1,0 +1,34 @@
+---
+description: Debug modes, logging, troubleshooting
+globs: "**/*.ts"
+alwaysApply: false
+---
+
+# Debugging and Logging
+
+## Reference
+See `docs/TROUBLESHOOTING.md`.
+
+## URL Params
+| Param | Effect |
+|-------|--------|
+| `?log=animation:debug` | Animation system at debug |
+| `?log=*:trace` | All systems at trace |
+| `?logRelay=1` | Send logs to server console |
+| `?movementcontrols=1` | Isolated turn/walk test (no characterAI) |
+| `?controls=1` | Show control panel |
+| `?turn=lerp` | Turn strategy (lerp / snap / reset) |
+
+## npm Scripts
+- `npm run dev:log` — common systems (animation, stateMachine, messaging)
+- `npm run dev:log:debug` — all systems at debug
+- `npm run dev:trace` — all systems at trace
+
+## Movement Controls Mode
+`?movementcontrols=1` — manual turn left/right, walk to waypoint, Pause/Resume/Step Frame.
+
+## Step Frame Debug
+When paused: Step Frame advances one frame. Enable `?log=animation:debug,position:debug,stateMachine:debug`.
+
+## Turn Snapping Issues
+Check `?turn=lerp` vs `snap`; enable `?log=position:debug` for `logFacingChange`.

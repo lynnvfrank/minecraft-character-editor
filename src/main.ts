@@ -5,6 +5,13 @@ import {
   getCreatorSkinCanvas,
   loadSkinFromPath,
   getEditMode3D,
+  getCreatorWorkSize,
+  getActiveTool,
+  getBrushSize,
+  getBrushCursorStyleFor3D,
+  getLayer3DVisible,
+  getLayer3DLocked,
+  getLayerAtCoords,
   uvToWorkingCoords,
   paintStartFrom3D,
   paintMoveFrom3D,
@@ -22,6 +29,7 @@ import { createFakeChatUI } from './fakeChatUI';
 import { setupTestControls } from './setupTestControls';
 import { logger } from './logger';
 import { setFacingLogContextProvider } from './debugFacing';
+import { SKIN_LAYER_BOUNDS } from './skinLayout';
 
 type SkinEntry = {
   path: string;
@@ -101,17 +109,14 @@ function parseTurnStrategy(p: URLSearchParams): TurnStrategy {
   return 'lerp';
 }
 let turnStrategy: TurnStrategy = parseTurnStrategy(params);
-/** Animation keys excluded from creator preview cycle (locomotion only) */
-const CREATOR_LOCOMOTION_KEYS = new Set([
-  'walking', 'walk', 'run', 'running',
-  'start-walking', 'stop-walking', 'start-walking-movement', 'stop-walking-movement',
-  'walking-backwards', 'female-walk',
-  'left-turn', 'right-turn', 'turn-left', 'turn-right'
+/** Animation keys included in creator preview (idle only for now) */
+const CREATOR_IDLE_KEYS = new Set([
+  'idle'
 ]);
 
 function getCreatorAnimationKeys(): string[] {
   return animationsList
-    .filter((a) => !CREATOR_LOCOMOTION_KEYS.has(a.key.toLowerCase()))
+    .filter((a) => CREATOR_IDLE_KEYS.has(a.key.toLowerCase()))
     .map((a) => a.key);
 }
 
@@ -155,18 +160,30 @@ function getRoute(): 'creator' | 'viewer' {
   return 'viewer';
 }
 
+const characters: Record<string, CharacterState> = {};
+let animationManager: ReturnType<typeof createAnimationManager> | null = null;
+
 function applyRoute(): void {
   const route = getRoute();
   document.body.dataset.route = route;
   if (route === 'creator') {
+    if (animationManager) {
+      animationManager.stop();
+      animationManager.stopIdleWanderer?.();
+    }
+    const char = characters['runningboy'];
+    if (char?.currentAction) {
+      char.currentAction.stop();
+      char.currentAction = null;
+    }
     initCreator();
     window.setTimeout(() => {
       startCreatorAnimationCycler();
     }, 0);
     window.setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
-      const char = characters['runningboy'];
-      if (char?.currentSkin) loadSkinFromPath(char.currentSkin);
+      const c = characters['runningboy'];
+      if (c?.currentSkin) loadSkinFromPath(c.currentSkin);
     }, 0);
   }
 }
@@ -184,7 +201,6 @@ let renderer: THREE.WebGLRenderer;
 let camera: THREE.PerspectiveCamera;
 let scene: THREE.Scene;
 let controls: OrbitControls;
-const characters: Record<string, CharacterState> = {};
 const clock = new THREE.Clock();
 let skinsList: SkinEntry[] = [];
 let animationsList: AnimationEntry[] = [];
@@ -193,7 +209,6 @@ let animationsList: AnimationEntry[] = [];
 type Sequence = { id: string; label: string; steps: SequenceStep[] };
 let sequencesList: Sequence[] = [];
 let socketManager: ReturnType<typeof createSocketManager> | null = null;
-let animationManager: ReturnType<typeof createAnimationManager> | null = null;
 let characterAI: ReturnType<typeof createCharacterAI> | null = null;
 
 /** Debug: pause animation loop (used when ?movementcontrols=1). */
@@ -471,6 +486,18 @@ function _getMinecraftPartFromMeshName(name: string): keyof typeof MINECRAFT_SKI
     return 'legR';
   }
   return null;
+}
+
+/** Addendum layer keys for visibility. */
+const CREATOR_LAYER_KEYS = ['head', 'hat', 'body', 'jacket', 'arms', 'sleeves', 'legs', 'pants'] as const;
+
+function applyCreatorLayerVisibility(model: THREE.Group, _layerVisible: Record<string, boolean>) {
+  // Visibility is handled by texture-region transparency; all meshes stay visible
+  model.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      (obj as THREE.Mesh).visible = true;
+    }
+  });
 }
 
 function configureTexture(texture: THREE.Texture, preset: TexturePreset) {
@@ -838,12 +865,16 @@ function setupUserActivityListeners() {
   const MOUSE_THROTTLE_MS = 200;
 
   document.addEventListener('mousemove', () => {
+    if (getRoute() !== 'viewer') return;
     const now = Date.now();
     if (now - lastMouseReport < MOUSE_THROTTLE_MS) return;
     lastMouseReport = now;
     characterAI?.onUserActivity(false);
   });
-  document.addEventListener('keydown', () => characterAI?.onUserActivity(true));
+  document.addEventListener('keydown', () => {
+    if (getRoute() !== 'viewer') return;
+    characterAI?.onUserActivity(true);
+  });
 }
 
 function setupSocketEvents() {
@@ -900,6 +931,65 @@ function onWindowResize() {
 }
 
 let creatorPreviewTexture: THREE.CanvasTexture | null = null;
+let creatorOverlayCanvas: HTMLCanvasElement | null = null;
+let creatorOverlayTexture: THREE.CanvasTexture | null = null;
+
+/** All layers using texture-region transparency (head, hat, body, jacket, sleeves, arms, legs, pants) */
+const TEXTURE_LAYER_KEYS = ['head', 'hat', 'body', 'jacket', 'sleeves', 'arms', 'legs', 'pants'] as const;
+
+/** Build visibility texture: copy skin, zero alpha for hidden layer regions. Apply to all meshes. */
+function buildVisibilityTexture(
+  skinCanvas: HTMLCanvasElement,
+  layerVisible: Record<string, boolean>
+): THREE.Texture {
+  const workSize = getCreatorWorkSize();
+  const scale = workSize / 64;
+
+  if (!creatorOverlayCanvas || creatorOverlayCanvas.width !== workSize) {
+    creatorOverlayCanvas = document.createElement('canvas');
+    creatorOverlayCanvas.width = workSize;
+    creatorOverlayCanvas.height = workSize;
+  }
+  const ctx = creatorOverlayCanvas.getContext('2d');
+  if (!ctx) return creatorPreviewTexture!;
+
+  ctx.clearRect(0, 0, workSize, workSize);
+  ctx.drawImage(skinCanvas, 0, 0);
+  const imageData = ctx.getImageData(0, 0, workSize, workSize);
+  const data = imageData.data;
+
+  for (const layerKey of TEXTURE_LAYER_KEYS) {
+    if (layerVisible[layerKey] !== false) continue;
+    const bounds = SKIN_LAYER_BOUNDS[layerKey];
+    if (!bounds) continue;
+    for (const b of bounds) {
+      const x0 = Math.floor(b.x * scale);
+      const y0 = Math.floor(b.y * scale);
+      const x1 = Math.min(Math.ceil((b.x + b.w) * scale), workSize);
+      const y1 = Math.min(Math.ceil((b.y + b.h) * scale), workSize);
+      for (let py = y0; py < y1; py++) {
+        for (let px = x0; px < x1; px++) {
+          const i = (py * workSize + px) * 4;
+          data[i + 3] = 0;
+        }
+      }
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  if (!creatorOverlayTexture) {
+    creatorOverlayTexture = new THREE.CanvasTexture(creatorOverlayCanvas);
+    creatorOverlayTexture.colorSpace = THREE.SRGBColorSpace;
+    creatorOverlayTexture.magFilter = THREE.NearestFilter;
+    creatorOverlayTexture.minFilter = THREE.NearestFilter;
+    creatorOverlayTexture.generateMipmaps = false;
+    creatorOverlayTexture.wrapS = creatorOverlayTexture.wrapT = THREE.ClampToEdgeWrapping;
+    creatorOverlayTexture.flipY = true;
+  }
+  creatorOverlayTexture.source.data = creatorOverlayCanvas;
+  creatorOverlayTexture.needsUpdate = true;
+  return creatorOverlayTexture;
+}
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -930,10 +1020,54 @@ function raycastToSkinUV(clientX: number, clientY: number): { u: number; v: numb
   return { u: uv.x, v: uv.y };
 }
 
+/** Raycast and return UV for first hit that maps to a paintable layer. Passes through hidden overlays (hat, jacket, sleeves, pants) to hit base layers (head, body, arms, legs). */
+function raycastToPaintableUV(clientX: number, clientY: number): { u: number; v: number } | null {
+  const canvas = renderer.domElement;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = getCharacterMeshes();
+  const intersects = raycaster.intersectObjects(meshes, false);
+  const layerVisible = getLayer3DVisible();
+  const layerLocked = getLayer3DLocked();
+  for (const hit of intersects) {
+    const uv = (hit as THREE.Intersection<THREE.Object3D> & { uv?: THREE.Vector2 }).uv;
+    if (!uv) continue;
+    const { x, y } = uvToWorkingCoords(uv.x, uv.y);
+    const layer = getLayerAtCoords(x, y);
+    if (!layer) continue;
+    if (layerVisible[layer] === false) continue;
+    if (layerLocked[layer] === true) continue;
+    return { u: uv.x, v: uv.y };
+  }
+  return null;
+}
+
+function updateCreator3DCanvasCursor() {
+  const canvas = renderer.domElement;
+  if (getRoute() !== 'creator' || !getEditMode3D()) {
+    canvas.style.cursor = '';
+    return;
+  }
+  const tool = getActiveTool();
+  if (tool === 'brush' || tool === 'eraser') {
+    canvas.style.cursor = getBrushCursorStyleFor3D(getBrushSize());
+  } else {
+    canvas.style.cursor = '';
+  }
+}
+
 function updateOrbitControlsForEditMode() {
   if (getRoute() !== 'creator') return;
   if (getEditMode3D()) {
-    controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    // Navigate: full orbit (left + right drag). Brush/Eraser/Fill: left = paint, right = orbit
+    const isNavigate = getActiveTool() === 'navigate';
+    controls.mouseButtons = {
+      LEFT: isNavigate ? THREE.MOUSE.ROTATE : null,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE
+    };
   } else {
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   }
@@ -945,7 +1079,8 @@ function setupCreator3DPaint() {
   function handlePointerDown(e: MouseEvent) {
     if (getRoute() !== 'creator' || !getEditMode3D()) return;
     if (e.button !== 0) return; // left only
-    const uv = raycastToSkinUV(e.clientX, e.clientY);
+    if (getActiveTool() === 'navigate') return; // navigate = no paint
+    const uv = raycastToPaintableUV(e.clientX, e.clientY);
     if (!uv) return;
     const { x, y } = uvToWorkingCoords(uv.u, uv.v);
     if (e.altKey) {
@@ -960,7 +1095,7 @@ function setupCreator3DPaint() {
 
   function handlePointerMove(e: MouseEvent) {
     if (!is3DPainting) return;
-    const uv = raycastToSkinUV(e.clientX, e.clientY);
+    const uv = raycastToPaintableUV(e.clientX, e.clientY);
     if (!uv) return;
     const { x, y } = uvToWorkingCoords(uv.u, uv.v);
     paintMoveFrom3D(x, y);
@@ -981,8 +1116,55 @@ function setupCreator3DPaint() {
   canvas.addEventListener('mouseup', handlePointerUp);
   canvas.addEventListener('mouseleave', handlePointerUp);
 
-  document.addEventListener('creator-edit-mode-change', () => updateOrbitControlsForEditMode());
+  document.addEventListener('creator-edit-mode-change', () => {
+    updateOrbitControlsForEditMode();
+    updateCreator3DViewPlacement();
+    updateCreator3DCanvasCursor();
+  });
+  document.addEventListener('creator-tools-3d-change', () => {
+    updateOrbitControlsForEditMode();
+    updateCreator3DCanvasCursor();
+  });
   updateOrbitControlsForEditMode();
+  updateCreator3DViewPlacement();
+  updateCreator3DCanvasCursor();
+}
+
+function updateCreator3DViewPlacement() {
+  if (getRoute() !== 'creator') return;
+  const app = document.getElementById('app');
+  const wrapper = document.getElementById('creator-view-wrapper');
+  const slot = document.getElementById('creator-3d-preview-slot');
+  if (!app || !wrapper || !slot) return;
+  if (getEditMode3D()) {
+    if (app.parentElement !== wrapper) {
+      wrapper.appendChild(app);
+      onWindowResize();
+      recreateOrbitControls();
+    }
+  } else {
+    if (app.parentElement !== slot) {
+      slot.appendChild(app);
+      resetCameraFor2DPreview();
+    }
+    onWindowResize();
+  }
+}
+
+/** Recreate OrbitControls after DOM move so event handling works correctly */
+function recreateOrbitControls() {
+  controls.dispose();
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.target.set(0, 1, 0);
+  updateOrbitControlsForEditMode();
+}
+
+/** Re-center and zoom out camera so the full character fits in the small 2D-mode preview */
+function resetCameraFor2DPreview() {
+  camera.position.set(0, 1.5, 4);
+  controls.target.set(0, 1, 0);
+  controls.update();
 }
 
 function updateCreatorPreviewTexture() {
@@ -999,14 +1181,26 @@ function updateCreatorPreviewTexture() {
     creatorPreviewTexture.wrapS = creatorPreviewTexture.wrapT = THREE.ClampToEdgeWrapping;
     creatorPreviewTexture.flipY = true;
   }
-  creatorPreviewTexture.source.data = canvas;
-  creatorPreviewTexture.needsUpdate = true;
-  applySkinToModel(char.model, creatorPreviewTexture, 'clamped-flip' as TexturePreset, 'transparent' as AlphaMode);
+  const layerVisible = getLayer3DVisible();
+  // Always build texture from fresh canvas copy so eraser/paint updates show immediately
+  // (direct creatorPreviewTexture can show stale pixels on base layers due to GPU/Three.js caching)
+  const textureToUse = buildVisibilityTexture(canvas, layerVisible);
+
+  applySkinToModel(char.model, textureToUse, 'clamped-flip' as TexturePreset, 'transparent' as AlphaMode);
+  applyCreatorLayerVisibility(char.model, layerVisible);
 }
 
 function animate() {
   requestAnimationFrame(animate);
-  if (getRoute() === 'creator') updateCreatorPreviewTexture();
+  if (getRoute() === 'creator') {
+    updateCreatorPreviewTexture();
+  } else {
+    const char = characters['runningboy'];
+    if (char) {
+      const allVisible = Object.fromEntries(CREATOR_LAYER_KEYS.map((k) => [k, true]));
+      applyCreatorLayerVisibility(char.model, allVisible);
+    }
+  }
   if (paused) return;
   const delta = clock.getDelta();
   Object.values(characters).forEach((char) => char.mixer.update(delta));
