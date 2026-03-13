@@ -133,6 +133,12 @@ If the character snaps 90° before the turn starts:
 3. **Check `Turn start lerp` trace** — Enable `?log=animation:trace`. You should see lerp progress (`t`, `modelYawDeg`). If you never see these, the lerp isn't running.
 4. **Facing change logs** — Enable `?log=position:debug` to see `logFacingChange` when `model.rotation.y` changes. Check `source` to see what's writing rotation (e.g. `updateBodyTurn` would indicate characterAI overwriting during walk—it should skip when `isInWalkToPhase`).
 
+### Character Creator: Cursor ghosting on Mac (Safari and Chrome)
+
+On Mac with Retina display, the brush/eraser cursor may show faint ghosting (inner square, outer partial square) around the main outline. This appears in both Safari and Chrome. **Known issue**; no fix yet. The cursor size is correct (1 cell, adjusted for `devicePixelRatio`), but macOS cursor rendering produces these artifacts. Workaround: use Windows/Edge where the cursor renders cleanly, or ignore the ghosting.
+
+---
+
 ### Step frame logs (movement controls mode)
 
 When paused and you click **Step Frame**, logs emit per enabled system:

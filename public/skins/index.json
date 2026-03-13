@@ -65,6 +65,10 @@
     "preview": "/skins/previews/skin-anime9-preview.png"
   },
   {
+    "path": "/skins/skin-base.png",
+    "label": "skin base"
+  },
+  {
     "path": "/skins/skin-demon1.png",
     "label": "skin demon1",
     "preview": "/skins/previews/skin-demon1-preview.png"

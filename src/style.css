@@ -63,6 +63,9 @@ body[data-route="creator"][data-edit-mode="2d"] .creator-canvas-area {
   display: flex !important;
   flex: 1 1 auto;
 }
+body[data-route="creator"][data-edit-mode="2d"] .creator-blocky-grid {
+  display: grid !important;
+}
 body[data-route="creator"][data-edit-mode="2d"] .creator-3d-preview-slot {
   display: flex !important;
   flex: 0 0 auto;
@@ -285,13 +288,24 @@ body[data-route="viewer"] .creator-canvas-area {
   cursor: pointer;
 }
 
-/* 3D layers panel — floating lower-right, shown only in Edit 3D mode */
-.creator-layers-panel-3d {
+/* Lower-right panels container (layers + hover info) */
+.creator-lower-right-panels {
   display: none;
   position: absolute;
   bottom: 0.75rem;
   right: 0.75rem;
   z-index: 20;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+body[data-route="creator"] .creator-lower-right-panels {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 3D layers panel — floating lower-right, inside creator-lower-right-panels */
+.creator-layers-panel-3d {
   width: 180px;
   min-width: 180px;
   background: rgba(20, 25, 40, 0.92);
@@ -300,9 +314,6 @@ body[data-route="viewer"] .creator-canvas-area {
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-}
-body[data-route="creator"][data-edit-mode="3d"] .creator-layers-panel-3d {
-  display: block;
 }
 .creator-layers-panel-3d-header {
   display: flex;
@@ -314,6 +325,12 @@ body[data-route="creator"][data-edit-mode="3d"] .creator-layers-panel-3d {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
   font-size: 0.8rem;
+}
+.creator-layers-panel-3d-solo-indicator {
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  color: rgba(255, 200, 100, 0.95);
+  font-weight: 500;
 }
 .creator-layers-panel-3d:not(.creator-layers-panel-3d-collapsed) .creator-layers-panel-3d-header {
   margin-bottom: 0.5rem;
@@ -360,10 +377,19 @@ body[data-route="creator"][data-edit-mode="3d"] .creator-layers-panel-3d {
   flex-direction: column;
   gap: 0.25rem;
 }
+.creator-layers-panel-3d-separator {
+  height: 0;
+  margin: 0.2rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
 .creator-layers-panel-3d-row {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+}
+.creator-layers-panel-3d-row-highlight {
+  background: rgba(99, 179, 237, 0.2);
+  border-radius: 4px;
 }
 .creator-layers-panel-3d-row .creator-layers-panel-3d-name {
   min-width: 4.5em;
@@ -391,6 +417,26 @@ body[data-route="creator"][data-edit-mode="3d"] .creator-layers-panel-3d {
   color: rgba(255, 255, 255, 0.9);
 }
 
+/* Hover info panel — below layers panel, same size, part name + skin coords (2D and 3D) */
+.creator-hover-info-panel {
+  width: 180px;
+  min-width: 180px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-family: ui-monospace, monospace;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.creator-hover-info-text {
+  white-space: nowrap;
+}
+
 /* 3D tools panel — floating upper-left, shown only in Edit 3D mode */
 .creator-tools-panel-3d {
   display: none;
@@ -405,7 +451,7 @@ body[data-route="creator"][data-edit-mode="3d"] .creator-layers-panel-3d {
   font-size: 0.85rem;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
-body[data-route="creator"][data-edit-mode="3d"] .creator-tools-panel-3d {
+body[data-route="creator"] .creator-tools-panel-3d {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -414,6 +460,27 @@ body[data-route="creator"][data-edit-mode="3d"] .creator-tools-panel-3d {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
+}
+.creator-tools-panel-3d-tools-row {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+.creator-tools-panel-3d-edit-mode {
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.15rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.creator-tools-panel-3d-divider {
+  width: 100%;
+  height: 0;
+  margin: 0.25rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.creator-tools-panel-3d-divider-2d-only {
+  display: none;
+}
+body[data-route="creator"][data-edit-mode="2d"] .creator-tools-panel-3d-divider-2d-only {
+  display: block;
 }
 .creator-tools-panel-3d-btn {
   padding: 0.35rem 0.6rem;
@@ -438,8 +505,23 @@ body[data-route="creator"][data-edit-mode="3d"] .creator-tools-panel-3d {
   align-items: center;
   gap: 0.5rem;
 }
-.creator-tools-panel-3d-brush-row.creator-tools-panel-3d-visible {
+.creator-tools-panel-3d-brush-row.creator-tools-panel-3d-visible,
+.creator-tools-panel-3d-view-toggles.creator-tools-panel-3d-visible {
   display: flex;
+}
+.creator-tools-panel-3d-view-toggles {
+  display: none;
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+.creator-tools-panel-3d-undo-redo {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  width: 100%;
+}
+.creator-tools-panel-3d-undo-redo .creator-tools-panel-3d-btn {
+  flex: 1;
 }
 .creator-tools-panel-3d-label {
   font-size: 0.75rem;
@@ -524,14 +606,92 @@ body[data-route="creator"][data-edit-mode="3d"] .creator-tools-panel-3d {
 .creator-ruler-top {
   grid-column: 2;
   grid-row: 1;
-  display: block;
+  position: relative;
+  width: 512px;
+  height: 20px;
   background: rgba(0, 0, 0, 0.5);
 }
 .creator-ruler-left {
   grid-column: 1;
   grid-row: 2;
-  display: block;
+  position: relative;
+  width: 20px;
+  height: 512px;
   background: rgba(0, 0, 0, 0.5);
+}
+.creator-ruler-tick {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.7);
+}
+.creator-ruler-tick-major {
+  width: 1px;
+  height: 10px;
+  bottom: 0;
+}
+.creator-ruler-top .creator-ruler-tick-major {
+  transform: translateX(-50%);
+}
+.creator-ruler-tick-minor {
+  width: 1px;
+  height: 5px;
+  bottom: 0;
+}
+.creator-ruler-top .creator-ruler-tick-minor {
+  transform: translateX(-50%);
+}
+.creator-ruler-tick-cell {
+  width: 1px;
+  height: 3px;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.35);
+}
+.creator-ruler-top .creator-ruler-tick-cell {
+  transform: translateX(-50%);
+}
+.creator-ruler-label {
+  position: absolute;
+  font: 11px / 1 system-ui, -apple-system, sans-serif;
+  color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+}
+.creator-ruler-top .creator-ruler-label {
+  top: 1px;
+  transform: translateX(0);
+  margin-left: 2px;
+  text-align: left;
+}
+.creator-ruler-top .creator-ruler-label-last {
+  transform: translateX(-100%);
+  margin-left: 0;
+  margin-right: 2px;
+  text-align: right;
+}
+.creator-ruler-left .creator-ruler-tick-major {
+  height: 1px;
+  width: 10px;
+  right: 0;
+  transform: translateY(-50%);
+}
+.creator-ruler-left .creator-ruler-tick-minor {
+  height: 1px;
+  width: 5px;
+  right: 0;
+  transform: translateY(-50%);
+}
+.creator-ruler-left .creator-ruler-tick-cell {
+  height: 1px;
+  width: 3px;
+  right: 0;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.35);
+}
+.creator-ruler-left .creator-ruler-label {
+  right: 4px;
+  transform: translateY(0);
+  text-align: right;
+}
+.creator-ruler-left .creator-ruler-label-last {
+  transform: translateY(-100%);
 }
 .creator-canvas-inner {
   grid-column: 2;
@@ -550,6 +710,23 @@ body[data-route="creator"][data-edit-mode="3d"] .creator-tools-panel-3d {
   top: 0;
   left: 0;
   pointer-events: none;
+}
+
+.creator-blocky-grid {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 512px;
+  height: 512px;
+  grid-template-columns: repeat(64, 1fr);
+  grid-template-rows: repeat(64, 1fr);
+  background: #1a1a2e;
+  cursor: crosshair;
+}
+.creator-blocky-cell {
+  min-width: 0;
+  min-height: 0;
 }
 .creator-actions {
   flex: 0 0 auto;

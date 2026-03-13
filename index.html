@@ -38,10 +38,10 @@
       <div class="creator-canvas-area" id="creator-canvas-area">
         <div class="creator-canvas-wrap" id="creator-canvas-wrap">
           <div class="creator-ruler-corner" id="creator-ruler-corner"></div>
-          <canvas id="creator-ruler-top" class="creator-ruler-top" width="512" height="20" aria-hidden="true"></canvas>
-          <canvas id="creator-ruler-left" class="creator-ruler-left" width="20" height="512" aria-hidden="true"></canvas>
+          <div id="creator-ruler-top" class="creator-ruler-top" role="presentation" aria-hidden="true"></div>
+          <div id="creator-ruler-left" class="creator-ruler-left" role="presentation" aria-hidden="true"></div>
           <div class="creator-canvas-inner">
-            <canvas id="creator-display-canvas" width="512" height="512" title="Skin canvas (64×64 zoomed)"></canvas>
+            <div id="creator-blocky-grid" class="creator-blocky-grid" aria-label="64×64 blocky pixel grid" role="img"></div>
             <canvas id="creator-overlay-canvas" class="creator-overlay-canvas" width="512" height="512" aria-hidden="true"></canvas>
           </div>
         </div>

@@ -5,7 +5,7 @@
  * Resolution: work at WORK_SIZE (e.g. 128×128), export downscaled to 64×64.
  */
 
-import { SKIN_SIZE, SKIN_LAYER_BOUNDS, type Bounds } from './skinLayout';
+import { SKIN_SIZE, SKIN_LAYER_BOUNDS, SKIN_PART_BOUNDS, SKIN_DEAD_ZONES, isInDeadZone, type Bounds } from './skinLayout';
 
 const RESOLUTION_MULTIPLIER = 2;
 const UNDO_LIMIT = 50;
@@ -14,40 +14,42 @@ const ZOOM = 4;
 const DISPLAY_SIZE = WORK_SIZE * ZOOM;
 const SWATCH_MAX = 12;
 const DEFAULT_COLOR = '#8b7355';
-const LAYER_KEYS = ['head', 'hat', 'body', 'jacket', 'arms', 'sleeves', 'legs', 'pants'] as const;
+const LAYER_KEYS = ['hat', 'head', 'jacket', 'body', 'sleeves', 'arms', 'pants', 'legs'] as const;
+/** Groups for layers panel display; separator shown after each group. */
+const LAYER_GROUPS: readonly (readonly string[])[] = [
+  ['hat', 'head'],
+  ['jacket', 'body'],
+  ['sleeves', 'arms'],
+  ['pants', 'legs'],
+];
 
 /** 3D mode: visibility per layer (hidden = not rendered, brush ignored). Default true. */
 const layer3DVisible: Record<string, boolean> = Object.fromEntries(LAYER_KEYS.map((k) => [k, true]));
 /** 3D mode: lock per layer (locked = brush ignored, part stays visible). Default false. */
 const layer3DLocked: Record<string, boolean> = Object.fromEntries(LAYER_KEYS.map((k) => [k, false]));
-const RULER_SIZE = 20;
+/** Solo mode: Alt+click eye shows only one layer. Stored visibility to restore on exit. */
+let layer3DSoloMode = false;
+let layer3DSoloBeforeState: Record<string, boolean> | null = null;
+let layer3DSoloCurrentLayer: string | null = null;
 
 /** Ruler: 0,0 upper-left to 64,64 lower-right. Toggleable. */
 let showRulers = false;
-/** Grid: every 4 lines by default. Toggleable. Extensible settings. */
-let showGrid = false;
 /** Template overlay: region outlines for model-to-2D mapping. Toggleable. Non-destructive. */
 let showTemplate = false;
-/** Edit mode: true = paint on 3D model, false = paint on 2D canvas */
+/** Edit mode: true = paint on 3D model, false = paint on 2D blocky grid */
 let editMode3D = true;
-const gridConfig = {
-  spacingX: 4,
-  spacingY: 4,
-  color: 'rgba(255,255,255,0.25)',
-  lineWidth: 1
-};
 
 export type Tool = 'brush' | 'eraser' | 'fill' | 'navigate';
 
 let skinCanvas: HTMLCanvasElement | null = null;
 
 let currentColor = DEFAULT_COLOR;
-let brushSize = 2;
+const BRUSH_SIZE = 1;
 let swatchColors: string[] = [DEFAULT_COLOR];
 let isDrawing = false;
 let lastSkinX = -1;
 let lastSkinY = -1;
-let activeTool: Tool = 'brush';
+let activeTool: Tool = 'navigate';
 let selectedLayers = new Set<string>(LAYER_KEYS);
 /** When false, allow drawing anywhere on the canvas (ignore layer mask). */
 let restrictToLayers = true;
@@ -104,6 +106,19 @@ export function getLayerAtCoords(workingX: number, workingY: number): string | n
   return null;
 }
 
+/** Return the specific part display name (Right leg, Left pants, etc.) at coords, or null. */
+export function getPartDisplayNameAtCoords(workingX: number, workingY: number): string | null {
+  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
+  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
+  if (isInDeadZone(normX, normY)) return null;
+  for (const { part, bounds } of SKIN_PART_BOUNDS) {
+    for (const b of bounds) {
+      if (pointInBounds(normX, normY, b)) return part;
+    }
+  }
+  return null;
+}
+
 /** 3D mode: can we paint on this layer? (visible and not locked) */
 function canPaintOn3DLayer(layer: string | null): boolean {
   if (!layer) return false;
@@ -134,6 +149,13 @@ function isInSelectedLayer(workingX: number, workingY: number): boolean {
   return false;
 }
 
+/** 2D view: can we paint at this coord? (selected layer and not locked) */
+function canPaintAt2D(workingX: number, workingY: number): boolean {
+  if (!isInSelectedLayer(workingX, workingY)) return false;
+  const layer = getLayerAtCoords(workingX, workingY);
+  return layer != null && !layer3DLocked[layer];
+}
+
 function getSkinCanvas(): HTMLCanvasElement {
   if (!skinCanvas) {
     skinCanvas = document.createElement('canvas');
@@ -143,39 +165,41 @@ function getSkinCanvas(): HTMLCanvasElement {
   return skinCanvas;
 }
 
-function getDisplayCanvas(): HTMLCanvasElement | null {
-  return document.getElementById('creator-display-canvas') as HTMLCanvasElement | null;
-}
-
 function getOverlayCanvas(): HTMLCanvasElement | null {
   return document.getElementById('creator-overlay-canvas') as HTMLCanvasElement | null;
 }
 
-function getRulerTopCanvas(): HTMLCanvasElement | null {
-  return document.getElementById('creator-ruler-top') as HTMLCanvasElement | null;
-}
 
-function getRulerLeftCanvas(): HTMLCanvasElement | null {
-  return document.getElementById('creator-ruler-left') as HTMLCanvasElement | null;
-}
-
-/** Returns CSS cursor value for brush: box outline. Hotspot center. */
+/** Returns CSS cursor value for brush: box outline. Hotspot center. Uses PNG to avoid SVG ghosting on Mac. */
 function makeBrushCursorSVG(boxPx: number): string {
   const cursorSize = 64;
-  const x = (cursorSize - boxPx) / 2;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><rect x="${x}" y="${x}" width="${boxPx}" height="${boxPx}" fill="none" stroke="white" stroke-width="1"/></svg>`;
-  const encoded = encodeURIComponent(svg).replace(/'/g, '%27');
-  return `url("data:image/svg+xml,${encoded}") ${cursorSize / 2} ${cursorSize / 2}, crosshair`;
+  const x = Math.round((cursorSize - boxPx) / 2);
+  const w = Math.round(boxPx);
+  const canvas = document.createElement('canvas');
+  canvas.width = cursorSize;
+  canvas.height = cursorSize;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><rect x="${x}" y="${x}" width="${w}" height="${w}" fill="none" stroke="white" stroke-width="1"/></svg>`;
+    const encoded = encodeURIComponent(svg).replace(/'/g, '%27');
+    return `url("data:image/svg+xml,${encoded}") ${cursorSize / 2} ${cursorSize / 2}, crosshair`;
+  }
+  ctx.clearRect(0, 0, cursorSize, cursorSize);
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, x + 0.5, Math.max(0, w - 1), Math.max(0, w - 1));
+  const png = canvas.toDataURL('image/png');
+  return `url("${png}") ${cursorSize / 2} ${cursorSize / 2}, crosshair`;
 }
 
-/** Returns CSS cursor value for brush: box outline, size matches on-screen brush size (2D). */
-function getBrushCursorStyle(size: number): string {
-  const canvas = getDisplayCanvas();
-  const rect = canvas?.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  const boxPx = rect
-    ? Math.max(2, (size * (rect.width / WORK_SIZE)) / dpr)
-    : size * (DISPLAY_SIZE / WORK_SIZE) / dpr;
+/** Returns CSS cursor value for brush: box outline, size = 1 cell (2D blocky). */
+function getBrushCursorStyle(_size: number): string {
+  const grid = document.getElementById('creator-blocky-grid');
+  const rect = grid?.getBoundingClientRect();
+  const cellPx = rect ? rect.width / SKIN_SIZE : BLOCKY_GRID_SIZE / SKIN_SIZE;
+  // On Mac Retina/Safari, the OS scales the cursor 2x; divide by DPR so it matches 1 cell.
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  const boxPx = Math.max(2, cellPx / dpr);
   return makeBrushCursorSVG(boxPx);
 }
 
@@ -186,45 +210,41 @@ export function getBrushCursorStyleFor3D(size: number): string {
 }
 
 function updateCanvasCursor(): void {
-  const disp = getDisplayCanvas();
-  if (!disp) return;
-  disp.style.cursor = getBrushCursorStyle(brushSize);
-}
-
-/** Convert client/screen coords to working-canvas pixel coords. */
-function clientToSkin(clientX: number, clientY: number): { x: number; y: number } {
-  const canvas = getDisplayCanvas();
-  if (!canvas) return { x: -1, y: -1 };
-  const rect = canvas.getBoundingClientRect();
-  const localX = clientX - rect.left;
-  const localY = clientY - rect.top;
-  const px = Math.floor((localX / rect.width) * WORK_SIZE);
-  const py = Math.floor((localY / rect.height) * WORK_SIZE);
-  return { x: Math.max(0, Math.min(WORK_SIZE - 1, px)), y: Math.max(0, Math.min(WORK_SIZE - 1, py)) };
+  const grid = document.getElementById('creator-blocky-grid');
+  if (!grid) return;
+  const el = grid as HTMLElement;
+  el.style.cursor =
+    activeTool === 'navigate' ? 'default' : getBrushCursorStyle(BRUSH_SIZE);
 }
 
 /**
  * Draw a square block brush at (sx, sy) on the skin canvas.
  * If stroke is provided, records previous pixel values for undo.
+ * @param size - Brush size in pixels (default BRUSH_SIZE). Use 2 for blocky 2D to paint 1 grid cell.
+ * @param alignTopLeft - If true, (sx,sy) is top-left corner; if false, brush is centered on (sx,sy).
  */
 function brushAt(
   skinCtx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
   isEraser = false,
-  stroke?: { pixels: PixelChange[]; isEraser: boolean; newColor: string; recorded: Set<string> } | null
+  stroke?: { pixels: PixelChange[]; isEraser: boolean; newColor: string; recorded: Set<string> } | null,
+  size = BRUSH_SIZE,
+  alignTopLeft = false
 ): void {
-  const offset = Math.floor(brushSize / 2);
-  for (let dy = 0; dy < brushSize; dy++) {
-    for (let dx = 0; dx < brushSize; dx++) {
-      const px = sx - offset + dx;
-      const py = sy - offset + dy;
+  const offset = alignTopLeft ? 0 : Math.floor(size / 2);
+  const startX = sx - offset;
+  const startY = sy - offset;
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) {
+      const px = startX + dx;
+      const py = startY + dy;
       if (
         px >= 0 &&
         px < WORK_SIZE &&
         py >= 0 &&
         py < WORK_SIZE &&
-        isInSelectedLayer(px, py)
+        canPaintAt2D(px, py)
       ) {
         if (stroke) {
           const key = `${px},${py}`;
@@ -250,7 +270,7 @@ function brushAt(
  */
 function floodFill(skinCtx: CanvasRenderingContext2D, sx: number, sy: number): PixelChange[] {
   const changed: PixelChange[] = [];
-  if (!isInSelectedLayer(sx, sy)) return changed;
+  if (!canPaintAt2D(sx, sy)) return changed;
   const imageData = skinCtx.getImageData(0, 0, WORK_SIZE, WORK_SIZE);
   const data = imageData.data;
   const targetR = data[((sy * WORK_SIZE + sx) * 4) + 0];
@@ -274,7 +294,7 @@ function floodFill(skinCtx: CanvasRenderingContext2D, sx: number, sy: number): P
 
   while (stack.length > 0) {
     const [x, y] = stack.pop()!;
-    if (!isInSelectedLayer(x, y)) continue;
+    if (!canPaintAt2D(x, y)) continue;
     const i = idx(x, y);
     if (!match(i)) continue;
     changed.push({ x, y, r: data[i], g: data[i + 1], b: data[i + 2], a: data[i + 3] });
@@ -369,6 +389,13 @@ function performUndo(): void {
   renderToDisplay();
 }
 
+function updateAllUndoRedoButtons(): void {
+  const ub = document.getElementById('creator-tools-undo-btn') as HTMLButtonElement | null;
+  const rb = document.getElementById('creator-tools-redo-btn') as HTMLButtonElement | null;
+  if (ub) ub.disabled = undoStack.length === 0;
+  if (rb) rb.disabled = redoStack.length === 0;
+}
+
 function performRedo(): void {
   const cmd = redoStack.pop();
   if (!cmd) return;
@@ -437,10 +464,7 @@ export async function loadSkinFromPath(path: string): Promise<void> {
   undoStack.push({ type: 'load', beforeData, afterData });
   if (undoStack.length > UNDO_LIMIT) undoStack.shift();
   renderToDisplay();
-  const undoBtn = document.getElementById('creator-undo-btn') as HTMLButtonElement | null;
-  const redoBtn = document.getElementById('creator-redo-btn') as HTMLButtonElement | null;
-  if (undoBtn) undoBtn.disabled = undoStack.length === 0;
-  if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+  updateAllUndoRedoButtons();
 }
 
 function setupCreatorSkinGallery(skins: SkinEntry[]): void {
@@ -465,6 +489,8 @@ function setupCreatorSkinGallery(skins: SkinEntry[]): void {
 
 /**
  * Draw a line from (x0,y0) to (x1,y1) using brush dabs (Bresenham).
+ * @param size - Brush size (default BRUSH_SIZE).
+ * @param alignTopLeft - If true, snap to cell grid and paint from top-left (for blocky 2D).
  */
 function drawLine(
   skinCtx: CanvasRenderingContext2D,
@@ -473,8 +499,13 @@ function drawLine(
   x1: number,
   y1: number,
   isEraser = false,
-  stroke?: { pixels: PixelChange[]; isEraser: boolean; newColor: string; recorded: Set<string> } | null
+  stroke?: { pixels: PixelChange[]; isEraser: boolean; newColor: string; recorded: Set<string> } | null,
+  size = BRUSH_SIZE,
+  alignTopLeft = false
 ): void {
+  const cellSize = alignTopLeft ? RESOLUTION_MULTIPLIER : 1;
+  const snap = (v: number) => (alignTopLeft ? Math.floor(v / cellSize) * cellSize : v);
+
   const dx = Math.abs(x1 - x0);
   const dy = Math.abs(y1 - y0);
   const sx = x0 < x1 ? 1 : -1;
@@ -483,9 +514,16 @@ function drawLine(
 
   let x = x0;
   let y = y0;
+  let lastCellKey = '';
 
   while (true) {
-    brushAt(skinCtx, x, y, isEraser, stroke);
+    const bx = snap(x);
+    const by = snap(y);
+    const cellKey = `${bx},${by}`;
+    if (!alignTopLeft || cellKey !== lastCellKey) {
+      lastCellKey = cellKey;
+      brushAt(skinCtx, bx, by, isEraser, stroke, size, alignTopLeft);
+    }
     if (x === x1 && y === y1) break;
     const e2 = 2 * err;
     if (e2 > -dy) {
@@ -499,52 +537,66 @@ function drawLine(
   }
 }
 
-/**
- * Render the 64×64 skin to the display canvas (zoomed, pixel-perfect).
- * Draws dim overlay on non-selected layer regions.
- */
+/** Refresh blocky grid and overlays (rulers, grid, template). */
 function renderToDisplay(): void {
-  const disp = getDisplayCanvas();
-  const skin = getSkinCanvas();
-  if (!disp || !disp.getContext('2d')) return;
-
-  const ctx = disp.getContext('2d')!;
-  ctx.imageSmoothingEnabled = false;
-
-  disp.width = DISPLAY_SIZE;
-  disp.height = DISPLAY_SIZE;
-
-  ctx.fillStyle = '#1a1a2e';
-  ctx.fillRect(0, 0, DISPLAY_SIZE, DISPLAY_SIZE);
-  ctx.drawImage(skin, 0, 0, WORK_SIZE, WORK_SIZE, 0, 0, DISPLAY_SIZE, DISPLAY_SIZE);
-
-  if (restrictToLayers && selectedLayers.size > 0 && selectedLayers.size < LAYER_KEYS.length) {
-    const displayScale = DISPLAY_SIZE / WORK_SIZE;
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    for (const layer of LAYER_KEYS) {
-      if (selectedLayers.has(layer)) continue;
-      const bounds = SKIN_LAYER_BOUNDS[layer];
-      if (!bounds) continue;
-      for (const b of bounds) {
-        const sx = b.x * RESOLUTION_MULTIPLIER * displayScale;
-        const sy = b.y * RESOLUTION_MULTIPLIER * displayScale;
-        const sw = b.w * RESOLUTION_MULTIPLIER * displayScale;
-        const sh = b.h * RESOLUTION_MULTIPLIER * displayScale;
-        ctx.fillRect(sx, sy, sw, sh);
-      }
-    }
-  }
-
+  renderBlockyGrid();
   renderRulersAndGrid();
 }
 
-/** Skin space 0-64 maps to display 0..DISPLAY_SIZE. */
-const RULER_SCALE = DISPLAY_SIZE / SKIN_SIZE;
+/** Display pixels per working pixel. Rulers use WORK_SIZE so they match the 128×128 draw grid. */
+const RULER_SCALE = DISPLAY_SIZE / WORK_SIZE;
+
+function buildRulers(): void {
+  const topRuler = document.getElementById('creator-ruler-top');
+  const leftRuler = document.getElementById('creator-ruler-left');
+  if (!topRuler || !leftRuler) return;
+  if (topRuler.children.length > 0) return;
+
+  topRuler.innerHTML = '';
+  leftRuler.innerHTML = '';
+
+  for (let s = 0; s <= WORK_SIZE; s += 2) {
+    const px = Math.round(s * RULER_SCALE);
+    const isMajor = s % 16 === 0;
+    const isMinor = s % 8 === 0 && !isMajor;
+    const isCell = !isMajor && !isMinor;
+    const label = String(s / 2);
+
+    const tickClass =
+      isMajor ? 'creator-ruler-tick creator-ruler-tick-major' :
+      isMinor ? 'creator-ruler-tick creator-ruler-tick-minor' :
+      'creator-ruler-tick creator-ruler-tick-cell';
+
+    const topTick = document.createElement('div');
+    topTick.className = tickClass;
+    topTick.style.left = `${px}px`;
+    topRuler.appendChild(topTick);
+
+    const leftTick = document.createElement('div');
+    leftTick.className = tickClass;
+    leftTick.style.top = `${px}px`;
+    leftRuler.appendChild(leftTick);
+
+    if (isMajor) {
+      const isLast = s === WORK_SIZE;
+      const labelClass = 'creator-ruler-label' + (isLast ? ' creator-ruler-label-last' : '');
+      const topLabel = document.createElement('span');
+      topLabel.className = labelClass;
+      topLabel.textContent = label;
+      topLabel.style.left = `${px}px`;
+      topRuler.appendChild(topLabel);
+
+      const leftLabel = document.createElement('span');
+      leftLabel.className = labelClass;
+      leftLabel.textContent = label;
+      leftLabel.style.top = `${px}px`;
+      leftRuler.appendChild(leftLabel);
+    }
+  }
+}
 
 function renderRulersAndGrid(): void {
   const overlay = getOverlayCanvas();
-  const topRuler = getRulerTopCanvas();
-  const leftRuler = getRulerLeftCanvas();
 
   if (overlay) {
     const ctx = overlay.getContext('2d');
@@ -552,105 +604,34 @@ function renderRulersAndGrid(): void {
       overlay.width = DISPLAY_SIZE;
       overlay.height = DISPLAY_SIZE;
       ctx.clearRect(0, 0, DISPLAY_SIZE, DISPLAY_SIZE);
-      if (showGrid) {
-        ctx.strokeStyle = gridConfig.color;
-        ctx.lineWidth = gridConfig.lineWidth;
-        ctx.beginPath();
-        for (let s = 0; s <= SKIN_SIZE; s += gridConfig.spacingX) {
-          const x = s * RULER_SCALE;
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, DISPLAY_SIZE);
-        }
-        for (let s = 0; s <= SKIN_SIZE; s += gridConfig.spacingY) {
-          const y = s * RULER_SCALE;
-          ctx.moveTo(0, y);
-          ctx.lineTo(DISPLAY_SIZE, y);
-        }
-        ctx.stroke();
-      }
       if (showTemplate) {
         ctx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
         ctx.lineWidth = 2;
         ctx.fillStyle = 'rgba(100, 200, 255, 0.2)';
+        const templateScale = RULER_SCALE * RESOLUTION_MULTIPLIER;
         for (const bounds of Object.values(SKIN_LAYER_BOUNDS)) {
           for (const b of bounds) {
-            const x = b.x * RULER_SCALE;
-            const y = b.y * RULER_SCALE;
-            const w = b.w * RULER_SCALE;
-            const h = b.h * RULER_SCALE;
+            const x = b.x * templateScale;
+            const y = b.y * templateScale;
+            const w = b.w * templateScale;
+            const h = b.h * templateScale;
             ctx.fillRect(x, y, w, h);
             ctx.strokeRect(x, y, w, h);
           }
         }
+        // Erase dead zones from template (reference diagram areas with meta-info, not skin)
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = 'rgba(0,0,0,1)';
+        for (const z of SKIN_DEAD_ZONES) {
+          const x = z.x * templateScale;
+          const y = z.y * templateScale;
+          const w = z.w * templateScale;
+          const h = z.h * templateScale;
+          ctx.fillRect(x, y, w, h);
+        }
+        ctx.globalCompositeOperation = 'source-over';
       }
     }
-  }
-
-  const tickColor = 'rgba(255,255,255,0.7)';
-  const labelColor = 'rgba(255,255,255,0.9)';
-
-  if (showRulers && topRuler) {
-    const ctx = topRuler.getContext('2d');
-    if (ctx) {
-      topRuler.width = DISPLAY_SIZE;
-      topRuler.height = RULER_SIZE;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(0, 0, DISPLAY_SIZE, RULER_SIZE);
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      for (let s = 0; s <= SKIN_SIZE; s += 4) {
-        const px = s * RULER_SCALE;
-        const isMajor = s % 8 === 0;
-        ctx.strokeStyle = tickColor;
-        ctx.fillStyle = tickColor;
-        ctx.lineWidth = 1;
-        if (px < DISPLAY_SIZE) {
-          ctx.beginPath();
-          ctx.moveTo(px, RULER_SIZE);
-          ctx.lineTo(px, RULER_SIZE - (isMajor ? 10 : 5));
-          ctx.stroke();
-        }
-        if (isMajor && px <= DISPLAY_SIZE - 4) {
-          ctx.fillStyle = labelColor;
-          ctx.fillText(String(s), px + (gridConfig.spacingX * RULER_SCALE) / 2, 2);
-        }
-      }
-    }
-  } else if (topRuler) {
-    const ctx = topRuler.getContext('2d');
-    ctx?.clearRect(0, 0, topRuler.width, topRuler.height);
-  }
-
-  if (showRulers && leftRuler) {
-    const ctx = leftRuler.getContext('2d');
-    if (ctx) {
-      leftRuler.width = RULER_SIZE;
-      leftRuler.height = DISPLAY_SIZE;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(0, 0, RULER_SIZE, DISPLAY_SIZE);
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      for (let s = 0; s <= SKIN_SIZE; s += 4) {
-        const py = s * RULER_SCALE;
-        const isMajor = s % 8 === 0;
-        ctx.strokeStyle = tickColor;
-        ctx.fillStyle = tickColor;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(RULER_SIZE, py);
-        ctx.lineTo(RULER_SIZE - (isMajor ? 10 : 5), py);
-        ctx.stroke();
-        if (isMajor && py <= DISPLAY_SIZE - 4) {
-          ctx.fillStyle = labelColor;
-          ctx.fillText(String(s), RULER_SIZE - 4, py + (gridConfig.spacingY * RULER_SCALE) / 2);
-        }
-      }
-    }
-  } else if (leftRuler) {
-    const ctx = leftRuler.getContext('2d');
-    ctx?.clearRect(0, 0, leftRuler.width, leftRuler.height);
   }
 
   const wrap = document.getElementById('creator-canvas-wrap');
@@ -664,89 +645,13 @@ function buildToolbar(): void {
 
   toolbar.innerHTML = `
     <div class="creator-toolbar-row">
-      <span class="creator-toolbar-label">Edit</span>
-      <div class="creator-undo-redo" role="group" aria-label="Undo Redo">
-        <button type="button" class="creator-tool-btn" id="creator-undo-btn" title="Undo (Ctrl+Z)">Undo</button>
-        <button type="button" class="creator-tool-btn" id="creator-redo-btn" title="Redo (Ctrl+Shift+Z)">Redo</button>
-      </div>
-      <span class="creator-toolbar-label">Tools</span>
-      <div class="creator-tools" role="group" aria-label="Drawing tools">
-        <button type="button" class="creator-tool-btn creator-tool" data-tool="brush" title="Brush">Brush</button>
-        <button type="button" class="creator-tool-btn creator-tool" data-tool="eraser" title="Eraser">Eraser</button>
-        <button type="button" class="creator-tool-btn creator-tool" data-tool="fill" title="Fill">Fill</button>
-      </div>
-      <span class="creator-toolbar-label">Brush</span>
-      <div class="creator-brush-sizes" role="group" aria-label="Brush size">
-        ${[1, 2, 4, 8].map((s) => `<button type="button" class="creator-tool-btn creator-brush-size" data-size="${s}" title="${s}px">${s}</button>`).join('')}
-      </div>
       <span class="creator-toolbar-label">Color</span>
       <div class="creator-current-color" title="Current color"></div>
       <input type="text" class="creator-hex-input" value="${currentColor}" maxlength="7" placeholder="#RRGGBB" aria-label="Hex color">
       <span class="creator-toolbar-label">Swatch</span>
       <div class="creator-swatch" role="group" aria-label="Color swatch"></div>
-      <span class="creator-toolbar-label">View</span>
-      <span class="creator-toolbar-label">Edit</span>
-      <div class="creator-edit-mode" role="group" aria-label="Edit mode">
-        <button type="button" class="creator-tool-btn creator-edit-mode-btn" id="creator-edit-2d-btn" data-mode="2d" title="Edit on 2D canvas">2D</button>
-        <button type="button" class="creator-tool-btn creator-edit-mode-btn" id="creator-edit-3d-btn" data-mode="3d" title="Edit on 3D model">3D</button>
-      </div>
-      <span class="creator-toolbar-label">View</span>
-      <div class="creator-view-toggles" role="group" aria-label="Canvas overlays">
-        <button type="button" class="creator-tool-btn creator-toggle" id="creator-rulers-btn" data-toggle="rulers" title="Toggle rulers">Rulers</button>
-        <button type="button" class="creator-tool-btn creator-toggle" id="creator-grid-btn" data-toggle="grid" title="Toggle grid">Grid</button>
-        <button type="button" class="creator-tool-btn creator-toggle" id="creator-template-btn" data-toggle="template" title="Show template overlay for skin layout reference">Template</button>
-      </div>
-    </div>
-    <div class="creator-toolbar-row creator-layers-row">
-      <span class="creator-toolbar-label">Layers</span>
-      <label class="creator-layer-check creator-restrict-toggle" title="When off, you can draw anywhere on the canvas">
-        <input type="checkbox" id="creator-restrict-layers" ${restrictToLayers ? 'checked' : ''}>
-        <span>Restrict to layers</span>
-      </label>
-      <div class="creator-layers" role="group" aria-label="Skin layers">
-        ${LAYER_KEYS.map((l) => `<label class="creator-layer-check"><input type="checkbox" data-layer="${l}" ${selectedLayers.has(l) ? 'checked' : ''}><span>${l.charAt(0).toUpperCase() + l.slice(1)}</span></label>`).join('')}
-      </div>
     </div>
   `;
-
-  const undoBtn = document.getElementById('creator-undo-btn') as HTMLButtonElement | null;
-  const redoBtn = document.getElementById('creator-redo-btn') as HTMLButtonElement | null;
-  const updateUndoRedoButtons = () => {
-    if (undoBtn) undoBtn.disabled = undoStack.length === 0;
-    if (redoBtn) redoBtn.disabled = redoStack.length === 0;
-  };
-  undoBtn?.addEventListener('click', () => { performUndo(); updateUndoRedoButtons(); });
-  redoBtn?.addEventListener('click', () => { performRedo(); updateUndoRedoButtons(); });
-  updateUndoRedoButtons();
-
-  toolbar.querySelectorAll('.creator-tool').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const tool = (btn as HTMLElement).dataset.tool as Tool;
-      setActiveTool(tool);
-      toolbar.querySelectorAll('.creator-tool').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-    });
-  });
-  (toolbar.querySelector('.creator-tool[data-tool="brush"]') as HTMLElement)?.classList.add('active');
-
-  const restrictCb = document.getElementById('creator-restrict-layers') as HTMLInputElement | null;
-  restrictCb?.addEventListener('change', () => {
-    restrictToLayers = restrictCb.checked;
-    renderToDisplay();
-  });
-
-  toolbar.querySelectorAll('.creator-layer-check input[data-layer]').forEach((cb) => {
-    cb.addEventListener('change', () => {
-      const layer = (cb as HTMLInputElement).dataset.layer;
-      if (!layer) return;
-      if ((cb as HTMLInputElement).checked) {
-        selectedLayers.add(layer);
-      } else {
-        selectedLayers.delete(layer);
-      }
-      renderToDisplay();
-    });
-  });
 
   const currentColorEl = toolbar.querySelector('.creator-current-color') as HTMLElement;
   const hexInput = toolbar.querySelector('.creator-hex-input') as HTMLInputElement;
@@ -774,46 +679,6 @@ function buildToolbar(): void {
     });
   }
 
-  toolbar.querySelectorAll('.creator-brush-size').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const size = parseInt((btn as HTMLElement).dataset.size || '2', 10);
-      setBrushSize(size);
-      toolbar.querySelectorAll('.creator-brush-size').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      updateCanvasCursor();
-    });
-  });
-  (toolbar.querySelector(`.creator-brush-size[data-size="${brushSize}"]`) as HTMLElement)?.classList.add('active');
-
-  const updateToggleButtons = () => {
-    (document.getElementById('creator-rulers-btn') as HTMLElement)?.classList.toggle('active', showRulers);
-    (document.getElementById('creator-grid-btn') as HTMLElement)?.classList.toggle('active', showGrid);
-    (document.getElementById('creator-template-btn') as HTMLElement)?.classList.toggle('active', showTemplate);
-  };
-  toolbar.querySelectorAll('.creator-toggle').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const t = (btn as HTMLElement).dataset.toggle;
-      if (t === 'rulers') showRulers = !showRulers;
-      else if (t === 'grid') showGrid = !showGrid;
-      else if (t === 'template') showTemplate = !showTemplate;
-      updateToggleButtons();
-      renderToDisplay();
-    });
-  });
-  toolbar.querySelectorAll('.creator-edit-mode-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const m = (btn as HTMLElement).dataset.mode;
-      editMode3D = m === '3d';
-      document.body.dataset.editMode = editMode3D ? '3d' : '2d';
-      (document.getElementById('creator-edit-2d-btn') as HTMLElement)?.classList.toggle('active', !editMode3D);
-      (document.getElementById('creator-edit-3d-btn') as HTMLElement)?.classList.toggle('active', editMode3D);
-      document.dispatchEvent(new CustomEvent('creator-edit-mode-change', { detail: { is3D: editMode3D } }));
-    });
-  });
-  (document.getElementById('creator-edit-2d-btn') as HTMLElement)?.classList.toggle('active', !editMode3D);
-  (document.getElementById('creator-edit-3d-btn') as HTMLElement)?.classList.toggle('active', editMode3D);
-  updateToggleButtons();
-
   hexInput?.addEventListener('change', () => {
     const v = hexInput.value.trim();
     if (/^#[0-9a-fA-F]{6}$/.test(v)) {
@@ -830,19 +695,82 @@ function buildToolbar(): void {
   renderSwatch();
 }
 
-function setupCanvasEvents(): void {
-  const disp = getDisplayCanvas();
+const BLOCKY_GRID_SIZE = 512;
+
+function buildBlockyGrid(): void {
+  const grid = document.getElementById('creator-blocky-grid');
+  if (!grid || grid.children.length > 0) return;
+  grid.innerHTML = '';
+  grid.style.gridTemplateColumns = `repeat(${SKIN_SIZE}, 1fr)`;
+  grid.style.gridTemplateRows = `repeat(${SKIN_SIZE}, 1fr)`;
+  grid.style.width = `${BLOCKY_GRID_SIZE}px`;
+  grid.style.height = `${BLOCKY_GRID_SIZE}px`;
+  for (let y = 0; y < SKIN_SIZE; y++) {
+    for (let x = 0; x < SKIN_SIZE; x++) {
+      const cell = document.createElement('div');
+      cell.className = 'creator-blocky-cell';
+      cell.dataset.cx = String(x);
+      cell.dataset.cy = String(y);
+      cell.setAttribute('role', 'presentation');
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function renderBlockyGrid(): void {
+  const grid = document.getElementById('creator-blocky-grid');
   const skin = getSkinCanvas();
-  const skinCtx = skin.getContext('2d', { willReadFrequently: true });
-  if (!disp || !skinCtx) return;
+  const ctx = skin?.getContext('2d', { willReadFrequently: true });
+  if (!grid || !ctx) return;
+  const cells = grid.querySelectorAll<HTMLElement>('.creator-blocky-cell');
+  cells.forEach((cell) => {
+    const cx = parseInt(cell.dataset.cx ?? '0', 10);
+    const cy = parseInt(cell.dataset.cy ?? '0', 10);
+    const wx = cx * RESOLUTION_MULTIPLIER;
+    const wy = cy * RESOLUTION_MULTIPLIER;
+    const d = ctx.getImageData(wx, wy, 1, 1).data;
+    const hex = rgbToHex(d[0], d[1], d[2]);
+    const alpha = d[3] / 255;
+    cell.style.backgroundColor = alpha < 0.01 ? 'transparent' : hex;
+  });
+}
+
+function clientToBlockyCell(clientX: number, clientY: number): { cx: number; cy: number } | null {
+  const grid = document.getElementById('creator-blocky-grid');
+  if (!grid) return null;
+  const rect = grid.getBoundingClientRect();
+  const lx = (clientX - rect.left) / rect.width;
+  const ly = (clientY - rect.top) / rect.height;
+  if (lx < 0 || lx >= 1 || ly < 0 || ly >= 1) return null;
+  const cx = Math.floor(lx * SKIN_SIZE);
+  const cy = Math.floor(ly * SKIN_SIZE);
+  return { cx: Math.max(0, Math.min(SKIN_SIZE - 1, cx)), cy: Math.max(0, Math.min(SKIN_SIZE - 1, cy)) };
+}
+
+function setupBlockyGridEvents(): void {
+  const grid = document.getElementById('creator-blocky-grid');
+  const skin = getSkinCanvas();
+  const skinCtx = skin?.getContext('2d', { willReadFrequently: true });
+  if (!grid || !skinCtx) return;
   const ctx = skinCtx;
 
-  function handlePointer(e: MouseEvent): void {
-    const { x, y } = clientToSkin(e.clientX, e.clientY);
+  function handleBlockyPointer(e: MouseEvent): void {
+    const cell = clientToBlockyCell(e.clientX, e.clientY);
+    if (cell) {
+      const wx = cell.cx * RESOLUTION_MULTIPLIER;
+      const wy = cell.cy * RESOLUTION_MULTIPLIER;
+      const part = getPartDisplayNameAtCoords(wx, wy);
+      updateHoverInfo(part, cell.cx, cell.cy);
+    } else if (e.type === 'mouseleave') {
+      updateHoverInfo(null, -1, -1);
+    }
+    if (!cell) return;
+    const wx = cell.cx * RESOLUTION_MULTIPLIER;
+    const wy = cell.cy * RESOLUTION_MULTIPLIER;
 
     if (e.altKey) {
-      const data = ctx.getImageData(x, y, 1, 1).data;
-      const hex = rgbToHex(data[0], data[1], data[2]);
+      const d = ctx.getImageData(wx, wy, 1, 1).data;
+      const hex = rgbToHex(d[0], d[1], d[2]);
       currentColor = hex;
       addToSwatch(hex);
       const currentColorEl = document.querySelector('.creator-current-color') as HTMLElement;
@@ -866,30 +794,32 @@ function setupCanvasEvents(): void {
       return;
     }
 
+    if (activeTool === 'navigate') return;
+
     if (e.type === 'mousedown' && e.button === 0) {
       if (activeTool === 'fill') {
-        const changed = floodFill(ctx, x, y);
+        const changed = floodFill(ctx, wx, wy);
         if (changed.length > 0) {
           redoStack = [];
           undoStack.push({ type: 'fill', pixels: changed, fillColor: currentColor });
           if (undoStack.length > UNDO_LIMIT) undoStack.shift();
         }
-        renderToDisplay();
+        renderBlockyGrid();
       } else {
         isDrawing = true;
-        lastSkinX = x;
-        lastSkinY = y;
+        lastSkinX = wx;
+        lastSkinY = wy;
         const isEraser = activeTool === 'eraser';
         currentStroke = { pixels: [], isEraser, newColor: currentColor, recorded: new Set<string>() };
-        brushAt(ctx, x, y, isEraser, currentStroke);
-        renderToDisplay();
+        brushAt(ctx, wx, wy, isEraser, currentStroke, RESOLUTION_MULTIPLIER, true);
+        renderBlockyGrid();
       }
     } else if (e.type === 'mousemove' && isDrawing && activeTool !== 'fill' && currentStroke) {
-      const isEraser = activeTool === 'eraser';
-      drawLine(ctx, lastSkinX, lastSkinY, x, y, isEraser, currentStroke);
-      lastSkinX = x;
-      lastSkinY = y;
-      renderToDisplay();
+      const isEraser = currentStroke.isEraser;
+      drawLine(ctx, lastSkinX, lastSkinY, wx, wy, isEraser, currentStroke, RESOLUTION_MULTIPLIER, true);
+      lastSkinX = wx;
+      lastSkinY = wy;
+      renderBlockyGrid();
     } else if (e.type === 'mouseup' || e.type === 'mouseleave') {
       if (e.type === 'mouseup' && e.button === 0 && currentStroke) {
         if (currentStroke.pixels.length > 0) {
@@ -904,35 +834,29 @@ function setupCanvasEvents(): void {
         }
         currentStroke = null;
         isDrawing = false;
-        const ub = document.getElementById('creator-undo-btn') as HTMLButtonElement | null;
-        const rb = document.getElementById('creator-redo-btn') as HTMLButtonElement | null;
-        if (ub) ub.disabled = undoStack.length === 0;
-        if (rb) rb.disabled = redoStack.length === 0;
+        updateAllUndoRedoButtons();
       }
-      if (e.type === 'mouseleave') {
-        if (currentStroke && currentStroke.pixels.length > 0) {
-          redoStack = [];
-          undoStack.push({
-            type: 'stroke',
-            pixels: currentStroke.pixels,
-            isEraser: currentStroke.isEraser,
-            newColor: currentStroke.newColor,
-          });
-          if (undoStack.length > UNDO_LIMIT) undoStack.shift();
-        }
+      if (e.type === 'mouseleave' && currentStroke && currentStroke.pixels.length > 0) {
+        redoStack = [];
+        undoStack.push({
+          type: 'stroke',
+          pixels: currentStroke.pixels,
+          isEraser: currentStroke.isEraser,
+          newColor: currentStroke.newColor,
+        });
+        if (undoStack.length > UNDO_LIMIT) undoStack.shift();
         currentStroke = null;
         isDrawing = false;
+        updateAllUndoRedoButtons();
       }
     }
   }
 
-  disp.addEventListener('mousedown', handlePointer);
-  disp.addEventListener('mousemove', handlePointer);
-  disp.addEventListener('mouseup', handlePointer);
-  disp.addEventListener('mouseleave', handlePointer);
-
-  updateCanvasCursor();
-  disp.title = 'Skin canvas — drag to paint, Alt+click to pick color, use Fill tool for flood fill';
+  grid.addEventListener('mousedown', handleBlockyPointer);
+  grid.addEventListener('mousemove', handleBlockyPointer);
+  grid.addEventListener('mouseup', handleBlockyPointer);
+  grid.addEventListener('mouseleave', handleBlockyPointer);
+  grid.title = 'Blocky 64×64 grid — drag to paint, Alt+click to pick color';
 }
 
 function fitCanvasAreaScale(): void {
@@ -948,9 +872,66 @@ function fitCanvasAreaScale(): void {
 
 let layersPanel3DCollapsed = false;
 
+/** Map part display name (e.g. "Right sleeve") to layer key (e.g. "sleeves"). */
+function partToLayer(part: string): string | null {
+  const m: Record<string, string> = {
+    Head: 'head',
+    Hat: 'hat',
+    Body: 'body',
+    Jacket: 'jacket',
+    'Right leg': 'legs',
+    'Left leg': 'legs',
+    'Right pants': 'pants',
+    'Left pants': 'pants',
+    'Right arm': 'arms',
+    'Left arm': 'arms',
+    'Right sleeve': 'sleeves',
+    'Left sleeve': 'sleeves',
+  };
+  return m[part] ?? null;
+}
+
+/** Update the hover info panel with current part and skin coords. Pass null to clear. */
+export function updateHoverInfo(part: string | null, skinX: number, skinY: number): void {
+  const panel = document.getElementById('creator-hover-info-panel');
+  if (!panel) return;
+  const textEl = panel.querySelector('.creator-hover-info-text');
+  if (!textEl) return;
+  if (part == null || skinX < 0 || skinY < 0) {
+    textEl.textContent = '—';
+  } else {
+    textEl.textContent = `${part} (${skinX},${skinY})`;
+  }
+  const layersPanel = document.getElementById('creator-layers-panel-3d');
+  if (layersPanel) {
+    layersPanel.querySelectorAll('.creator-layers-panel-3d-row').forEach((row) => {
+      const layer = (row as HTMLElement).dataset.layer;
+      const shouldHighlight = part != null && partToLayer(part) === layer;
+      row.classList.toggle('creator-layers-panel-3d-row-highlight', !!shouldHighlight);
+    });
+  }
+}
+
+function buildHoverInfoPanel(): void {
+  const container = document.getElementById('creator-lower-right-panels') ?? document.getElementById('creator-view-wrapper');
+  if (!container) return;
+
+  let panel = document.getElementById('creator-hover-info-panel');
+  if (panel) panel.remove();
+
+  panel = document.createElement('div');
+  panel.id = 'creator-hover-info-panel';
+  panel.className = 'creator-hover-info-panel';
+  panel.setAttribute('aria-live', 'polite');
+  panel.setAttribute('aria-label', 'Current skin part and coordinates');
+  panel.innerHTML = '<span class="creator-hover-info-text">—</span>';
+
+  container.appendChild(panel);
+}
+
 function buildLayersPanel3D(): void {
-  const wrapper = document.getElementById('creator-view-wrapper');
-  if (!wrapper) return;
+  const container = document.getElementById('creator-lower-right-panels') ?? document.getElementById('creator-view-wrapper');
+  if (!container) return;
 
   let panel = document.getElementById('creator-layers-panel-3d');
   if (panel) panel.remove();
@@ -968,27 +949,44 @@ function buildLayersPanel3D(): void {
       </button>
     </div>
     <div class="creator-layers-panel-3d-list" role="group">
-      ${LAYER_KEYS.map(
-        (layer) =>
-          `<div class="creator-layers-panel-3d-row" data-layer="${layer}">
-          <span class="creator-layers-panel-3d-name">${layer.charAt(0).toUpperCase() + layer.slice(1)}</span>
-          <label class="creator-layers-panel-3d-visibility" title="Visibility (eye): hide to paint underlying parts">
-            <input type="checkbox" class="creator-layer-3d-visible" data-layer="${layer}" ${layer3DVisible[layer] ? 'checked' : ''}>
-            <span class="creator-layer-eye" aria-hidden="true">👁</span>
-          </label>
-          <label class="creator-layers-panel-3d-lock" title="Lock: ignore brush/eraser/fill">
-            <input type="checkbox" class="creator-layer-3d-lock" data-layer="${layer}" ${layer3DLocked[layer] ? 'checked' : ''}>
-            <span class="creator-layer-lock" aria-hidden="true">🔒</span>
-          </label>
-        </div>`
-      ).join('')}
+      ${LAYER_GROUPS.flatMap((group, i) => {
+        const rows = group.map(
+          (layer) =>
+            `<div class="creator-layers-panel-3d-row" data-layer="${layer}">
+            <span class="creator-layers-panel-3d-name">${layer.charAt(0).toUpperCase() + layer.slice(1)}</span>
+            <label class="creator-layers-panel-3d-visibility" title="Visibility (eye): hide to paint underlying parts. Alt+click: solo this layer">
+              <input type="checkbox" class="creator-layer-3d-visible" data-layer="${layer}" ${layer3DVisible[layer] ? 'checked' : ''}>
+              <span class="creator-layer-eye" aria-hidden="true">👁</span>
+            </label>
+            <label class="creator-layers-panel-3d-lock" title="Lock: ignore brush/eraser/fill">
+              <input type="checkbox" class="creator-layer-3d-lock" data-layer="${layer}" ${layer3DLocked[layer] ? 'checked' : ''}>
+              <span class="creator-layer-lock" aria-hidden="true">🔒</span>
+            </label>
+          </div>`
+        );
+        const sep = i < LAYER_GROUPS.length - 1 ? '<div class="creator-layers-panel-3d-separator" aria-hidden="true"></div>' : '';
+        return [...rows, sep];
+      }).join('')}
     </div>
   `;
 
-  panel.querySelectorAll('.creator-layer-3d-visible').forEach((cb) => {
-    cb.addEventListener('change', () => {
-      const layer = (cb as HTMLElement).dataset.layer;
-      if (layer) setLayer3DVisible(layer, (cb as HTMLInputElement).checked);
+  panel.querySelectorAll('.creator-layers-panel-3d-visibility').forEach((label) => {
+    const input = label.querySelector('.creator-layer-3d-visible') as HTMLInputElement;
+    const layer = input?.dataset.layer;
+    if (!layer) return;
+    label.addEventListener('click', (e) => {
+      if ((e as MouseEvent).altKey) {
+        e.preventDefault();
+        handleVisibilityAltClick(layer);
+        if (panel) {
+          syncVisibilityCheckboxes(panel);
+          updateSoloIndicator(panel);
+        }
+        return;
+      }
+    });
+    input.addEventListener('change', () => {
+      setLayer3DVisible(layer, input.checked);
     });
   });
   panel.querySelectorAll('.creator-layer-3d-lock').forEach((cb) => {
@@ -997,6 +995,27 @@ function buildLayersPanel3D(): void {
       if (layer) setLayer3DLocked(layer, (cb as HTMLInputElement).checked);
     });
   });
+
+  setupDragToToggle(
+    panel,
+    '.creator-layers-panel-3d-visibility',
+    '.creator-layer-3d-visible',
+    (l) => layer3DVisible[l],
+    (l, v) => setLayer3DVisible(l, v),
+    (p) => {
+      syncVisibilityCheckboxes(p);
+      updateSoloIndicator(p);
+    },
+    (e) => !(e as MouseEvent).altKey
+  );
+  setupDragToToggle(
+    panel,
+    '.creator-layers-panel-3d-lock',
+    '.creator-layer-3d-lock',
+    (l) => layer3DLocked[l],
+    (l, v) => setLayer3DLocked(l, v),
+    syncLockCheckboxes
+  );
 
   const toggleBtn = panel.querySelector('.creator-layers-panel-3d-toggle') as HTMLButtonElement;
   const updateCollapsedUI = () => {
@@ -1018,7 +1037,7 @@ function buildLayersPanel3D(): void {
   });
   updateCollapsedUI();
 
-  wrapper.appendChild(panel);
+  container.appendChild(panel);
 }
 
 function buildToolsPanel3D(): void {
@@ -1033,59 +1052,100 @@ function buildToolsPanel3D(): void {
   panel.className = 'creator-tools-panel-3d';
   panel.setAttribute('aria-label', '3D tools');
   panel.innerHTML = `
-    <div class="creator-tools-panel-3d-row" role="group" aria-label="Drawing tools">
+    <div class="creator-tools-panel-3d-row creator-tools-panel-3d-edit-mode" role="group" aria-label="Edit mode">
+      <button type="button" class="creator-tools-panel-3d-btn creator-tools-panel-3d-mode-btn" data-mode="2d" title="Edit on 2D canvas">2D</button>
+      <button type="button" class="creator-tools-panel-3d-btn creator-tools-panel-3d-mode-btn" data-mode="3d" title="Edit on 3D model">3D</button>
+    </div>
+    <div class="creator-tools-panel-3d-row creator-tools-panel-3d-tools-row" role="group" aria-label="Drawing tools">
       <button type="button" class="creator-tools-panel-3d-btn" data-tool="navigate" title="Navigate: orbit/zoom, no paint">Navigate</button>
+      <div class="creator-tools-panel-3d-divider" aria-hidden="true"></div>
       <button type="button" class="creator-tools-panel-3d-btn" data-tool="brush" title="Brush">Brush</button>
       <button type="button" class="creator-tools-panel-3d-btn" data-tool="eraser" title="Eraser">Eraser</button>
       <button type="button" class="creator-tools-panel-3d-btn" data-tool="fill" title="Fill">Fill</button>
     </div>
-    <div class="creator-tools-panel-3d-brush-row" data-only-when="brush" role="group" aria-label="Brush size">
-      <span class="creator-tools-panel-3d-label">Brush</span>
-      <div class="creator-tools-panel-3d-sizes">
-        ${[1, 2, 4, 8].map((s) => `<button type="button" class="creator-tools-panel-3d-size-btn" data-size="${s}" title="${s}px"><span class="creator-tools-panel-3d-brush-icon" style="width:${s * 3}px;height:${s * 3}px"></span></button>`).join('')}
-      </div>
+    <div class="creator-tools-panel-3d-row creator-tools-panel-3d-view-toggles" data-only-when="2d" role="group" aria-label="Canvas overlays">
+      <div class="creator-tools-panel-3d-divider creator-tools-panel-3d-divider-2d-only" aria-hidden="true"></div>
+      <button type="button" class="creator-tools-panel-3d-btn creator-tools-panel-3d-toggle-btn" data-toggle="rulers" title="Toggle rulers">Rulers</button>
+      <button type="button" class="creator-tools-panel-3d-btn creator-tools-panel-3d-toggle-btn" data-toggle="template" title="Show template overlay">Template</button>
+    </div>
+    <div class="creator-tools-panel-3d-divider" aria-hidden="true"></div>
+    <div class="creator-tools-panel-3d-row creator-tools-panel-3d-undo-redo" role="group" aria-label="Undo Redo">
+      <button type="button" class="creator-tools-panel-3d-btn creator-tools-panel-3d-undo-btn" id="creator-tools-undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo">↩</button>
+      <button type="button" class="creator-tools-panel-3d-btn creator-tools-panel-3d-redo-btn" id="creator-tools-redo-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↪</button>
     </div>
   `;
 
   const updateToolActive = () => {
-    panel.querySelectorAll('.creator-tools-panel-3d-btn').forEach((btn) => {
+    panel.querySelectorAll('.creator-tools-panel-3d-btn[data-tool]').forEach((btn) => {
       btn.classList.toggle('active', (btn as HTMLElement).dataset.tool === activeTool);
     });
   };
-  const updateBrushActive = () => {
-    panel.querySelectorAll('.creator-tools-panel-3d-size-btn').forEach((btn) => {
-      btn.classList.toggle('active', parseInt((btn as HTMLElement).dataset.size || '0', 10) === brushSize);
+  const updateViewTogglesRowVisibility = () => {
+    const row = panel.querySelector('.creator-tools-panel-3d-view-toggles');
+    if (row) row.classList.toggle('creator-tools-panel-3d-visible', !editMode3D);
+  };
+  const updateViewToggleButtons = () => {
+    panel.querySelectorAll('.creator-tools-panel-3d-toggle-btn').forEach((btn) => {
+      const t = (btn as HTMLElement).dataset.toggle;
+      const isActive = (t === 'rulers' && showRulers) || (t === 'template' && showTemplate);
+      btn.classList.toggle('active', !!isActive);
     });
   };
-  const updateBrushRowVisibility = () => {
-    const row = panel.querySelector('.creator-tools-panel-3d-brush-row');
-    if (row) row.classList.toggle('creator-tools-panel-3d-visible', activeTool === 'brush');
+  const updateEditModeButtons = () => {
+    panel.querySelectorAll('.creator-tools-panel-3d-mode-btn').forEach((btn) => {
+      btn.classList.toggle('active', (btn as HTMLElement).dataset.mode === (editMode3D ? '3d' : '2d'));
+    });
   };
 
-  panel.querySelectorAll('.creator-tools-panel-3d-btn').forEach((btn) => {
+  panel.querySelectorAll('.creator-tools-panel-3d-mode-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const m = (btn as HTMLElement).dataset.mode;
+      editMode3D = m === '3d';
+      document.body.dataset.editMode = editMode3D ? '3d' : '2d';
+      (document.getElementById('creator-edit-2d-btn') as HTMLElement)?.classList.toggle('active', !editMode3D);
+      (document.getElementById('creator-edit-3d-btn') as HTMLElement)?.classList.toggle('active', editMode3D);
+      updateEditModeButtons();
+      document.dispatchEvent(new CustomEvent('creator-edit-mode-change', { detail: { is3D: editMode3D } }));
+    });
+  });
+  panel.querySelectorAll('.creator-tools-panel-3d-btn[data-tool]').forEach((btn) => {
     btn.addEventListener('click', () => {
       setActiveTool((btn as HTMLElement).dataset.tool as Tool);
       updateToolActive();
-      updateBrushRowVisibility();
     });
   });
-  panel.querySelectorAll('.creator-tools-panel-3d-size-btn').forEach((btn) => {
+  panel.querySelectorAll('.creator-tools-panel-3d-toggle-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const size = parseInt((btn as HTMLElement).dataset.size || '2', 10);
-      setBrushSize(size);
-      updateBrushActive();
+      const t = (btn as HTMLElement).dataset.toggle;
+      if (t === 'rulers') showRulers = !showRulers;
+      else if (t === 'template') showTemplate = !showTemplate;
+      updateViewToggleButtons();
+      renderToDisplay();
     });
+  });
+  (panel.querySelector('#creator-tools-undo-btn') as HTMLButtonElement)?.addEventListener('click', () => {
+    performUndo();
+    updateAllUndoRedoButtons();
+  });
+  (panel.querySelector('#creator-tools-redo-btn') as HTMLButtonElement)?.addEventListener('click', () => {
+    performRedo();
+    updateAllUndoRedoButtons();
   });
 
   document.addEventListener('creator-tools-3d-change', () => {
     updateToolActive();
-    updateBrushActive();
-    updateBrushRowVisibility();
+    updateCanvasCursor();
+  });
+  document.addEventListener('creator-edit-mode-change', () => {
+    updateEditModeButtons();
+    updateViewTogglesRowVisibility();
   });
 
   updateToolActive();
-  updateBrushActive();
-  updateBrushRowVisibility();
+  updateEditModeButtons();
+  updateViewTogglesRowVisibility();
+  updateViewToggleButtons();
+  updateAllUndoRedoButtons();
 
   wrapper.appendChild(panel);
 }
@@ -1108,9 +1168,6 @@ function setupCanvasAreaResize(): void {
  * Call when the creator panel is shown.
  */
 export function initCreator(): void {
-  const disp = getDisplayCanvas();
-  if (!disp) return;
-
   const skin = getSkinCanvas();
   const ctx = skin.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;
@@ -1118,10 +1175,20 @@ export function initCreator(): void {
   ctx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
   document.body.dataset.editMode = editMode3D ? '3d' : '2d';
   buildToolbar();
+  const wrapper = document.getElementById('creator-view-wrapper');
+  if (wrapper && !document.getElementById('creator-lower-right-panels')) {
+    const container = document.createElement('div');
+    container.id = 'creator-lower-right-panels';
+    container.className = 'creator-lower-right-panels';
+    wrapper.appendChild(container);
+  }
   buildLayersPanel3D();
+  buildHoverInfoPanel();
   buildToolsPanel3D();
+  buildBlockyGrid();
+  buildRulers();
+  setupBlockyGridEvents();
   renderToDisplay();
-  setupCanvasEvents();
   setupCanvasAreaResize();
 
   (async () => {
@@ -1155,10 +1222,7 @@ export function initCreator(): void {
         } else {
           performUndo();
         }
-        const ub = document.getElementById('creator-undo-btn') as HTMLButtonElement | null;
-        const rb = document.getElementById('creator-redo-btn') as HTMLButtonElement | null;
-        if (ub) ub.disabled = undoStack.length === 0;
-        if (rb) rb.disabled = redoStack.length === 0;
+        updateAllUndoRedoButtons();
       }
     }
   });
@@ -1192,6 +1256,132 @@ export function setLayer3DVisible(layer: string, visible: boolean): void {
   }
 }
 
+/** Set visibility for all layers at once (used by solo mode). */
+function setLayer3DVisibleAll(visible: Record<string, boolean>): void {
+  for (const k of LAYER_KEYS) {
+    if (visible[k] !== undefined) layer3DVisible[k] = visible[k];
+  }
+  document.dispatchEvent(new CustomEvent('creator-layer3d-change'));
+}
+
+/** Sync visibility checkboxes from layer3DVisible (after batch changes). */
+function syncVisibilityCheckboxes(panel: HTMLElement): void {
+  panel.querySelectorAll<HTMLInputElement>('.creator-layer-3d-visible').forEach((cb) => {
+    const layer = cb.dataset.layer;
+    if (layer && layer3DVisible[layer] !== undefined) cb.checked = layer3DVisible[layer];
+  });
+}
+
+/** Sync lock checkboxes from layer3DLocked (after batch changes). */
+function syncLockCheckboxes(panel: HTMLElement): void {
+  panel.querySelectorAll<HTMLInputElement>('.creator-layer-3d-lock').forEach((cb) => {
+    const layer = cb.dataset.layer;
+    if (layer && layer3DLocked[layer] !== undefined) cb.checked = layer3DLocked[layer];
+  });
+}
+
+/** Get layer name from element under client coords, or null. */
+function getLayerUnderPoint(clientX: number, clientY: number): string | null {
+  const el = document.elementFromPoint(clientX, clientY);
+  if (!el) return null;
+  const row = el.closest('.creator-layers-panel-3d-row');
+  return (row as HTMLElement)?.dataset?.layer ?? null;
+}
+
+const DRAG_THRESHOLD_PX = 4;
+
+/** Setup drag-to-toggle: mousedown on label, drag over rows to apply same value. */
+function setupDragToToggle(
+  panel: HTMLElement,
+  labelSelector: string,
+  inputSelector: string,
+  getValue: (layer: string) => boolean,
+  setValue: (layer: string, value: boolean) => void,
+  sync: (panel: HTMLElement) => void,
+  canStartDrag: (e: Event) => boolean = () => true
+): void {
+  panel.querySelectorAll(labelSelector).forEach((label) => {
+    const input = label.querySelector(inputSelector) as HTMLInputElement;
+    const layer = input?.dataset.layer;
+    if (!layer) return;
+    label.addEventListener('mousedown', (e) => {
+      const me = e as MouseEvent;
+      if (me.button !== 0 || !canStartDrag(me)) return;
+      const startX = me.clientX;
+      const startY = me.clientY;
+      const dragValue = !getValue(layer);
+      let hasDragged = false;
+      const handleMove = (moveEv: MouseEvent) => {
+        if (!hasDragged) {
+          const dx = moveEv.clientX - startX;
+          const dy = moveEv.clientY - startY;
+          if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
+          hasDragged = true;
+          setValue(layer, dragValue);
+          sync(panel);
+        }
+        const targetLayer = getLayerUnderPoint(moveEv.clientX, moveEv.clientY);
+        if (targetLayer && LAYER_KEYS.includes(targetLayer as (typeof LAYER_KEYS)[number])) {
+          setValue(targetLayer, dragValue);
+          sync(panel);
+        }
+      };
+      const handleClick = (clickEv: Event) => {
+        label.removeEventListener('click', handleClick, true);
+        if (hasDragged) {
+          clickEv.preventDefault();
+          clickEv.stopPropagation();
+        }
+      };
+      const handleUp = () => {
+        document.removeEventListener('mousemove', handleMove);
+        document.removeEventListener('mouseup', handleUp, true);
+      };
+      document.addEventListener('mousemove', handleMove);
+      document.addEventListener('mouseup', handleUp, true);
+      label.addEventListener('click', handleClick, true);
+    });
+  });
+}
+
+/** Show "Solo: LayerName" in panel header when in solo mode. */
+function updateSoloIndicator(panel: HTMLElement): void {
+  let indicator = panel.querySelector('.creator-layers-panel-3d-solo-indicator') as HTMLElement | null;
+  if (layer3DSoloMode && layer3DSoloCurrentLayer) {
+    if (!indicator) {
+      indicator = document.createElement('span');
+      indicator.className = 'creator-layers-panel-3d-solo-indicator';
+      const title = panel.querySelector('.creator-layers-panel-3d-title');
+      if (title) title.after(indicator);
+    }
+    indicator.textContent = `Solo: ${layer3DSoloCurrentLayer.charAt(0).toUpperCase() + layer3DSoloCurrentLayer.slice(1)}`;
+  } else if (indicator) {
+    indicator.textContent = '';
+  }
+}
+
+/** Handle Alt+click on visibility: solo this layer or restore. */
+function handleVisibilityAltClick(layer: string): void {
+  if (layer3DSoloMode) {
+    if (layer3DSoloCurrentLayer === layer) {
+      if (layer3DSoloBeforeState) setLayer3DVisibleAll(layer3DSoloBeforeState);
+      layer3DSoloMode = false;
+      layer3DSoloBeforeState = null;
+      layer3DSoloCurrentLayer = null;
+    } else {
+      layer3DSoloCurrentLayer = layer;
+      const soloState = Object.fromEntries(LAYER_KEYS.map((k) => [k, k === layer]));
+      setLayer3DVisibleAll(soloState);
+    }
+  } else {
+    layer3DSoloBeforeState = { ...layer3DVisible };
+    layer3DSoloCurrentLayer = layer;
+    const soloState = Object.fromEntries(LAYER_KEYS.map((k) => [k, k === layer]));
+    setLayer3DVisibleAll(soloState);
+    layer3DSoloMode = true;
+  }
+}
+
 /** Set lock for a layer and dispatch change event. */
 export function setLayer3DLocked(layer: string, locked: boolean): void {
   if (LAYER_KEYS.includes(layer as (typeof LAYER_KEYS)[number])) {
@@ -1211,17 +1401,9 @@ export function setActiveTool(tool: Tool): void {
   document.dispatchEvent(new CustomEvent('creator-tools-3d-change'));
 }
 
-/** Brush size (1, 2, 4, 8). */
+/** Brush size (fixed at 1 pixel for 3D; 1 grid cell for 2D blocky). */
 export function getBrushSize(): number {
-  return brushSize;
-}
-
-/** Set brush size and dispatch change event. */
-export function setBrushSize(size: number): void {
-  if ([1, 2, 4, 8].includes(size)) {
-    brushSize = size;
-    document.dispatchEvent(new CustomEvent('creator-tools-3d-change'));
-  }
+  return BRUSH_SIZE;
 }
 
 /** WORK_SIZE for UV→pixel mapping (texture is WORK_SIZE×WORK_SIZE). */
@@ -1261,7 +1443,10 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
   lastSkinY = workingY;
   const isEraser = activeTool === 'eraser';
   currentStroke = { pixels: [], isEraser, newColor: currentColor, recorded: new Set<string>() };
-  brushAt(ctx, workingX, workingY, isEraser, currentStroke);
+  // Snap to cell top-left so we paint 2×2 = one full skin pixel (matches 2D blocky)
+  const baseX = Math.floor(workingX / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
+  const baseY = Math.floor(workingY / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
+  brushAt(ctx, baseX, baseY, isEraser, currentStroke, RESOLUTION_MULTIPLIER, true);
   renderToDisplay();
   return true;
 }
@@ -1274,7 +1459,7 @@ export function paintMoveFrom3D(workingX: number, workingY: number): void {
   const ctx = skin.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;
   const isEraser = currentStroke.isEraser;
-  drawLine(ctx, lastSkinX, lastSkinY, workingX, workingY, isEraser, currentStroke);
+  drawLine(ctx, lastSkinX, lastSkinY, workingX, workingY, isEraser, currentStroke, RESOLUTION_MULTIPLIER, true);
   lastSkinX = workingX;
   lastSkinY = workingY;
   renderToDisplay();
@@ -1295,10 +1480,7 @@ export function paintEndFrom3D(): void {
   currentStroke = null;
   isDrawing = false;
   renderToDisplay();
-  const ub = document.getElementById('creator-undo-btn') as HTMLButtonElement | null;
-  const rb = document.getElementById('creator-redo-btn') as HTMLButtonElement | null;
-  if (ub) ub.disabled = undoStack.length === 0;
-  if (rb) rb.disabled = redoStack.length === 0;
+  updateAllUndoRedoButtons();
 }
 
 /** Sample color at working coords (eyedropper). Returns hex or null. */

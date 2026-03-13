@@ -17,7 +17,9 @@ import {
   paintMoveFrom3D,
   paintEndFrom3D,
   sampleColorAt,
-  applySampledColor
+  applySampledColor,
+  updateHoverInfo,
+  getPartDisplayNameAtCoords
 } from './creator';
 import { preprocessSkinTexture } from './skinPreprocess';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -489,7 +491,7 @@ function _getMinecraftPartFromMeshName(name: string): keyof typeof MINECRAFT_SKI
 }
 
 /** Addendum layer keys for visibility. */
-const CREATOR_LAYER_KEYS = ['head', 'hat', 'body', 'jacket', 'arms', 'sleeves', 'legs', 'pants'] as const;
+const CREATOR_LAYER_KEYS = ['hat', 'head', 'jacket', 'body', 'sleeves', 'arms', 'pants', 'legs'] as const;
 
 function applyCreatorLayerVisibility(model: THREE.Group, _layerVisible: Record<string, boolean>) {
   // Visibility is handled by texture-region transparency; all meshes stay visible
@@ -1094,12 +1096,29 @@ function setupCreator3DPaint() {
   }
 
   function handlePointerMove(e: MouseEvent) {
+    if (getRoute() !== 'creator' || !getEditMode3D()) return;
+    const uv = raycastToSkinUV(e.clientX, e.clientY);
+    if (uv) {
+      const { x, y } = uvToWorkingCoords(uv.u, uv.v);
+      const part = getPartDisplayNameAtCoords(x, y);
+      const skinX = Math.floor(x / 2);
+      const skinY = Math.floor(y / 2);
+      updateHoverInfo(part, skinX, skinY);
+    } else {
+      updateHoverInfo(null, -1, -1);
+    }
     if (!is3DPainting) return;
-    const uv = raycastToPaintableUV(e.clientX, e.clientY);
-    if (!uv) return;
-    const { x, y } = uvToWorkingCoords(uv.u, uv.v);
+    const paintUv = raycastToPaintableUV(e.clientX, e.clientY);
+    if (!paintUv) return;
+    const { x, y } = uvToWorkingCoords(paintUv.u, paintUv.v);
     paintMoveFrom3D(x, y);
     e.preventDefault();
+  }
+
+  function handle3DCanvasLeave() {
+    if (getRoute() === 'creator' && getEditMode3D()) {
+      updateHoverInfo(null, -1, -1);
+    }
   }
 
   function handlePointerUp(e: MouseEvent) {
@@ -1114,7 +1133,10 @@ function setupCreator3DPaint() {
   canvas.addEventListener('mousedown', handlePointerDown);
   canvas.addEventListener('mousemove', handlePointerMove);
   canvas.addEventListener('mouseup', handlePointerUp);
-  canvas.addEventListener('mouseleave', handlePointerUp);
+  canvas.addEventListener('mouseleave', (e) => {
+    handle3DCanvasLeave();
+    handlePointerUp(e);
+  });
 
   document.addEventListener('creator-edit-mode-change', () => {
     updateOrbitControlsForEditMode();
