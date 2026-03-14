@@ -16,7 +16,8 @@ alwaysApply: true
 
 | File | Purpose |
 |------|---------|
-| `src/main.ts` | Entry point: scene, model load, skin/anim logic, API events |
+| `src/main.ts` | Entry point: orchestration, model load, skin/anim logic, API events |
+| `src/viewer/` | Scene setup, skin application, orbit/pointer controls (`scene.ts`, `skinApplication.ts`, `controls.ts`) |
 | `src/creator.ts` | Character creator (2D/3D skin editor) |
 | `src/skinPreprocess.ts` | Skin texture preprocessing (transparent → solid in primary regions) |
 | `docs/minecraft-skin-layout-specification.md` | Skin layout, region bounds, UVs |
@@ -26,6 +27,7 @@ alwaysApply: true
 
 - **Plans/specs:** `PLAN-GUIDE.md`
 - **Skin/UV:** `docs/minecraft-skin-layout-specification.md`
+- **Skin artist/agent:** `docs/MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md` (pixel bounds, color theory, patterns, ImageMagick)
 - **Creator:** `docs/CHARACTER-CREATION-SCREEN-SPEC.md`
 - **Debugging:** `docs/TROUBLESHOOTING.md`
 
@@ -33,7 +35,7 @@ alwaysApply: true
 
 - Use `SKIN_LAYER_BOUNDS` or `MINECRAFT_SKIN_UVS` for skin regions
 - FBX scale: `model.scale.setScalar(0.01)`
-- Mesh→skin mapping: `_getMinecraftPartFromMeshName()`
+- Mesh→skin mapping: `getMinecraftPartFromMeshName()` in `meshPartMapping.ts`
 
 ## Dev Environment
 

@@ -9,6 +9,7 @@
  */
 
 import * as THREE from 'three';
+import { SKIN_LAYER_BOUNDS, type LayerKey } from './skinLayout';
 
 export type SkinPreprocessConfig = {
   /** When false, returns the texture unchanged (preprocessing disabled) */
@@ -25,15 +26,18 @@ export const SKIN_PREPROCESS_CONFIG: SkinPreprocessConfig = {
   alphaThreshold: 127,
 };
 
-/** Primary layer bounds (X, Y, W, H). Transparency is replaced with solid color. */
-const PRIMARY_REGIONS: [number, number, number, number][] = [
-  [0, 0, 32, 16],   // Head
-  [16, 16, 16, 16], // Body
-  [0, 16, 16, 16],  // Right Leg
-  [16, 48, 16, 16], // Left Leg
-  [40, 16, 16, 16], // Right Arm
-  [32, 48, 16, 16], // Left Arm
-];
+/**
+ * Primary layers: base body parts where transparency is replaced with solid color.
+ * Overlay layers (hat, jacket, sleeves, pants) keep transparency.
+ */
+const PRIMARY_LAYER_KEYS: LayerKey[] = ['head', 'body', 'arms', 'legs'];
+
+/** Derived from SKIN_LAYER_BOUNDS for primary layers. Format: [x, y, w, h] per rect. */
+const PRIMARY_REGIONS: [number, number, number, number][] = PRIMARY_LAYER_KEYS.flatMap((key) => {
+  const bounds = SKIN_LAYER_BOUNDS[key];
+  if (!bounds) return [];
+  return bounds.map((b) => [b.x, b.y, b.w, b.h] as [number, number, number, number]);
+});
 
 function isInPrimaryRegion(x: number, y: number): boolean {
   return PRIMARY_REGIONS.some(([rx, ry, rw, rh]) =>

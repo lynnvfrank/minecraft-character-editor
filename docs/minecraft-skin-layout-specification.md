@@ -2,6 +2,8 @@
 
 **Purpose:** Reference document for troubleshooting skin texture mapping issues and for translating skins between different layout formats (e.g., 64×64 ↔ 64×32, or custom formats).
 
+**See also:** [`MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md`](MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md) — artist pixel boundaries and AI-agent instructions for generating skins (color theory, fashion patterns, prints, ImageMagick).
+
 **Canvas:** 64×64 pixels (modern skins). Origin (0,0) is top-left.
 **Legacy:** Crop to 64×32 for pre-1.8 skins (upper half only).
 

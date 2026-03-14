@@ -14,7 +14,7 @@ A specification for building a character creation screen that lets users draw on
 6. [Paint on 3D Model](#paint-on-3d-model)
 7. [Layer System](#layer-system)
 8. [Layers Panel — Floating Over 2D and 3D](#layers-panel--floating-over-2d-and-3d)
-9. [Solo-Layer Visibility (Alt/Option + Eye Click)](#solo-layer-visibility-altoption--eye-click)
+9. [Solo-Layer Visibility and Lock (Alt/Option + Click)](#solo-layer-visibility-and-lock-altoption--click)
 10. [Tools Panel — Floating Over 2D and 3D](#tools-panel--floating-over-2d-and-3d)
 11. [Color Swatch Management System](#color-swatch-management-system)
 12. [Cursor Behavior (2D and 3D)](#cursor-behavior-2d-and-3d)
@@ -43,9 +43,12 @@ A specification for building a character creation screen that lets users draw on
 
 | Feature | Status |
 |---------|--------|
-| Color swatch manager (centralized, 12–24 colors, merge/dedupe) | ⬜ |
+| Color swatch manager (multi-palette: History + Skin, tab UI) | ✅ |
+| Color picker panel (SV + hue, 5-swatch bar, minimize, floating lower-right) | ✅ |
+| Swatch grid display (colorful squares, capacity limit) — History & Skin palettes | ✅ |
 | Select more colors (Add color button → picker) | ⬜ |
-| Auto-load from skin (extract colors on load) | ⬜ |
+| Eyedropper tool (2D/3D pixel sampling, prepend to swatch, tool exclusivity) | ✅ |
+| Auto-load from skin (Skin palette extracts colors on load, dedupe + diversity) | ✅ |
 | Blocky 2D editor as sole 2D view (Canvas 2D drawing removed) | ✅ |
 | Rulers (HTML/CSS, crisp text, 0–64 labels) | ✅ |
 | Tools panel — floating over both 2D and 3D views | ✅ |
@@ -54,10 +57,11 @@ A specification for building a character creation screen that lets users draw on
 | Default tool: Navigate (not Brush) on load | ✅ |
 | Layers panel (3D) — floating lower-right, lock + visibility | ✅ |
 | Hidden layer behavior (3D part hidden, brush ignored) | ✅ |
-| Solo-layer (Alt+click eye → show only that layer) | ✅ |
+| Solo-layer visibility (Alt+click eye) | ✅ |
+| Solo-layer lock (Alt+click lock) | ✅ |
 | Brush size fixed at 1 cell (2D and 3D) | ✅ |
 | 2D view tools: Navigate, Brush, Eraser, Fill, Rulers, Grid, Template | ✅ |
-| Left sidebar: Edit (Undo/Redo), Color, Swatch only | ✅ |
+| Left sidebar: Edit (Undo/Redo), Skin gallery; Swatches in right-side panel (Download hidden) | ✅ |
 | Grid mode toggle (1px black pixel overlay) | ⬜ |
 | Cursor (2D and 3D) — block outline for Brush/Eraser | ✅ |
 | Visual body-diagram layer toggles | 📋 |
@@ -67,6 +71,13 @@ A specification for building a character creation screen that lets users draw on
 | Layer row highlight when hovering over skin part | ✅ |
 | Dead zones excluded from template overlay and hover info | ✅ |
 | Undo/Redo buttons split width in tools panel | ✅ |
+| Keyboard shortcuts (Tab, H, B, E, G, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z) | ✅ |
+| Tool icons for Navigate, Brush, Eraser, Fill, Eyedropper (no text labels) | ✅ |
+| Color picker minimize (collapses to 5 swatches) | ✅ |
+| Swatches panel minimize (collapses to "Swatches (N)") | ✅ |
+| Multi-palette swatches (History + Skin tabs) | ✅ |
+| Skin palette color extraction (dedupe + diversity) | ✅ |
+| Left sidebar size (220–380px) | ✅ |
 
 *Update this table and the status indicator in each section heading when implementation changes.*
 
@@ -198,7 +209,8 @@ The character creator uses a blocky 64×64 grid as the sole 2D editor. The Canva
 ### Left Sidebar (Simplified)
 
 - **Edit** — Undo, Redo.
-- **Color** — Current color swatch, hex input, color swatch palette.
+- **Skin gallery** — Load skin selector. Color swatch and hex input removed (color selection via color picker and swatches panels).
+- **Download** — Hidden (present in DOM but not visible).
 - **Removed** — Tools (Brush, Eraser, Fill), Brush sizes, 2D/3D toggle, Layers, Rulers, Grid, Template. These now live in the floating tools panel.
 
 ### Default Tool
@@ -287,7 +299,7 @@ A floating panel in the lower-right corner of the view area lists all skin layer
 ### Drag-to-Toggle
 
 - **Visibility and lock** — Click and hold on a visibility or lock toggle, then drag over other layer rows. Each row crossed adopts the same toggle value (e.g., drag to hide multiple layers at once). Simple click still toggles a single layer normally.
-- **Implementation** — Uses a drag threshold (4px); movement beyond threshold starts drag mode. Alt+click on visibility bypasses drag and triggers solo mode.
+- **Implementation** — Uses a drag threshold (4px); movement beyond threshold starts drag mode. Alt+click on visibility or lock bypasses drag and triggers solo mode.
 
 ### Paint Eligibility
 
@@ -320,23 +332,31 @@ A later version may replace or supplement checkboxes with a 2D body diagram wher
 
 ---
 
-## Solo-Layer Visibility (Alt/Option + Eye Click)
+## Solo-Layer Visibility and Lock (Alt/Option + Click)
 
 ### Scope
 
-Hold Alt (Windows/Linux) or Option (macOS) and click the visibility (eye) toggle of a layer to show only that layer. Click again (with Alt/Option held) to restore the previous visibility state.
+Hold Alt (Windows/Linux) or Option (macOS) and click a layer control to enter "solo" mode for that control. Both the visibility (eye) toggle and the lock toggle support this behavior.
 
-### Behavior
+### Solo Visibility (Alt + Eye Click)
 
 | Action | Result |
 |--------|--------|
-| **First click (Alt/Option held)** | Enter "solo mode." Hide all other layers; show only the clicked layer. Store the previous visibility state. |
-| **Second click (Alt/Option held)** | Exit solo mode. Restore all layers to their stored visibility. |
+| **First click (Alt/Option held)** | Enter solo visibility. Hide all other layers; show only the clicked layer. Store the previous visibility state. |
+| **Second click (Alt/Option held)** | Exit solo visibility. Restore all layers to their stored visibility. |
+
+### Solo Lock (Alt + Lock Click)
+
+| Action | Result |
+|--------|--------|
+| **First click (Alt/Option held)** | Enter solo lock. Lock all other layers; unlock only the clicked layer. Store the previous lock state. This focuses editing on a single layer. |
+| **Second click (Alt/Option held)** | Exit solo lock. Restore all layers to their stored lock state. |
 
 ### Edge Cases
 
-- **Alt released before second click** — Solo mode persists until the next Alt+click on any eye.
-- **Click without Alt** — Normal visibility toggle; does not enter or exit solo mode.
+- **Alt released before second click** — Solo mode persists until the next Alt+click on the same control type (eye or lock).
+- **Click without Alt** — Normal toggle; does not enter or exit solo mode.
+- **Alt+click on lock** — Bypasses drag-to-toggle (same as visibility).
 
 ---
 
@@ -352,9 +372,10 @@ A floating tools panel appears in the upper-left corner of the view area for bot
 |------|---------|
 | **2D / 3D** | Edit mode toggle. Switch between blocky 2D canvas and 3D model view. |
 | **Navigate** | Disables paint, eraser, and fill. Restores full orbit/camera control. Default tool on page load. |
-| **Brush** | Paint on the skin (2D blocky grid or 3D raycast hit). |
-| **Eraser** | Erase (set pixels to transparent). |
-| **Fill** | Flood fill from clicked pixel. |
+| **Brush** | Paint on the skin (2D blocky grid or 3D raycast hit). Mutually exclusive with Eyedropper. |
+| **Eraser** | Erase (set pixels to transparent). Mutually exclusive with Eyedropper. |
+| **Fill** | Flood fill from clicked pixel. Mutually exclusive with Eyedropper. |
+| **Eyedropper** | Sample pixel color on 2D or 3D; add to swatches (prepended). See [Color Swatch Management System](#color-swatch-management-system). Mutually exclusive with Brush, Eraser, and Fill. |
 | **Rulers** | (2D only) Toggle rulers above and left of the blocky grid. |
 | **Grid** | (2D only) Toggle grid overlay. |
 | **Template** | (2D only) Toggle skin region outlines for layout reference. |
@@ -365,6 +386,23 @@ A floating tools panel appears in the upper-left corner of the view area for bot
 - **Style** — Vertical list; floating panel; semi-transparent background.
 - **Dividers** — Between 2D/3D toggle and tools; between Navigate and Brush; (2D only) between Fill and Rulers.
 - **Undo/Redo** — Undo and Redo buttons split the full width of the tools panel (50% each).
+- **Tool icons** — Navigate, Brush, Eraser, Fill, and Eyedropper are shown as icons (not text labels). Use recognizable paint-tool iconography (e.g., hand for Navigate, brush tip for Brush, eraser for Eraser, paint bucket for Fill, eyedropper for Eyedropper). Optional: show the shortcut key in a tooltip on hover.
+
+### Keyboard Shortcuts
+
+Shortcuts follow conventions familiar to users of Adobe Photoshop and similar paint tools. Use Ctrl on Windows/Linux; Command (⌘) on macOS.
+
+| Action | Shortcut (Win/Linux) | Shortcut (Mac) |
+|--------|----------------------|----------------|
+| 2D / 3D toggle | `Tab` | `Tab` |
+| Navigate mode | `H` | `H` |
+| Brush | `B` | `B` |
+| Eraser | `E` | `E` |
+| Fill | `G` | `G` |
+| Undo | `Ctrl+Z` | `Cmd+Z` |
+| Redo | `Ctrl+Shift+Z` | `Cmd+Shift+Z` |
+
+**Notes:** The 2D/3D toggle uses Tab (common for switching edit modes). Navigate, Brush, Eraser, and Fill use the same single-letter shortcuts as Photoshop (H = Hand, B = Brush, E = Eraser, G = Paint Bucket). Undo/Redo use the standard system shortcuts.
 
 ### Brush Size
 
@@ -376,32 +414,55 @@ A floating tools panel appears in the upper-left corner of the view area for bot
 
 ### Scope
 
-A system to manage color swatches, allow users to select and add more colors, and auto-load colors from the existing skin texture.
+A system to manage color swatches with multiple palettes, allow users to select and add more colors, and auto-load colors from the loaded skin texture.
 
-### Swatch Manager
+### Multi-Palette Swatches Panel
 
-- **Centralized state** — Single source of truth for the current swatch (array of hex strings).
-- **Capacity** — Max 12–24 colors (12 recommended).
-- **Merge strategy** — When adding colors, merge with existing; deduplicate by hex value.
+- **Palettes** — Two palettes in tab UI:
+  - **History** — Most recently used colors (newest first). Editable; drag-drop to set swatch color.
+  - **Skin** — Colors extracted from the currently loaded skin. Read-only; click to apply color.
+- **Tab UI** — Horizontal tabs at top (History | Skin). Active tab highlighted (bold, blue bottom border).
+- **Minimize** — Panel can minimize to "Swatches (N)" with expand button.
+- **Capacity** — Max 25 colors (5×5 grid) per palette.
+- **Display** — Swatches presented as a grid of colorful squares. Active palette's grid is visible; inactive hidden.
+
+### Color Picker Panel
+
+- **Design** — Saturation/brightness square (SV) + hue bar. Below: **5-swatch bar** showing color variations (±20, ±40 brightness from active). Active swatch has white border.
+- **5-swatch behavior** — Middle swatch active by default. When user picks from SV/hue, active swatch updates. Other swatches show deltas from active. User can click any swatch to make it active.
+- **Position** — Floating panel, bottom-right corner.
+- **Minimize** — Panel can minimize to show only the 5 swatches.
+- **Sync** — When a swatch or picker color is selected, color picker updates.
 
 ### Select More Colors
 
-- **"Add color" flow** — Button opens a color picker (native `<input type="color">` or library like Coloris).
+- **"Add color" flow** — Button opens the color picker panel.
 - **Behavior** — Selected color is added to the swatch and set as current. Deduplicate before adding.
 
-### Auto-Load from Skin
+### Eyedropper Tool
 
-When a skin is loaded, extract unique colors and add to the swatch:
+- **Access** — The eyedropper appears in the tools panel, in the same group as Brush, Eraser, and Fill (not in the color picker panel).
+- **Behavior** — When the eyedropper tool is active and the user left-clicks on the 2D blocky grid or 3D model, the system determines the pixel and color at that point. This works in both 2D and 3D.
+- **Tool exclusivity** — When the eyedropper tool is enabled, the Brush, Eraser, and Fill tools are not enabled. Likewise, when Brush, Eraser, or Fill is enabled, the eyedropper is not enabled.
+- **Color addition** — A color selected via eyedropper is prepended to the swatch list (pushing other swatches over). If the color already exists in the swatch list, it is removed from its previous position and prepended. The capacity limit applies; the oldest swatch may be dropped when at capacity.
+
+### Auto-Load from Skin (Skin Palette)
+
+When a skin is loaded via "Load skin", the **Skin palette** is updated:
 
 | Load type | Extraction scope |
 |-----------|------------------|
-| Full skin load | Entire 64×64 |
-| Partial load / preset | Only `SKIN_LAYER_BOUNDS` for affected layer(s) |
+| Full skin load | Entire working canvas (128×128) |
+| Partial load / preset | Only `SKIN_LAYER_BOUNDS` for affected layer(s) — future |
 
-**Deduplication:** Merge with existing; avoid duplicates (hex match, case-insensitive). Optional sort by frequency or hue.
+**Deduplication:** Unique hex colors only (transparent pixels skipped).
+
+**Variety:** When unique colors exceed palette capacity (25), **farthest-point sampling** selects a diverse subset: repeatedly pick the color farthest from all already-selected colors (Euclidean distance in RGB). This avoids clumping similar shades.
 
 ### References
 
+- [src/creator/swatches.ts](../src/creator/swatches.ts) — Multi-palette UI; subscribes to `SKIN_LOAD_CHANGE`.
+- [src/creator.ts](../src/creator.ts) — `extractColorsFromSkin`, farthest-point diversity; `loadSkinFromPath` publishes `SKIN_LOAD_CHANGE`.
 - [src/skinLayout.ts](../src/skinLayout.ts) — `SKIN_LAYER_BOUNDS` for region bounds.
 
 ---
@@ -419,6 +480,7 @@ The cursor changes based on the active tool when hovering over the 2D blocky gri
 | **Brush** | Block outline, 1 cell. Hotspot at center. |
 | **Eraser** | Same as Brush: box outline, 1 cell. |
 | **Fill** | Default cursor. |
+| **Eyedropper** | Eyedropper/crosshair cursor. |
 | **Navigate** | Default cursor. |
 
 ### Implementation
@@ -513,16 +575,16 @@ See [Hover Info Panel (2D and 3D)](#hover-info-panel-2d-and-3d) for the floating
 
 ```
 /creator (route or page)
-├── Creator panel (left sidebar)
+├── Creator panel (left sidebar, min 220px, max 380px)
 │   ├── Edit (Undo, Redo)
-│   ├── Color (swatch, hex, palette)
-│   ├── Swatch
-│   ├── Skin gallery
+│   ├── Skin gallery (Load skin)
 │   ├── 3D preview slot (Edit 2D only; 256px)
-│   └── Actions (Download, Save)
+│   └── Actions (Download hidden)
 ├── Creator view wrapper (right; main area)
-│   ├── Tools panel (floating, upper-left) — 2D/3D, Navigate, Brush, Eraser, Fill, Rulers, Grid, Template
+│   ├── Tools panel (floating, upper-left) — 2D/3D, Navigate, Brush, Eraser, Fill, Eyedropper (icons), Rulers, Template
 │   ├── Layers panel (floating, lower-right)
+│   ├── Color picker panel (floating, lower-right) — SV + hue, 5-swatch bar; minimize
+│   ├── Swatches panel (floating, lower-right) — History & Skin palettes (tabs); minimize
 │   ├── Hover info panel (lower-right)
 │   ├── Blocky 2D canvas (Edit 2D) or 3D view (Edit 3D)
 │   └── Rulers (2D only; when toggled)
@@ -610,7 +672,7 @@ The character creator merges with the app that displays the 3D viewer. Same app,
 
 ### Select / Delete / Color Picker
 
-- Marquee select; delete selection; eyedropper; swatch; hex input. See [Color Swatch Management System](#color-swatch-management-system).
+- Marquee select; delete selection; eyedropper (2D/3D pixel sampling, prepends to swatch, mutually exclusive with Brush/Eraser/Fill); swatch grid; hex input. See [Color Swatch Management System](#color-swatch-management-system).
 
 ---
 
@@ -628,16 +690,18 @@ The character creator merges with the app that displays the 3D viewer. Same app,
 | Feature | Description |
 |---------|-------------|
 | Blocky 2D editor | Sole 2D drawing method; 64×64 grid; no Canvas 2D drawing |
-| Tools panel | Floating upper-left; 2D/3D toggle; Navigate, Brush, Eraser, Fill; Rulers, Grid, Template (2D); Undo/Redo split width |
-| Layers panel | Floating lower-right; lock + visibility per layer; solo-layer (Alt+click eye); drag-to-toggle; row highlight on hover |
-| Left sidebar | Edit (Undo/Redo), Color, Swatch only |
+| Tools panel | Floating upper-left; 2D/3D toggle; Navigate, Brush, Eraser, Fill, Eyedropper (icon-only); Rulers, Template (2D); Undo/Redo; shortcuts (Tab, H, B, E, G, Ctrl/Cmd+Z) |
+| Layers panel | Floating lower-right; lock + visibility per layer; solo visibility (Alt+click eye) and solo lock (Alt+click lock); drag-to-toggle; row highlight on hover |
+| Left sidebar | Edit (Undo/Redo), Skin gallery; Download hidden (220–380px width) |
+| Right panels (top→bottom) | Color picker (minimize), Swatches (History/Skin tabs, minimize), Layers, Hover info |
 | Default tool | Navigate on load |
 | Brush size | Fixed at 1 cell (2×2 px) |
 | Rulers | HTML/CSS; labels 0–64; toggled from tools panel |
 | Cursor | Brush/Eraser: block outline; Fill/Navigate: default. Ghosting issue on Mac. |
 | Hover info panel | Lower-right; specific part + skin (x,y); respects hidden overlays; highlights layer row |
 | Paint on 3D | Raycast → UV → pixel; shared texture; left-drag paint, right-drag orbit |
-| Color swatch | Centralized; add color; auto-extract from skin load |
+| Color swatches | Multi-palette: History (editable) + Skin (from loaded skin, read-only); tab UI; eyedropper prepends to History; diversity sampling for Skin palette |
+| Color picker panel | Floating lower-right; SV + hue; 5-swatch bar (±20/±40 brightness); minimize |
 | Presets | Per-layer templates |
 | Randomize | One-click random presets |
 | Download / Save | PNG download; POST to API → `public/skins/custom/` |

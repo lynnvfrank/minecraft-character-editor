@@ -8,23 +8,3 @@ alwaysApply: false
 
 ## Spec
 See `docs/CHARACTER-CREATION-SCREEN-SPEC.md` and `docs/CREATOR-VIEWER-STATE-MANAGEMENT.md`.
-
-## Edit 2D vs 3D
-- **Default:** Edit 3D (paint on model)
-- **3D mode:** Left-drag = paint, right-drag = orbit
-- **2D mode:** Large canvas; 3D preview moves to creator panel (256px)
-- **OrbitControls:** Recreate when switching back to 3D (dispose + new instance)
-- **Camera reset:** When entering 2D preview, re-center camera (0, 1.5, 4)
-
-## Brush
-- Sizes: 1, 2, 4, 8 px (square block)
-- Default: 2 px
-- Custom box-outline cursor matching brush size
-
-## Undo
-- Command stack; point-based for brush strokes
-- Load skin = push load command onto undo stack
-
-## Layer Mask
-- Drawing restricted to selected layer regions only
-- Non-selected regions: dimmed or read-only

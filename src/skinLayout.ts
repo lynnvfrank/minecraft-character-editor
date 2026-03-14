@@ -6,6 +6,23 @@
 export type Bounds = { x: number; y: number; w: number; h: number };
 
 /**
+ * Canonical layer keys for visibility, lock, and UI. Order: hat/head, jacket/body, sleeves/arms, pants/legs.
+ * Single source of truth — import this instead of defining locally.
+ */
+export const LAYER_KEYS = ['hat', 'head', 'jacket', 'body', 'sleeves', 'arms', 'pants', 'legs'] as const;
+export type LayerKey = (typeof LAYER_KEYS)[number];
+
+export function isLayerKey(s: string | undefined): s is LayerKey {
+  return s != null && (LAYER_KEYS as readonly string[]).includes(s);
+}
+
+/**
+ * Layer keys in base-before-overlay order for texture/UV operations.
+ * head→hat, body→jacket, arms→sleeves, legs→pants. Use when iterating for visibility texture.
+ */
+export const TEXTURE_LAYER_KEYS = ['head', 'hat', 'body', 'jacket', 'sleeves', 'arms', 'legs', 'pants'] as const;
+
+/**
  * Pixel bounds for each layer. Face positions in the spec extend beyond the high-level
  * "Bounds" — e.g. BACK BODY at X:32, BACK JACKET at X:32, and the right strip X:56-64.
  */
@@ -34,7 +51,8 @@ export const SKIN_LAYER_BOUNDS: Record<string, Bounds[]> = {
   ],
 };
 
-export const SKIN_SIZE = 64;
+/** Re-export for backward compatibility. Prefer importing from skinCoordinates. */
+export { SKIN_SIZE } from './skinCoordinates';
 
 /**
  * Dead zones / non-skin zones from reference diagrams (minecraft-skin-layout-specification.md).
@@ -53,6 +71,44 @@ export function isInDeadZone(normX: number, normY: number): boolean {
     if (normX >= z.x && normX < z.x + z.w && normY >= z.y && normY < z.y + z.h) return true;
   }
   return false;
+}
+
+/**
+ * Part display name (e.g. "Right sleeve") → layer key. Used for hover info and texture position events.
+ */
+export const PART_TO_LAYER: Record<string, LayerKey> = {
+  Head: 'head',
+  Hat: 'hat',
+  Body: 'body',
+  Jacket: 'jacket',
+  'Right leg': 'legs',
+  'Left leg': 'legs',
+  'Right pants': 'pants',
+  'Left pants': 'pants',
+  'Right arm': 'arms',
+  'Left arm': 'arms',
+  'Right sleeve': 'sleeves',
+  'Left sleeve': 'sleeves',
+};
+
+/** UV part keys used by MINECRAFT_SKIN_UVS in main.ts. */
+export type UVPartKey = 'head' | 'hat' | 'body' | 'jacket' | 'armR' | 'armL' | 'sleeveR' | 'sleeveL' | 'legR' | 'legL' | 'pantsR' | 'pantsL';
+
+/** Layer key → UV part keys for texture/mesh mapping. */
+export const LAYER_TO_UV_PARTS: Partial<Record<LayerKey, UVPartKey[]>> = {
+  head: ['head'],
+  hat: ['hat'],
+  body: ['body'],
+  jacket: ['jacket'],
+  arms: ['armR', 'armL'],
+  sleeves: ['sleeveR', 'sleeveL'],
+  legs: ['legR', 'legL'],
+  pants: ['pantsR', 'pantsL'],
+};
+
+/** Map part display name to layer key. Returns null if unknown. */
+export function partToLayer(part: string): LayerKey | null {
+  return (PART_TO_LAYER[part] as LayerKey) ?? null;
 }
 
 /**

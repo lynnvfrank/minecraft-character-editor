@@ -6,20 +6,7 @@ import {
   loadSkinFromPath,
   getEditMode3D,
   getCreatorWorkSize,
-  getActiveTool,
-  getBrushSize,
-  getBrushCursorStyleFor3D,
   getLayer3DVisible,
-  getLayer3DLocked,
-  getLayerAtCoords,
-  uvToWorkingCoords,
-  paintStartFrom3D,
-  paintMoveFrom3D,
-  paintEndFrom3D,
-  sampleColorAt,
-  applySampledColor,
-  updateHoverInfo,
-  getPartDisplayNameAtCoords
 } from './creator';
 import { preprocessSkinTexture } from './skinPreprocess';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -31,19 +18,23 @@ import { createFakeChatUI } from './fakeChatUI';
 import { setupTestControls } from './setupTestControls';
 import { logger } from './logger';
 import { setFacingLogContextProvider } from './debugFacing';
-import { SKIN_LAYER_BOUNDS } from './skinLayout';
-
-type SkinEntry = {
-  path: string;
-  label: string;
-  preview?: string;
-};
-
-type AnimationEntry = {
-  path: string;
-  key: string;
-  label: string;
-};
+import { SKIN_LAYER_BOUNDS, LAYER_KEYS, TEXTURE_LAYER_KEYS } from './skinLayout';
+import type { SkinEntry, AnimationEntry } from './types/catalog';
+import {
+  initScene as initViewerScene,
+  applyShadowToModel,
+  logModelUVInfo,
+  logMeshNames,
+  createDebugTexture,
+  applySkinToModel,
+  applyCreatorLayerVisibility,
+  setupCreator3DPaint,
+  updateOrbitControlsForEditMode,
+  recreateOrbitControls,
+  resetCameraFor2DPreview,
+  type TexturePreset,
+  type AlphaMode
+} from './viewer';
 
 const FALLBACK_SKINS: SkinEntry[] = [
   { path: '/skins/RunningboyRig.png', label: 'Default' }
@@ -68,9 +59,6 @@ type CharacterState = {
   currentSkin: string;
 };
 
-type TexturePreset = 'clamped' | 'clamped-flip' | 'repeat' | 'repeat-flip';
-type AlphaMode = 'none' | 'alphaTest' | 'transparent' | 'cutout';
-
 function buildCharacterConfig(skinPath: string, animations: AnimationEntry[]) {
   return {
     id: 'runningboy',
@@ -87,16 +75,6 @@ function buildCharacterConfig(skinPath: string, animations: AnimationEntry[]) {
 type CharacterConfig = ReturnType<typeof buildCharacterConfig>;
 
 const USE_DEBUG_TEXTURE = false;
-
-/**
- * Overlay scale workaround: scale the 2nd_Layer mesh (jacket, sleeves, pants)
- * slightly outward so it renders above the base. Toggle off to use model geometry as-is.
- * Steve_Hat is never touched — it already has correct offset from the model.
- */
-const OVERLAY_SCALE = {
-  enabled: true,
-  factor: 1.03,
-};
 
 /** When true, log mesh names and UV bounds to console on model load */
 const LOG_MODEL_INFO = false;
@@ -235,356 +213,6 @@ function resolveSkinByName(name: string): string | undefined {
   })?.path;
 }
 
-function initScene() {
-  if (!container) throw new Error('Missing #three-canvas-container element in DOM.');
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x050710);
-
-  const aspect = container.clientWidth / container.clientHeight || 1;
-  const fov = parseFloat(params.get('fov') || '45');
-  const cameraZ = parseFloat(params.get('cameraZ') || '3');
-  camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 100);
-  camera.position.set(0, 1.5, cameraZ);
-
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  container.appendChild(renderer.domElement);
-
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.target.set(0, 1, 0);
-
-  addLights();
-  addGround();
-}
-
-function addLights() {
-  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x202030, 1.0);
-  hemiLight.position.set(0, 4, 0);
-  scene.add(hemiLight);
-
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  dirLight.position.set(3, 6, 4);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(2048, 2048);
-  dirLight.shadow.camera.near = 1;
-  dirLight.shadow.camera.far = 20;
-  dirLight.shadow.camera.left = -8;
-  dirLight.shadow.camera.right = 8;
-  dirLight.shadow.camera.top = 8;
-  dirLight.shadow.camera.bottom = -8;
-  scene.add(dirLight);
-}
-
-function addGround() {
-  const geo = new THREE.CircleGeometry(8, 64);
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x1b1f3b,
-    metalness: 0.0,
-    roughness: 0.8
-  });
-  const ground = new THREE.Mesh(geo, mat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-}
-
-function applyShadowToModel(model: THREE.Group) {
-  model.traverse((obj) => {
-    if ((obj as THREE.Mesh).isMesh) {
-      const mesh = obj as THREE.Mesh;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-    }
-  });
-}
-
-function logModelUVInfo(model: THREE.Group, label: string) {
-  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-  const meshes: { name: string; uRange: [number, number]; vRange: [number, number] }[] = [];
-  model.traverse((obj) => {
-    if ((obj as THREE.Mesh).isMesh) {
-      const mesh = obj as THREE.Mesh;
-      const geom = mesh.geometry;
-      const uvAttr = geom.getAttribute('uv');
-      if (uvAttr) {
-        let mu = Infinity, mU = -Infinity, mV = Infinity, MV = -Infinity;
-        for (let i = 0; i < uvAttr.count; i++) {
-          const u = uvAttr.getX(i);
-          const v = uvAttr.getY(i);
-          mu = Math.min(mu, u); mU = Math.max(mU, u);
-          mV = Math.min(mV, v); MV = Math.max(MV, v);
-        }
-        minU = Math.min(minU, mu); maxU = Math.max(maxU, mU);
-        minV = Math.min(minV, mV); maxV = Math.max(maxV, MV);
-        meshes.push({ name: mesh.name || 'mesh', uRange: [mu, mU], vRange: [mV, MV] });
-      }
-    }
-  });
-  console.info(`[${label}] UV bounds: U [${minU.toFixed(4)}, ${maxU.toFixed(4)}]  V [${minV.toFixed(4)}, ${maxV.toFixed(4)}]`);
-  meshes.forEach((m) => {
-    console.info(`  ${m.name}: U [${m.uRange[0].toFixed(3)}, ${m.uRange[1].toFixed(3)}]  V [${m.vRange[0].toFixed(3)}, ${m.vRange[1].toFixed(3)}]`);
-  });
-}
-
-function logMeshNames(model: THREE.Group, label: string) {
-  const names: string[] = [];
-  model.traverse((obj) => {
-    if ((obj as THREE.Mesh).isMesh) {
-      names.push((obj as THREE.Mesh).name || '(unnamed)');
-    }
-  });
-  console.info(`[${label}] Mesh names:`, names);
-}
-
-function createDebugTexture(width: number, height: number): THREE.CanvasTexture {
-  const size = Math.max(width, height, 64);
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
-  const grid = 8;
-  for (let y = 0; y < grid; y++) {
-    for (let x = 0; x < grid; x++) {
-      ctx.fillStyle = (x + y) % 2 === 0 ? '#ff0066' : '#00ccff';
-      ctx.fillRect((x * size) / grid, (y * size) / grid, size / grid, size / grid);
-    }
-  }
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0, 0, size, size);
-  ctx.fillStyle = '#fff';
-  ctx.font = '12px sans-serif';
-  ctx.fillText(`${size}x${size}`, 4, 14);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.flipY = false;
-  tex.needsUpdate = true;
-  return tex;
-}
-
-/**
- * Minecraft 64x64 skin layout UVs (from minecraft-skin-layout-specification.md).
- * Normalized 0-1: U = x/64, V = 1 - y/64 (OpenGL convention, top-left image origin).
- * Face order: front, back, top, bottom, right, left — 4 verts each (bl, br, tr, tl).
- */
-const MINECRAFT_SKIN_UVS: Record<string, number[]> = {
-  head: [
-    0.125, 0.75, 0.25, 0.75, 0.25, 0.875, 0.125, 0.875,
-    0.375, 0.75, 0.5, 0.75, 0.5, 0.875, 0.375, 0.875,
-    0.125, 0.875, 0.25, 0.875, 0.25, 1, 0.125, 1,
-    0.25, 0.875, 0.375, 0.875, 0.375, 1, 0.25, 1,
-    0, 0.75, 0.125, 0.75, 0.125, 0.875, 0, 0.875,
-    0.25, 0.75, 0.375, 0.75, 0.375, 0.875, 0.25, 0.875,
-  ],
-  hat: [
-    0.625, 0.75, 0.75, 0.75, 0.75, 0.875, 0.625, 0.875,
-    0.875, 0.75, 1, 0.75, 1, 0.875, 0.875, 0.875,
-    0.625, 0.875, 0.75, 0.875, 0.75, 1, 0.625, 1,
-    0.75, 0.875, 0.875, 0.875, 0.875, 1, 0.75, 1,
-    0.5, 0.75, 0.625, 0.75, 0.625, 0.875, 0.5, 0.875,
-    0.75, 0.75, 0.875, 0.75, 0.875, 0.875, 0.75, 0.875,
-  ],
-  body: [
-    0.3125, 0.5, 0.4375, 0.5, 0.4375, 0.6875, 0.3125, 0.6875,
-    0.5, 0.5, 0.625, 0.5, 0.625, 0.6875, 0.5, 0.6875,
-    0.3125, 0.6875, 0.4375, 0.6875, 0.4375, 0.75, 0.3125, 0.75,
-    0.4375, 0.6875, 0.5625, 0.6875, 0.5625, 0.75, 0.4375, 0.75,
-    0.25, 0.5, 0.3125, 0.5, 0.3125, 0.6875, 0.25, 0.6875,
-    0.4375, 0.5, 0.5, 0.5, 0.5, 0.6875, 0.4375, 0.6875,
-  ],
-  jacket: [
-    0.3125, 0.25, 0.4375, 0.25, 0.4375, 0.4375, 0.3125, 0.4375,
-    0.5, 0.25, 0.625, 0.25, 0.625, 0.4375, 0.5, 0.4375,
-    0.3125, 0.4375, 0.4375, 0.4375, 0.4375, 0.5, 0.3125, 0.5,
-    0.4375, 0.4375, 0.5625, 0.4375, 0.5625, 0.5, 0.4375, 0.5,
-    0.25, 0.25, 0.3125, 0.25, 0.3125, 0.4375, 0.25, 0.4375,
-    0.4375, 0.25, 0.5, 0.25, 0.5, 0.4375, 0.4375, 0.4375,
-  ],
-  armR: [
-    0.6875, 0.5, 0.75, 0.5, 0.75, 0.6875, 0.6875, 0.6875,
-    0.8125, 0.5, 0.875, 0.5, 0.875, 0.6875, 0.8125, 0.6875,
-    0.6875, 0.6875, 0.75, 0.6875, 0.75, 0.75, 0.6875, 0.75,
-    0.75, 0.6875, 0.8125, 0.6875, 0.8125, 0.75, 0.75, 0.75,
-    0.625, 0.5, 0.6875, 0.5, 0.6875, 0.6875, 0.625, 0.6875,
-    0.75, 0.5, 0.8125, 0.5, 0.8125, 0.6875, 0.75, 0.6875,
-  ],
-  armL: [
-    0.5625, 0, 0.625, 0, 0.625, 0.1875, 0.5625, 0.1875,
-    0.6875, 0, 0.75, 0, 0.75, 0.1875, 0.6875, 0.1875,
-    0.5625, 0.1875, 0.625, 0.1875, 0.625, 0.25, 0.5625, 0.25,
-    0.625, 0.1875, 0.6875, 0.1875, 0.6875, 0.25, 0.625, 0.25,
-    0.5, 0, 0.5625, 0, 0.5625, 0.1875, 0.5, 0.1875,
-    0.625, 0, 0.6875, 0, 0.6875, 0.1875, 0.625, 0.1875,
-  ],
-  legR: [
-    0.0625, 0.5, 0.125, 0.5, 0.125, 0.6875, 0.0625, 0.6875,
-    0.1875, 0.5, 0.25, 0.5, 0.25, 0.6875, 0.1875, 0.6875,
-    0.0625, 0.6875, 0.125, 0.6875, 0.125, 0.75, 0.0625, 0.75,
-    0.125, 0.6875, 0.1875, 0.6875, 0.1875, 0.75, 0.125, 0.75,
-    0, 0.5, 0.0625, 0.5, 0.0625, 0.6875, 0, 0.6875,
-    0.125, 0.5, 0.1875, 0.5, 0.1875, 0.6875, 0.125, 0.6875,
-  ],
-  legL: [
-    0.3125, 0, 0.375, 0, 0.375, 0.1875, 0.3125, 0.1875,
-    0.4375, 0, 0.5, 0, 0.5, 0.1875, 0.4375, 0.1875,
-    0.3125, 0.1875, 0.375, 0.1875, 0.375, 0.25, 0.3125, 0.25,
-    0.375, 0.1875, 0.4375, 0.1875, 0.4375, 0.25, 0.375, 0.25,
-    0.25, 0, 0.3125, 0, 0.3125, 0.1875, 0.25, 0.1875,
-    0.375, 0, 0.4375, 0, 0.4375, 0.1875, 0.375, 0.1875,
-  ],
-  sleeveR: [
-    0.6875, 0.3125, 0.75, 0.3125, 0.75, 0.5, 0.6875, 0.5,
-    0.8125, 0.3125, 0.875, 0.3125, 0.875, 0.5, 0.8125, 0.5,
-    0.6875, 0.5, 0.75, 0.5, 0.75, 0.5625, 0.6875, 0.5625,
-    0.75, 0.5, 0.8125, 0.5, 0.8125, 0.5625, 0.75, 0.5625,
-    0.625, 0.3125, 0.6875, 0.3125, 0.6875, 0.5, 0.625, 0.5,
-    0.75, 0.3125, 0.8125, 0.3125, 0.8125, 0.5, 0.75, 0.5,
-  ],
-  sleeveL: [
-    0.8125, 0, 0.875, 0, 0.875, 0.1875, 0.8125, 0.1875,
-    0.9375, 0, 1, 0, 1, 0.1875, 0.9375, 0.1875,
-    0.8125, 0.1875, 0.875, 0.1875, 0.875, 0.25, 0.8125, 0.25,
-    0.875, 0.1875, 0.9375, 0.1875, 0.9375, 0.25, 0.875, 0.25,
-    0.75, 0, 0.8125, 0, 0.8125, 0.1875, 0.75, 0.1875,
-    0.875, 0, 0.9375, 0, 0.9375, 0.1875, 0.875, 0.1875,
-  ],
-  pantsR: [
-    0.0625, 0.3125, 0.125, 0.3125, 0.125, 0.5, 0.0625, 0.5,
-    0.1875, 0.3125, 0.25, 0.3125, 0.25, 0.5, 0.1875, 0.5,
-    0.0625, 0.5, 0.125, 0.5, 0.125, 0.5625, 0.0625, 0.5625,
-    0.125, 0.5, 0.1875, 0.5, 0.1875, 0.5625, 0.125, 0.5625,
-    0, 0.3125, 0.0625, 0.3125, 0.0625, 0.5, 0, 0.5,
-    0.125, 0.3125, 0.1875, 0.3125, 0.1875, 0.5, 0.125, 0.5,
-  ],
-  pantsL: [
-    0.0625, 0, 0.125, 0, 0.125, 0.1875, 0.0625, 0.1875,
-    0.1875, 0, 0.25, 0, 0.25, 0.1875, 0.1875, 0.1875,
-    0.0625, 0.1875, 0.125, 0.1875, 0.125, 0.25, 0.0625, 0.25,
-    0.125, 0.1875, 0.1875, 0.1875, 0.1875, 0.25, 0.125, 0.25,
-    0, 0, 0.0625, 0, 0.0625, 0.1875, 0, 0.1875,
-    0.125, 0, 0.1875, 0, 0.1875, 0.1875, 0.125, 0.1875,
-  ],
-};
-
-function _getMinecraftPartFromMeshName(name: string): keyof typeof MINECRAFT_SKIN_UVS | null {
-  const n = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (n.includes('head') && !n.includes('hat') && !n.includes('layer') && !n.includes('access')) return 'head';
-  if (n.includes('hat') || (n.includes('head') && (n.includes('layer') || n.includes('access')))) return 'hat';
-  if (n.includes('body') && !n.includes('layer') && !n.includes('jacket')) return 'body';
-  if (n.includes('jacket') || (n.includes('body') && n.includes('layer'))) return 'jacket';
-  if (n.includes('sleeve') && n.includes('r')) return 'sleeveR';
-  if (n.includes('sleeve') && n.includes('l')) return 'sleeveL';
-  if (n.includes('pant') && n.includes('r')) return 'pantsR';
-  if (n.includes('pant') && n.includes('l')) return 'pantsL';
-  if (n.includes('arm') && !n.includes('layer') && !n.includes('sleeve')) {
-    if (n.includes('left') || (n.includes('l') && !n.includes('right'))) return 'armL';
-    return 'armR';
-  }
-  if (n.includes('leg') && !n.includes('layer') && !n.includes('pant')) {
-    if (n.includes('left') || (n.includes('l') && !n.includes('right'))) return 'legL';
-    return 'legR';
-  }
-  return null;
-}
-
-/** Addendum layer keys for visibility. */
-const CREATOR_LAYER_KEYS = ['hat', 'head', 'jacket', 'body', 'sleeves', 'arms', 'pants', 'legs'] as const;
-
-function applyCreatorLayerVisibility(model: THREE.Group, _layerVisible: Record<string, boolean>) {
-  // Visibility is handled by texture-region transparency; all meshes stay visible
-  model.traverse((obj) => {
-    if ((obj as THREE.Mesh).isMesh) {
-      (obj as THREE.Mesh).visible = true;
-    }
-  });
-}
-
-function configureTexture(texture: THREE.Texture, preset: TexturePreset) {
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
-  texture.generateMipmaps = false;
-
-  switch (preset) {
-    case 'clamped':
-      texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
-      texture.flipY = false;
-      break;
-    case 'clamped-flip':
-      texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
-      texture.flipY = true;
-      break;
-    case 'repeat':
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.flipY = false;
-      break;
-    case 'repeat-flip':
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.flipY = true;
-      break;
-  }
-}
-
-function applySkinToModel(
-  model: THREE.Group,
-  texture: THREE.Texture,
-  preset: TexturePreset = 'clamped',
-  alphaMode: AlphaMode = 'none',
-  skinPath?: string
-) {
-  configureTexture(texture, preset);
-
-  const OVERLAY_PARTS = new Set(['hat', 'jacket', 'sleeveR', 'sleeveL', 'pantsR', 'pantsL']);
-
-  let appliedCount = 0;
-  model.traverse((obj) => {
-    if ((obj as THREE.Mesh).isMesh) {
-      const mesh = obj as THREE.Mesh;
-      const meshName = mesh.name || '';
-      const part = _getMinecraftPartFromMeshName(meshName);
-      const is2ndLayer = meshName.toLowerCase().includes('2nd') && meshName.toLowerCase().includes('layer');
-
-      mesh.renderOrder = (part && OVERLAY_PARTS.has(part)) || is2ndLayer ? 1 : 0;
-
-      if (is2ndLayer && OVERLAY_SCALE.enabled) {
-        mesh.scale.setScalar(OVERLAY_SCALE.factor);
-      }
-
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      mats.forEach((m) => {
-        if (!m) return;
-        const mat = m as THREE.MeshPhongMaterial;
-        mat.map = texture;
-
-        switch (alphaMode) {
-          case 'alphaTest':
-            mat.alphaTest = 0.5;
-            mat.transparent = false;
-            break;
-          case 'transparent':
-            mat.transparent = true;
-            mat.alphaTest = 0.1;
-            mat.depthWrite = true;
-            mat.side = THREE.DoubleSide;
-            break;
-          case 'cutout':
-            mat.alphaTest = 0.01;
-            mat.transparent = false;
-            mat.side = THREE.DoubleSide;
-            break;
-        }
-
-        mat.needsUpdate = true;
-        appliedCount++;
-      });
-    }
-  });
-  logger.info('messaging', 'Skin change', { path: skinPath, appliedCount, alphaMode });
-}
-
 function fadeToAction(
   char: CharacterStateLike,
   next: THREE.AnimationAction,
@@ -631,7 +259,7 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
         }
         if (texture) {
           const texToUse = USE_DEBUG_TEXTURE ? createDebugTexture(64, 64) : texture;
-          applySkinToModel(model, texToUse, config.texturePreset, config.alphaMode, config.skin);
+          applySkinToModel(model, texToUse, config.texturePreset, config.alphaMode, config.skin, config.model);
         }
         applyShadowToModel(model);
 
@@ -936,9 +564,6 @@ let creatorPreviewTexture: THREE.CanvasTexture | null = null;
 let creatorOverlayCanvas: HTMLCanvasElement | null = null;
 let creatorOverlayTexture: THREE.CanvasTexture | null = null;
 
-/** All layers using texture-region transparency (head, hat, body, jacket, sleeves, arms, legs, pants) */
-const TEXTURE_LAYER_KEYS = ['head', 'hat', 'body', 'jacket', 'sleeves', 'arms', 'legs', 'pants'] as const;
-
 /** Build visibility texture: copy skin, zero alpha for hidden layer regions. Apply to all meshes. */
 function buildVisibilityTexture(
   skinCanvas: HTMLCanvasElement,
@@ -993,165 +618,6 @@ function buildVisibilityTexture(
   return creatorOverlayTexture;
 }
 
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-let is3DPainting = false;
-
-function getCharacterMeshes(): THREE.Object3D[] {
-  const char = characters['runningboy'];
-  if (!char) return [];
-  const meshes: THREE.Object3D[] = [];
-  char.model.traverse((obj) => {
-    if ((obj as THREE.Mesh).isMesh) meshes.push(obj);
-  });
-  return meshes;
-}
-
-function raycastToSkinUV(clientX: number, clientY: number): { u: number; v: number } | null {
-  const canvas = renderer.domElement;
-  const rect = canvas.getBoundingClientRect();
-  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(mouse, camera);
-  const meshes = getCharacterMeshes();
-  const intersects = raycaster.intersectObjects(meshes, false);
-  if (intersects.length === 0) return null;
-  const hit = intersects[0];
-  const uv = (hit as THREE.Intersection<THREE.Object3D> & { uv?: THREE.Vector2 }).uv;
-  if (!uv) return null;
-  return { u: uv.x, v: uv.y };
-}
-
-/** Raycast and return UV for first hit that maps to a paintable layer. Passes through hidden overlays (hat, jacket, sleeves, pants) to hit base layers (head, body, arms, legs). */
-function raycastToPaintableUV(clientX: number, clientY: number): { u: number; v: number } | null {
-  const canvas = renderer.domElement;
-  const rect = canvas.getBoundingClientRect();
-  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(mouse, camera);
-  const meshes = getCharacterMeshes();
-  const intersects = raycaster.intersectObjects(meshes, false);
-  const layerVisible = getLayer3DVisible();
-  const layerLocked = getLayer3DLocked();
-  for (const hit of intersects) {
-    const uv = (hit as THREE.Intersection<THREE.Object3D> & { uv?: THREE.Vector2 }).uv;
-    if (!uv) continue;
-    const { x, y } = uvToWorkingCoords(uv.x, uv.y);
-    const layer = getLayerAtCoords(x, y);
-    if (!layer) continue;
-    if (layerVisible[layer] === false) continue;
-    if (layerLocked[layer] === true) continue;
-    return { u: uv.x, v: uv.y };
-  }
-  return null;
-}
-
-function updateCreator3DCanvasCursor() {
-  const canvas = renderer.domElement;
-  if (getRoute() !== 'creator' || !getEditMode3D()) {
-    canvas.style.cursor = '';
-    return;
-  }
-  const tool = getActiveTool();
-  if (tool === 'brush' || tool === 'eraser') {
-    canvas.style.cursor = getBrushCursorStyleFor3D(getBrushSize());
-  } else {
-    canvas.style.cursor = '';
-  }
-}
-
-function updateOrbitControlsForEditMode() {
-  if (getRoute() !== 'creator') return;
-  if (getEditMode3D()) {
-    // Navigate: full orbit (left + right drag). Brush/Eraser/Fill: left = paint, right = orbit
-    const isNavigate = getActiveTool() === 'navigate';
-    controls.mouseButtons = {
-      LEFT: isNavigate ? THREE.MOUSE.ROTATE : null,
-      MIDDLE: THREE.MOUSE.DOLLY,
-      RIGHT: THREE.MOUSE.ROTATE
-    };
-  } else {
-    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-  }
-}
-
-function setupCreator3DPaint() {
-  const canvas = renderer.domElement;
-
-  function handlePointerDown(e: MouseEvent) {
-    if (getRoute() !== 'creator' || !getEditMode3D()) return;
-    if (e.button !== 0) return; // left only
-    if (getActiveTool() === 'navigate') return; // navigate = no paint
-    const uv = raycastToPaintableUV(e.clientX, e.clientY);
-    if (!uv) return;
-    const { x, y } = uvToWorkingCoords(uv.u, uv.v);
-    if (e.altKey) {
-      const hex = sampleColorAt(x, y);
-      if (hex) applySampledColor(hex);
-      return;
-    }
-    paintStartFrom3D(x, y);
-    is3DPainting = true;
-    e.preventDefault();
-  }
-
-  function handlePointerMove(e: MouseEvent) {
-    if (getRoute() !== 'creator' || !getEditMode3D()) return;
-    const uv = raycastToSkinUV(e.clientX, e.clientY);
-    if (uv) {
-      const { x, y } = uvToWorkingCoords(uv.u, uv.v);
-      const part = getPartDisplayNameAtCoords(x, y);
-      const skinX = Math.floor(x / 2);
-      const skinY = Math.floor(y / 2);
-      updateHoverInfo(part, skinX, skinY);
-    } else {
-      updateHoverInfo(null, -1, -1);
-    }
-    if (!is3DPainting) return;
-    const paintUv = raycastToPaintableUV(e.clientX, e.clientY);
-    if (!paintUv) return;
-    const { x, y } = uvToWorkingCoords(paintUv.u, paintUv.v);
-    paintMoveFrom3D(x, y);
-    e.preventDefault();
-  }
-
-  function handle3DCanvasLeave() {
-    if (getRoute() === 'creator' && getEditMode3D()) {
-      updateHoverInfo(null, -1, -1);
-    }
-  }
-
-  function handlePointerUp(e: MouseEvent) {
-    if (e.button !== 0) return;
-    if (is3DPainting) {
-      paintEndFrom3D();
-      is3DPainting = false;
-      e.preventDefault();
-    }
-  }
-
-  canvas.addEventListener('mousedown', handlePointerDown);
-  canvas.addEventListener('mousemove', handlePointerMove);
-  canvas.addEventListener('mouseup', handlePointerUp);
-  canvas.addEventListener('mouseleave', (e) => {
-    handle3DCanvasLeave();
-    handlePointerUp(e);
-  });
-
-  document.addEventListener('creator-edit-mode-change', () => {
-    updateOrbitControlsForEditMode();
-    updateCreator3DViewPlacement();
-    updateCreator3DCanvasCursor();
-  });
-  document.addEventListener('creator-tools-3d-change', () => {
-    updateOrbitControlsForEditMode();
-    updateCreator3DCanvasCursor();
-  });
-  updateOrbitControlsForEditMode();
-  updateCreator3DViewPlacement();
-  updateCreator3DCanvasCursor();
-}
-
 function updateCreator3DViewPlacement() {
   if (getRoute() !== 'creator') return;
   const app = document.getElementById('app');
@@ -1162,31 +628,17 @@ function updateCreator3DViewPlacement() {
     if (app.parentElement !== wrapper) {
       wrapper.appendChild(app);
       onWindowResize();
-      recreateOrbitControls();
+      controls.dispose();
+      controls = recreateOrbitControls(camera, renderer);
+      updateOrbitControlsForEditMode(controls, getRoute);
     }
   } else {
     if (app.parentElement !== slot) {
       slot.appendChild(app);
-      resetCameraFor2DPreview();
+      resetCameraFor2DPreview(camera, controls);
     }
     onWindowResize();
   }
-}
-
-/** Recreate OrbitControls after DOM move so event handling works correctly */
-function recreateOrbitControls() {
-  controls.dispose();
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.target.set(0, 1, 0);
-  updateOrbitControlsForEditMode();
-}
-
-/** Re-center and zoom out camera so the full character fits in the small 2D-mode preview */
-function resetCameraFor2DPreview() {
-  camera.position.set(0, 1.5, 4);
-  controls.target.set(0, 1, 0);
-  controls.update();
 }
 
 function updateCreatorPreviewTexture() {
@@ -1219,7 +671,7 @@ function animate() {
   } else {
     const char = characters['runningboy'];
     if (char) {
-      const allVisible = Object.fromEntries(CREATOR_LAYER_KEYS.map((k) => [k, true]));
+      const allVisible = Object.fromEntries(LAYER_KEYS.map((k) => [k, true]));
       applyCreatorLayerVisibility(char.model, allVisible);
     }
   }
@@ -1318,7 +770,12 @@ function logStepFrame(delta: number) {
 
 async function main() {
   logger.info('general', 'App started');
-  initScene();
+  if (!container) throw new Error('Missing #three-canvas-container element in DOM.');
+  const sceneContext = initViewerScene(container, params);
+  scene = sceneContext.scene;
+  camera = sceneContext.camera;
+  renderer = sceneContext.renderer;
+  controls = sceneContext.controls;
 
   let skins: SkinEntry[];
   try {
@@ -1405,7 +862,16 @@ async function main() {
     await loadSkinFromPath(initialSkin.path);
   }
 
-  setupCreator3DPaint();
+  setupCreator3DPaint({
+    getControls: () => controls,
+    setControls: (c) => { controls = c; },
+    camera,
+    renderer,
+    getCharacterModel: () => characters['runningboy']?.model ?? null,
+    getRoute,
+    onWindowResize,
+    onUpdateViewPlacement: updateCreator3DViewPlacement
+  });
 
   window.addEventListener('resize', onWindowResize);
   animate();

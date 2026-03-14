@@ -167,7 +167,7 @@ export function setupTestControls(deps: SetupTestControlsDeps): void {
   speedInput.value = '1';
   speedInput.min = '0.1';
   speedInput.step = '0.1';
-  speedInput.style.width = '4em';
+  speedInput.className = 'test-control-input-speed';
 
   addButton('Walk to [x,y,z]', () => {
     const x = parseFloat(xInput.value) || 0;

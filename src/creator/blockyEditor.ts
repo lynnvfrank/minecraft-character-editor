@@ -1,0 +1,368 @@
+/**
+ * Blocky 2D editor: div-based pixel grid, rulers, template overlay.
+ * Built because canvas pixelation was unreliable; divs give crisp 1:1 pixels.
+ */
+
+import { SKIN_SIZE, SKIN_LAYER_BOUNDS, SKIN_DEAD_ZONES } from '../skinLayout';
+import { WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skinCoordinates';
+import { rgbToHex } from '../types/color';
+import * as brush from './brush';
+import type { CreatorState } from './creatorState';
+
+const ZOOM = 4;
+const DISPLAY_SIZE = WORK_SIZE * ZOOM;
+const RULER_SCALE = DISPLAY_SIZE / WORK_SIZE;
+const BLOCKY_GRID_SIZE = 512;
+
+export interface BlockyEditorContext {
+  state: CreatorState;
+  getSkinCanvas: () => HTMLCanvasElement;
+  getOverlayCanvas: () => HTMLCanvasElement | null;
+  updateHoverInfo: (part: string | null, skinX: number, skinY: number) => void;
+  getPartDisplayNameAtCoords: (workingX: number, workingY: number) => string | null;
+  applyColorToUI: (hex: string) => void;
+  sampleColorAtWithAlpha: (workingX: number, workingY: number) => { hex: string; alpha: number } | null;
+  eyedropperAlphaThreshold: number;
+  pushUndoStroke: (pixels: { x: number; y: number; r: number; g: number; b: number; a: number }[], isEraser: boolean, newColor: string) => void;
+  pushUndoFill: (pixels: { x: number; y: number; r: number; g: number; b: number; a: number }[], fillColor: string) => void;
+  updateUndoRedoButtons: () => void;
+  undoLimit: number;
+}
+
+function canPaintAt2D(ctx: BlockyEditorContext, workingX: number, workingY: number): boolean {
+  if (!ctx.state.restrictToLayers) return true;
+  if (ctx.state.selectedLayers.size === 0) return true;
+  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
+  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
+  for (const layer of ctx.state.selectedLayers) {
+    const bounds = SKIN_LAYER_BOUNDS[layer];
+    if (!bounds) continue;
+    for (const b of bounds) {
+      if (normX >= b.x && normX < b.x + b.w && normY >= b.y && normY < b.y + b.h) {
+        return ctx.state.layer3DLocked[layer] !== true;
+      }
+    }
+  }
+  return false;
+}
+
+function getLayerAtCoords(ctx: BlockyEditorContext, workingX: number, workingY: number): string | null {
+  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
+  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
+  for (const layer of Object.keys(SKIN_LAYER_BOUNDS)) {
+    const bounds = SKIN_LAYER_BOUNDS[layer];
+    if (!bounds) continue;
+    for (const b of bounds) {
+      if (normX >= b.x && normX < b.x + b.w && normY >= b.y && normY < b.y + b.h) return layer;
+    }
+  }
+  return null;
+}
+
+function isInSelectedLayer(ctx: BlockyEditorContext, workingX: number, workingY: number): boolean {
+  if (!ctx.state.restrictToLayers) return true;
+  if (ctx.state.selectedLayers.size === 0) return true;
+  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
+  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
+  const pointInBounds = (x: number, y: number, b: { x: number; y: number; w: number; h: number }) =>
+    x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+  for (const layer of ctx.state.selectedLayers) {
+    const bounds = SKIN_LAYER_BOUNDS[layer];
+    if (!bounds) continue;
+    for (const b of bounds) {
+      if (pointInBounds(normX, normY, b)) return true;
+    }
+  }
+  return false;
+}
+
+function canPaintAt(ctx: BlockyEditorContext, workingX: number, workingY: number): boolean {
+  if (!isInSelectedLayer(ctx, workingX, workingY)) return false;
+  const layer = getLayerAtCoords(ctx, workingX, workingY);
+  return layer != null && !ctx.state.layer3DLocked[layer];
+}
+
+/** Build the 64×64 div grid. */
+export function buildBlockyGrid(): void {
+  const grid = document.getElementById('creator-blocky-grid');
+  if (!grid || grid.children.length > 0) return;
+  grid.innerHTML = '';
+  for (let y = 0; y < SKIN_SIZE; y++) {
+    for (let x = 0; x < SKIN_SIZE; x++) {
+      const cell = document.createElement('div');
+      cell.className = 'creator-blocky-cell';
+      cell.dataset.cx = String(x);
+      cell.dataset.cy = String(y);
+      cell.setAttribute('role', 'presentation');
+      grid.appendChild(cell);
+    }
+  }
+}
+
+/** Build ruler ticks and labels. */
+export function buildRulers(): void {
+  const topRuler = document.getElementById('creator-ruler-top');
+  const leftRuler = document.getElementById('creator-ruler-left');
+  if (!topRuler || !leftRuler) return;
+  if (topRuler.children.length > 0) return;
+
+  topRuler.innerHTML = '';
+  leftRuler.innerHTML = '';
+
+  for (let s = 0; s <= WORK_SIZE; s += 2) {
+    const px = Math.round(s * RULER_SCALE);
+    const isMajor = s % 16 === 0;
+    const isMinor = s % 8 === 0 && !isMajor;
+    const tickClass =
+      isMajor ? 'creator-ruler-tick creator-ruler-tick-major' :
+      isMinor ? 'creator-ruler-tick creator-ruler-tick-minor' :
+      'creator-ruler-tick creator-ruler-tick-cell';
+
+    const topTick = document.createElement('div');
+    topTick.className = tickClass;
+    topTick.style.left = `${px}px`;
+    topRuler.appendChild(topTick);
+
+    const leftTick = document.createElement('div');
+    leftTick.className = tickClass;
+    leftTick.style.top = `${px}px`;
+    leftRuler.appendChild(leftTick);
+
+    if (isMajor) {
+      const isLast = s === WORK_SIZE;
+      const labelClass = 'creator-ruler-label' + (isLast ? ' creator-ruler-label-last' : '');
+      const topLabel = document.createElement('span');
+      topLabel.className = labelClass;
+      topLabel.textContent = String(s / 2);
+      topLabel.style.left = `${px}px`;
+      topRuler.appendChild(topLabel);
+
+      const leftLabel = document.createElement('span');
+      leftLabel.className = labelClass;
+      leftLabel.textContent = String(s / 2);
+      leftLabel.style.top = `${px}px`;
+      leftRuler.appendChild(leftLabel);
+    }
+  }
+}
+
+/** Render blocky grid cells from skin canvas. */
+export function renderBlockyGrid(ctx: BlockyEditorContext): void {
+  const grid = document.getElementById('creator-blocky-grid');
+  const skin = ctx.getSkinCanvas();
+  const skinCtx = skin?.getContext('2d', { willReadFrequently: true });
+  if (!grid || !skinCtx) return;
+  const cells = grid.querySelectorAll<HTMLElement>('.creator-blocky-cell');
+  cells.forEach((cell) => {
+    const cx = parseInt(cell.dataset.cx ?? '0', 10);
+    const cy = parseInt(cell.dataset.cy ?? '0', 10);
+    const wx = cx * RESOLUTION_MULTIPLIER;
+    const wy = cy * RESOLUTION_MULTIPLIER;
+    const d = skinCtx.getImageData(wx, wy, 1, 1).data;
+    const hex = rgbToHex(d[0], d[1], d[2]);
+    const alpha = d[3] / 255;
+    cell.style.backgroundColor = alpha < 0.01 ? 'transparent' : hex;
+  });
+}
+
+/** Render rulers, template overlay, and scale. */
+export function renderRulersAndGrid(ctx: BlockyEditorContext): void {
+  const overlay = ctx.getOverlayCanvas();
+  if (overlay) {
+    const overlayCtx = overlay.getContext('2d');
+    if (overlayCtx) {
+      overlay.width = DISPLAY_SIZE;
+      overlay.height = DISPLAY_SIZE;
+      overlayCtx.clearRect(0, 0, DISPLAY_SIZE, DISPLAY_SIZE);
+      if (ctx.state.showTemplate) {
+        overlayCtx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
+        overlayCtx.lineWidth = 2;
+        overlayCtx.fillStyle = 'rgba(100, 200, 255, 0.2)';
+        const templateScale = RULER_SCALE * RESOLUTION_MULTIPLIER;
+        for (const bounds of Object.values(SKIN_LAYER_BOUNDS)) {
+          for (const b of bounds) {
+            const x = b.x * templateScale;
+            const y = b.y * templateScale;
+            const w = b.w * templateScale;
+            const h = b.h * templateScale;
+            overlayCtx.fillRect(x, y, w, h);
+            overlayCtx.strokeRect(x, y, w, h);
+          }
+        }
+        overlayCtx.globalCompositeOperation = 'destination-out';
+        overlayCtx.fillStyle = 'rgba(0,0,0,1)';
+        for (const z of SKIN_DEAD_ZONES) {
+          const x = z.x * templateScale;
+          const y = z.y * templateScale;
+          const w = z.w * templateScale;
+          const h = z.h * templateScale;
+          overlayCtx.fillRect(x, y, w, h);
+        }
+        overlayCtx.globalCompositeOperation = 'source-over';
+      }
+    }
+  }
+
+  const wrap = document.getElementById('creator-canvas-wrap');
+  if (wrap) wrap.toggleAttribute('data-rulers', ctx.state.showRulers);
+  fitCanvasAreaScale();
+}
+
+/** Refresh blocky grid and overlays. */
+export function renderToDisplay(ctx: BlockyEditorContext): void {
+  renderBlockyGrid(ctx);
+  renderRulersAndGrid(ctx);
+}
+
+/** Fit the canvas wrap to the area. */
+export function fitCanvasAreaScale(): void {
+  const area = document.getElementById('creator-canvas-area');
+  const wrap = document.getElementById('creator-canvas-wrap');
+  if (!area || !wrap) return;
+  const areaRect = area.getBoundingClientRect();
+  const hasRulers = wrap.hasAttribute('data-rulers');
+  const size = hasRulers ? 532 : 512;
+  const scale = Math.min(areaRect.width / size, areaRect.height / size);
+  (wrap as HTMLElement).style.transform = `scale(${scale})`;
+}
+
+/** Client coords to blocky grid cell. */
+export function clientToBlockyCell(clientX: number, clientY: number): { cx: number; cy: number } | null {
+  const grid = document.getElementById('creator-blocky-grid');
+  if (!grid) return null;
+  const rect = grid.getBoundingClientRect();
+  const lx = (clientX - rect.left) / rect.width;
+  const ly = (clientY - rect.top) / rect.height;
+  if (lx < 0 || lx >= 1 || ly < 0 || ly >= 1) return null;
+  const cx = Math.floor(lx * SKIN_SIZE);
+  const cy = Math.floor(ly * SKIN_SIZE);
+  return { cx: Math.max(0, Math.min(SKIN_SIZE - 1, cx)), cy: Math.max(0, Math.min(SKIN_SIZE - 1, cy)) };
+}
+
+/** Setup pointer events on the blocky grid. */
+export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
+  const grid = document.getElementById('creator-blocky-grid');
+  const skin = ctx.getSkinCanvas();
+  const skinCtx = skin?.getContext('2d', { willReadFrequently: true });
+  if (!grid || !skinCtx) return;
+
+  const canPaintAtBound = (wx: number, wy: number) => canPaintAt(ctx, wx, wy);
+  const getCurrentColor = () => ctx.state.currentColor;
+
+  function handleBlockyPointer(e: MouseEvent): void {
+    const cell = clientToBlockyCell(e.clientX, e.clientY);
+    if (cell) {
+      const wx = cell.cx * RESOLUTION_MULTIPLIER;
+      const wy = cell.cy * RESOLUTION_MULTIPLIER;
+      const part = ctx.getPartDisplayNameAtCoords(wx, wy);
+      ctx.updateHoverInfo(part, cell.cx, cell.cy);
+    } else if (e.type === 'mouseleave') {
+      ctx.updateHoverInfo(null, -1, -1);
+    }
+    if (!cell) return;
+    const wx = cell.cx * RESOLUTION_MULTIPLIER;
+    const wy = cell.cy * RESOLUTION_MULTIPLIER;
+
+    if (e.altKey) {
+      const sample = ctx.sampleColorAtWithAlpha(wx, wy);
+      if (sample && sample.alpha >= ctx.eyedropperAlphaThreshold) ctx.applyColorToUI(sample.hex);
+      return;
+    }
+
+    if (ctx.state.activeTool === 'navigate') return;
+
+    if (ctx.state.activeTool === 'eyedropper' && e.type === 'mousedown' && e.button === 0) {
+      const sample = ctx.sampleColorAtWithAlpha(wx, wy);
+      if (sample && sample.alpha >= ctx.eyedropperAlphaThreshold) ctx.applyColorToUI(sample.hex);
+      return;
+    }
+
+    if (e.type === 'mousedown' && e.button === 0) {
+      if (ctx.state.activeTool === 'fill') {
+        const changed = brush.floodFill(skinCtx, wx, wy, canPaintAtBound, getCurrentColor);
+        if (changed.length > 0) {
+          ctx.pushUndoFill(changed, ctx.state.currentColor);
+        }
+        renderBlockyGrid(ctx);
+      } else {
+        ctx.state.isDrawing = true;
+        ctx.state.lastSkinX = wx;
+        ctx.state.lastSkinY = wy;
+        const isEraser = ctx.state.activeTool === 'eraser';
+        ctx.state.currentStroke = {
+          pixels: [],
+          isEraser,
+          newColor: ctx.state.currentColor,
+          recorded: new Set<string>(),
+        };
+        brush.brushAt(
+          skinCtx,
+          wx,
+          wy,
+          isEraser,
+          canPaintAtBound,
+          getCurrentColor,
+          ctx.state.currentStroke,
+          RESOLUTION_MULTIPLIER,
+          true
+        );
+        renderBlockyGrid(ctx);
+      }
+    } else if (e.type === 'mousemove' && ctx.state.isDrawing && ctx.state.activeTool !== 'fill' && ctx.state.currentStroke) {
+      const isEraser = ctx.state.currentStroke.isEraser;
+      brush.drawLine(
+        skinCtx,
+        ctx.state.lastSkinX,
+        ctx.state.lastSkinY,
+        wx,
+        wy,
+        isEraser,
+        canPaintAtBound,
+        getCurrentColor,
+        ctx.state.currentStroke,
+        RESOLUTION_MULTIPLIER,
+        true
+      );
+      ctx.state.lastSkinX = wx;
+      ctx.state.lastSkinY = wy;
+      renderBlockyGrid(ctx);
+    } else if (e.type === 'mouseup' || e.type === 'mouseleave') {
+      if (e.type === 'mouseup' && e.button === 0 && ctx.state.currentStroke) {
+        if (ctx.state.currentStroke.pixels.length > 0) {
+          ctx.pushUndoStroke(
+            ctx.state.currentStroke.pixels,
+            ctx.state.currentStroke.isEraser,
+            ctx.state.currentStroke.newColor
+          );
+        }
+        ctx.state.currentStroke = null;
+        ctx.state.isDrawing = false;
+        ctx.updateUndoRedoButtons();
+      }
+      if (e.type === 'mouseleave' && ctx.state.currentStroke && ctx.state.currentStroke.pixels.length > 0) {
+        ctx.pushUndoStroke(
+          ctx.state.currentStroke.pixels,
+          ctx.state.currentStroke.isEraser,
+          ctx.state.currentStroke.newColor
+        );
+        ctx.state.currentStroke = null;
+        ctx.state.isDrawing = false;
+        ctx.updateUndoRedoButtons();
+      }
+    }
+  }
+
+  grid.addEventListener('mousedown', handleBlockyPointer);
+  grid.addEventListener('mousemove', handleBlockyPointer);
+  grid.addEventListener('mouseup', handleBlockyPointer);
+  grid.addEventListener('mouseleave', handleBlockyPointer);
+  grid.title = 'Blocky 64×64 grid — drag to paint, Alt+click to pick color';
+}
+
+/** Get brush cursor style for 2D grid. Uses grid rect for cell size. */
+export function getBrushCursorStyle2D(): string {
+  const grid = document.getElementById('creator-blocky-grid');
+  const rect = grid?.getBoundingClientRect();
+  const gridWidth = rect?.width ?? BLOCKY_GRID_SIZE;
+  return brush.getBrushCursorStyle2D(gridWidth, SKIN_SIZE, BLOCKY_GRID_SIZE / SKIN_SIZE);
+}

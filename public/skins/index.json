@@ -69,6 +69,46 @@
     "label": "skin base"
   },
   {
+    "path": "/skins/skin-cursor-01.png",
+    "label": "skin cursor 01"
+  },
+  {
+    "path": "/skins/skin-cursor-02.png",
+    "label": "skin cursor 02"
+  },
+  {
+    "path": "/skins/skin-cursor-03.png",
+    "label": "skin cursor 03"
+  },
+  {
+    "path": "/skins/skin-cursor-04.png",
+    "label": "skin cursor 04"
+  },
+  {
+    "path": "/skins/skin-cursor-05.png",
+    "label": "skin cursor 05"
+  },
+  {
+    "path": "/skins/skin-cursor-06.png",
+    "label": "skin cursor 06"
+  },
+  {
+    "path": "/skins/skin-cursor-07.png",
+    "label": "skin cursor 07"
+  },
+  {
+    "path": "/skins/skin-cursor-08.png",
+    "label": "skin cursor 08"
+  },
+  {
+    "path": "/skins/skin-cursor-09.png",
+    "label": "skin cursor 09"
+  },
+  {
+    "path": "/skins/skin-cursor-10.png",
+    "label": "skin cursor 10"
+  },
+  {
     "path": "/skins/skin-demon1.png",
     "label": "skin demon1",
     "preview": "/skins/previews/skin-demon1-preview.png"

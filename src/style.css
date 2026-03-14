@@ -34,8 +34,8 @@ body[data-route="creator"] {
 body[data-route="creator"] #creator-panel {
   display: flex !important;
   flex: 0 0 auto;
-  min-width: 320px;
-  max-width: 480px;
+  min-width: 220px;
+  max-width: 280px;
 }
 body[data-route="creator"] #creator-view-wrapper {
   display: flex !important;
@@ -187,32 +187,6 @@ body[data-route="viewer"] .creator-canvas-area {
   letter-spacing: 0.05em;
 }
 
-.creator-brush-sizes {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.creator-tool-btn {
-  padding: 0.35rem 0.6rem;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
-  color: #f5f5f5;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.creator-tool-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-.creator-tool-btn.active {
-  border-color: rgba(99, 179, 237, 0.8);
-  background: rgba(99, 179, 237, 0.2);
-}
-
 .creator-current-color {
   width: 28px;
   height: 28px;
@@ -237,15 +211,117 @@ body[data-route="viewer"] .creator-canvas-area {
   border-color: rgba(99, 179, 237, 0.6);
 }
 
-.creator-swatch {
+/* Swatches panel — floating lower-right, 5×5 grid of color squares */
+.creator-swatches-panel {
+  width: 180px;
+  min-width: 180px;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.creator-swatches-header {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
   flex-wrap: wrap;
+}
+.creator-swatches-tabs {
+  display: flex;
   gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+.creator-swatches-tabs-hidden {
+  display: none !important;
+}
+.creator-swatches-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.creator-swatches-tab:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+}
+.creator-swatches-tab.active {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+  border-bottom-color: rgba(63, 140, 255, 0.8);
+  background: rgba(255, 255, 255, 0.06);
+}
+.creator-swatches-title {
+  flex: 1;
+  min-width: 0;
+}
+.creator-swatches-panel:not(.creator-swatches-panel-collapsed) .creator-swatches-title {
+  display: none;
+}
+.creator-swatches-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  font-size: 0.7rem;
+  transition: background 0.15s ease;
+}
+.creator-swatches-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.creator-swatches-icon-expand {
+  display: none;
+}
+.creator-swatches-panel-collapsed .creator-swatches-icon-minimize {
+  display: none;
+}
+.creator-swatches-panel-collapsed .creator-swatches-icon-expand {
+  display: inline-block;
+}
+.creator-swatches-panel-collapsed .creator-swatch-grid {
+  display: none;
+}
+.creator-swatches-panel-collapsed .creator-swatches-header {
+  margin-bottom: 0;
+}
+.creator-swatches-panel-collapsed {
+  padding: 0.35rem 0.5rem;
+}
+.creator-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  gap: 0.25rem;
+  min-height: 140px;
 }
 
 .creator-swatch-item {
-  width: 22px;
-  height: 22px;
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 20px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 4px;
@@ -253,39 +329,26 @@ body[data-route="viewer"] .creator-canvas-area {
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
-.creator-swatch-item:hover {
+.creator-swatch-item-empty {
+  background: rgba(255, 255, 255, 0.08);
+  border-style: dashed;
+  cursor: default;
+  pointer-events: none;
+}
+
+.creator-swatch-item:not(.creator-swatch-item-empty):hover {
   transform: scale(1.1);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
 }
-
-.creator-tools,
-.creator-edit-mode {
-  display: flex;
-  gap: 0.25rem;
+.creator-swatch-draggable {
+  cursor: grab;
 }
-
-.creator-layers-row {
-  flex-basis: 100%;
+.creator-swatch-draggable:active {
+  cursor: grabbing;
 }
-
-.creator-layers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-}
-
-.creator-layer-check {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.85);
-  cursor: pointer;
-}
-
-.creator-layer-check input {
-  accent-color: rgba(99, 179, 237, 0.9);
-  cursor: pointer;
+.creator-swatch-drop-target.creator-swatch-drag-over {
+  box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.8);
+  outline: none;
 }
 
 /* Lower-right panels container (layers + hover info) */
@@ -302,6 +365,19 @@ body[data-route="viewer"] .creator-canvas-area {
 body[data-route="creator"] .creator-lower-right-panels {
   display: flex;
   flex-direction: column;
+}
+
+/* Right panels group — wraps all lower-right panels for logical grouping and drag-drop safety */
+.creator-right-panels-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  background: rgba(12, 16, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
 /* 3D layers panel — floating lower-right, inside creator-lower-right-panels */
@@ -417,6 +493,149 @@ body[data-route="creator"] .creator-lower-right-panels {
   color: rgba(255, 255, 255, 0.9);
 }
 
+/* Color picker panel — floating lower-right, SV square + hue bar + indicator */
+.creator-color-picker-panel {
+  width: 180px;
+  min-width: 180px;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.creator-color-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+.creator-color-picker-title {
+  flex: 1;
+}
+.creator-color-picker-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  font-size: 0.7rem;
+  transition: background 0.15s ease;
+}
+.creator-color-picker-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.creator-color-picker-icon-expand {
+  display: none;
+}
+.creator-color-picker-panel-collapsed .creator-color-picker-icon-minimize {
+  display: none;
+}
+.creator-color-picker-panel-collapsed .creator-color-picker-icon-expand {
+  display: inline-block;
+}
+.creator-color-picker-panel-collapsed .creator-color-picker-expandable {
+  display: none;
+}
+.creator-color-picker-panel-collapsed .creator-color-picker-header {
+  margin-bottom: 0.35rem;
+}
+.creator-color-picker-panel-collapsed {
+  padding: 0.35rem 0.5rem;
+}
+.creator-color-picker-sv-wrap {
+  margin-bottom: 0.5rem;
+}
+.creator-color-picker-sv {
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 200px;
+  border-radius: 6px;
+  position: relative;
+  cursor: crosshair;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.creator-color-picker-sv-dot {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.creator-color-picker-hue-row {
+  margin-bottom: 0.5rem;
+}
+.creator-color-picker-hue-bar {
+  width: 100%;
+  height: 16px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  position: relative;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.creator-color-picker-swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.creator-color-picker-five-swatches {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+.creator-color-picker-swatch-btn {
+  flex: 1;
+  aspect-ratio: 1;
+  min-height: 28px;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  padding: 0;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.creator-color-picker-swatch-btn:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.creator-color-picker-swatch-btn.active {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+.creator-color-picker-swatch-row.creator-color-picker-drop-target.creator-color-picker-drag-over {
+  box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.8);
+  border-radius: 6px;
+}
+.creator-color-picker-hue-dot {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
 /* Hover info panel — below layers panel, same size, part name + skin coords (2D and 3D) */
 .creator-hover-info-panel {
   width: 180px;
@@ -466,9 +685,13 @@ body[data-route="creator"] .creator-tools-panel-3d {
   flex-wrap: nowrap;
 }
 .creator-tools-panel-3d-edit-mode {
+  width: 100%;
   padding-bottom: 0.35rem;
   margin-bottom: 0.15rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.creator-tools-panel-3d-edit-mode .creator-tools-panel-3d-btn {
+  flex: 1;
 }
 .creator-tools-panel-3d-divider {
   width: 100%;
@@ -500,14 +723,15 @@ body[data-route="creator"][data-edit-mode="2d"] .creator-tools-panel-3d-divider-
   background: rgba(63, 140, 255, 0.3);
   border-color: rgba(63, 140, 255, 0.6);
 }
-.creator-tools-panel-3d-brush-row {
-  display: none;
-  align-items: center;
-  gap: 0.5rem;
-}
-.creator-tools-panel-3d-brush-row.creator-tools-panel-3d-visible,
-.creator-tools-panel-3d-view-toggles.creator-tools-panel-3d-visible {
+.creator-tools-panel-3d-btn-icon {
+  width: 100%;
+  padding: 0.4rem;
   display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.creator-tools-panel-3d-btn-icon svg {
+  flex-shrink: 0;
 }
 .creator-tools-panel-3d-view-toggles {
   display: none;
@@ -523,39 +747,9 @@ body[data-route="creator"][data-edit-mode="2d"] .creator-tools-panel-3d-divider-
 .creator-tools-panel-3d-undo-redo .creator-tools-panel-3d-btn {
   flex: 1;
 }
-.creator-tools-panel-3d-label {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.7);
-}
-.creator-tools-panel-3d-sizes {
+
+.creator-tools-panel-3d-view-toggles.creator-tools-panel-3d-visible {
   display: flex;
-  gap: 0.2rem;
-}
-.creator-tools-panel-3d-size-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.creator-tools-panel-3d-brush-icon {
-  display: block;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  background: transparent;
-  flex-shrink: 0;
-}
-.creator-tools-panel-3d-size-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-.creator-tools-panel-3d-size-btn.active {
-  background: rgba(63, 140, 255, 0.3);
-  border-color: rgba(63, 140, 255, 0.6);
 }
 
 .creator-canvas-area {
@@ -734,6 +928,9 @@ body[data-route="creator"][data-edit-mode="2d"] .creator-tools-panel-3d-divider-
   justify-content: center;
   gap: 0.5rem;
 }
+#creator-download-btn {
+  display: none;
+}
 .creator-btn {
   padding: 0.5rem 1.25rem;
   border-radius: 6px;
@@ -823,6 +1020,9 @@ body[data-route="creator"][data-edit-mode="2d"] .creator-tools-panel-3d-divider-
   background: rgba(255, 255, 255, 0.08);
   color: #f5f5f5;
   font-size: 0.85rem;
+}
+.test-controls-custom input[type="number"].test-control-input-speed {
+  width: 4em;
 }
 
 .test-control-btn {
@@ -947,9 +1147,7 @@ body[data-route="creator"][data-edit-mode="2d"] .creator-tools-panel-3d-divider-
   gap: 0.35rem;
 }
 
-.anim-button,
-.skin-button {
-  padding: 0.4rem 0.9rem;
+.anim-button {
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: #f5f5f5;
