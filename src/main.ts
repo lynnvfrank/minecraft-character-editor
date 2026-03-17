@@ -8,6 +8,7 @@ import {
   getEditMode3D,
   getCreatorWorkSize,
   getLayer3DVisible,
+  setActiveTool,
 } from './creator';
 import { preprocessSkinTexture } from './skinPreprocess';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -319,6 +320,9 @@ const CREATOR_EXIT_ANIMATION_MS = 450;
 async function transitionCreatorToViewer() {
   if (creatorTransitionInFlight || getRoute() !== 'creator') return;
   creatorTransitionInFlight = true;
+  // Ensure creator leaves with a non-painting tool selected so we don't
+  // accidentally keep brush/eraser semantics when returning.
+  setActiveTool('navigate');
   updateRouteButtonsState();
   try {
     document.body.dataset.creatorExiting = '1';
