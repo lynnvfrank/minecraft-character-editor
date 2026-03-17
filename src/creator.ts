@@ -41,6 +41,13 @@ const BRUSH_SIZE = 1;
 let skinCanvas: HTMLCanvasElement | null = null;
 let blockyCtx: blockyEditor.BlockyEditorContext | null = null;
 
+/** True once a skin has been loaded into the creator (from gallery or on route enter). Used to preserve canvas when re-entering creator. */
+let creatorCanvasPopulated = false;
+
+export function getCreatorCanvasPopulated(): boolean {
+  return creatorCanvasPopulated;
+}
+
 function addToSwatch(hex: string): void {
   const normalized = hex.toLowerCase();
   state.swatchColors = state.swatchColors.filter((c) => c.toLowerCase() !== normalized);
@@ -129,6 +136,7 @@ function performUndo(): void {
     getSkinCanvas,
     renderToDisplay: () => blockyEditor.renderToDisplay(blockyCtx!),
   });
+  publish(CREATOR_EVENTS.CANVAS_CHANGE);
 }
 
 function updateAllUndoRedoButtons(): void {
@@ -143,6 +151,7 @@ function performRedo(): void {
     getSkinCanvas,
     renderToDisplay: () => blockyEditor.renderToDisplay(blockyCtx!),
   });
+  publish(CREATOR_EVENTS.CANVAS_CHANGE);
 }
 
 /** Apply a color to currentColor and publish. If addToSwatchList is true, prepends to swatch list. Subscribers handle UI updates. */
@@ -221,12 +230,14 @@ export async function loadSkinFromPath(path: string): Promise<void> {
   const canvas = getSkinCanvas();
   const result = await skinIO.loadSkinToCanvas(path, canvas, skinIO.captureCanvasImageData);
   if (!result) return;
+  creatorCanvasPopulated = true;
   const { beforeData, afterData } = result;
   state.redoStack = [];
   state.undoStack.push({ type: 'load', beforeData, afterData });
   if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
   state.skinSwatchColors = extractColorsFromSkin(canvas);
-  publish(CREATOR_EVENTS.SKIN_LOAD_CHANGE);
+  publish(CREATOR_EVENTS.SKIN_LOAD_CHANGE, { path });
+  publish(CREATOR_EVENTS.CANVAS_CHANGE);
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
   updateAllUndoRedoButtons();
 }
@@ -352,7 +363,9 @@ export function initCreator(): void {
   const ctx = skin.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;
 
-  ctx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
+  if (!creatorCanvasPopulated) {
+    ctx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
+  }
   document.body.dataset.editMode = state.editMode3D ? EDIT_MODE_3D : EDIT_MODE_2D;
   const wrapper = document.getElementById('creator-view-wrapper');
   if (wrapper && !document.getElementById('creator-lower-right-panels')) {
@@ -393,6 +406,7 @@ export function initCreator(): void {
       state.undoStack.push({ type: 'fill', pixels, fillColor });
       if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
     },
+    onCanvasChange: () => publish(CREATOR_EVENTS.CANVAS_CHANGE),
     updateUndoRedoButtons: updateAllUndoRedoButtons,
     undoLimit: UNDO_LIMIT,
   };
@@ -706,6 +720,7 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
       state.redoStack = [];
       state.undoStack.push({ type: 'fill', pixels: changed, fillColor: state.currentColor });
       if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
+      publish(CREATOR_EVENTS.CANVAS_CHANGE);
     }
     if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
     return changed.length > 0;
@@ -719,6 +734,7 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
   const baseY = Math.floor(workingY / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
   brush.brushAt(ctx, baseX, baseY, isEraser, canPaintAt, getCurrentColor, state.currentStroke, RESOLUTION_MULTIPLIER, true);
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
+  publish(CREATOR_EVENTS.CANVAS_CHANGE);
   return true;
 }
 
@@ -747,6 +763,7 @@ export function paintMoveFrom3D(workingX: number, workingY: number): void {
   state.lastSkinX = workingX;
   state.lastSkinY = workingY;
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
+  publish(CREATOR_EVENTS.CANVAS_CHANGE);
 }
 
 /** End paint stroke and push to undo stack. */

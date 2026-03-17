@@ -27,6 +27,8 @@ export interface BlockyEditorContext {
   pushUndoFill: (pixels: { x: number; y: number; r: number; g: number; b: number; a: number }[], fillColor: string) => void;
   updateUndoRedoButtons: () => void;
   undoLimit: number;
+  /** Called when canvas pixels change (paint, fill, etc.). */
+  onCanvasChange?: () => void;
 }
 
 function canPaintAt2D(ctx: BlockyEditorContext, workingX: number, workingY: number): boolean {
@@ -282,6 +284,7 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
         const changed = brush.floodFill(skinCtx, wx, wy, canPaintAtBound, getCurrentColor);
         if (changed.length > 0) {
           ctx.pushUndoFill(changed, ctx.state.currentColor);
+          ctx.onCanvasChange?.();
         }
         renderBlockyGrid(ctx);
       } else {
@@ -306,6 +309,7 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
           RESOLUTION_MULTIPLIER,
           true
         );
+        ctx.onCanvasChange?.();
         renderBlockyGrid(ctx);
       }
     } else if (e.type === 'mousemove' && ctx.state.isDrawing && ctx.state.activeTool !== 'fill' && ctx.state.currentStroke) {
@@ -325,6 +329,7 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
       );
       ctx.state.lastSkinX = wx;
       ctx.state.lastSkinY = wy;
+      ctx.onCanvasChange?.();
       renderBlockyGrid(ctx);
     } else if (e.type === 'mouseup' || e.type === 'mouseleave') {
       if (e.type === 'mouseup' && e.button === 0 && ctx.state.currentStroke) {

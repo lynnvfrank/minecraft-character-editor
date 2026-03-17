@@ -6,6 +6,12 @@
 const { parse: parseUrl } = require('url');
 const sseClients = new Set();
 
+/** Optional Socket.IO server — when set, broadcast also emits to socket clients */
+let socketIo = null;
+function setSocketIo(io) {
+  socketIo = io;
+}
+
 // Log relay: read from env or process.argv
 const LOG_LEVEL_NUMS = { error: 0, warn: 1, info: 2, debug: 3, trace: 4 };
 function getLogRelayConfig() {
@@ -42,6 +48,9 @@ function broadcast(data) {
       sseClients.delete(res);
     }
   });
+  if (socketIo && (data.type === 'skin' || data.type === 'animation')) {
+    socketIo.emit(data.type, data.name);
+  }
 }
 
 function handleApi(req, res, next) {
@@ -131,4 +140,4 @@ function handleApi(req, res, next) {
   next?.();
 }
 
-module.exports = { handleApi, broadcast, getLogRelayConfig, buildLogUrlParams };
+module.exports = { handleApi, broadcast, getLogRelayConfig, buildLogUrlParams, setSocketIo };

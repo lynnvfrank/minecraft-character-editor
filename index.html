@@ -16,25 +16,35 @@
   </head>
   <body>
     <div id="creator-panel" class="creator-panel" aria-label="Character creator">
-      <header class="creator-header">
-        <h1>Character Creator</h1>
-        <nav class="creator-nav">
-          <a href="#/" class="creator-nav-link">Home</a>
-        </nav>
-      </header>
       <main class="creator-main">
-        <div class="creator-skin-gallery" aria-label="Skin gallery">
-          <span class="creator-toolbar-label">Load skin</span>
-          <div id="creator-skin-selector" class="creator-skin-selector" role="listbox" aria-label="Available skins"></div>
-        </div>
         <div class="creator-toolbar" role="toolbar" aria-label="Editor tools"></div>
-        <div class="creator-3d-preview-slot" id="creator-3d-preview-slot" aria-hidden="true"></div>
         <div class="creator-actions">
           <button type="button" id="creator-download-btn" class="creator-btn">Download</button>
         </div>
       </main>
     </div>
     <div id="creator-view-wrapper" class="creator-view-wrapper">
+      <div id="creator-left-panels" class="creator-left-panels">
+        <div id="creator-left-top-row" class="creator-left-top-row">
+          <div id="creator-upper-left-panels" class="creator-upper-left-panels">
+            <div id="creator-load-skins-panel" class="creator-load-skins-panel" aria-label="Load skin">
+              <div class="creator-load-skins-header">Load skin</div>
+              <div id="creator-skin-selector" class="creator-skin-selector" role="listbox" aria-label="Available skins"></div>
+            </div>
+          </div>
+        </div>
+        <div id="creator-lower-left-panels" class="creator-lower-left-panels">
+          <div class="creator-3d-preview-slot" id="creator-3d-preview-slot" aria-hidden="true"></div>
+          <div id="creator-home-panel" class="creator-home-panel" aria-label="Navigation">
+            <button type="button" id="enter-viewer-btn" class="creator-home-btn" aria-label="Return to home mode">Home</button>
+          </div>
+        </div>
+      </div>
+      <div id="app-lower-left-panels" class="app-lower-left-panels">
+        <div class="creator-home-panel" aria-label="Navigation">
+          <button type="button" id="enter-creator-btn" class="creator-home-btn" aria-label="Enter character design mode">Design</button>
+        </div>
+      </div>
       <div class="creator-canvas-area" id="creator-canvas-area">
         <div class="creator-canvas-wrap" id="creator-canvas-wrap">
           <div class="creator-ruler-corner" id="creator-ruler-corner"></div>
@@ -49,6 +59,10 @@
       <div id="app">
       <div id="three-canvas-container"></div>
       <div id="controls-bar">
+        <nav class="control-group nav-control-group">
+          <a href="#/" class="nav-link">Viewer</a>
+          <a href="#/creator" class="nav-link">Creator</a>
+        </nav>
         <div class="control-group skin-control-group">
           <span class="group-label">Skin</span>
           <div id="skin-selector" class="skin-selector" role="listbox" aria-label="Available skins"></div>

@@ -5,8 +5,8 @@ import { EDIT_MODE_2D, EDIT_MODE_3D, isDrawingTool, isToggleType } from './api';
 import { iconNavigate, iconBrush, iconEraser, iconFill, iconEyedropper } from './toolIcons';
 
 export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
-  const wrapper = document.getElementById('creator-view-wrapper');
-  if (!wrapper) return;
+  const topRow = document.getElementById('creator-left-top-row');
+  if (!topRow) return;
 
   const oldPanel = document.getElementById('creator-tools-panel-3d');
   if (oldPanel) oldPanel.remove();
@@ -108,5 +108,5 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   updateViewToggleButtons();
   ctx.updateUndoRedoButtons();
 
-  wrapper.appendChild(panel);
+  topRow.appendChild(panel);
 }

@@ -11,7 +11,8 @@ export type LogSystem =
   | 'position'
   | 'renderer'
   | 'input'
-  | 'general';
+  | 'general'
+  | 'transition';
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
@@ -30,7 +31,8 @@ const ALL_SYSTEMS: LogSystem[] = [
   'position',
   'renderer',
   'input',
-  'general'
+  'general',
+  'transition'
 ];
 
 const THROTTLE_MS = 80;
@@ -74,7 +76,8 @@ function buildConfig(): { config: LogConfig; relay: boolean } {
     position: 'error',
     renderer: 'error',
     input: 'error',
-    general: 'error'
+    general: 'error',
+    transition: 'error'
   };
 
   let relay = false;

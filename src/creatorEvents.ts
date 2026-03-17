@@ -12,6 +12,7 @@ export const CREATOR_EVENTS = {
   EDIT_MODE_CHANGE: 'creator-edit-mode-change',
   TOOLS_CHANGE: 'creator-tools-3d-change',
   LAYER3D_CHANGE: 'creator-layer3d-change',
+  CANVAS_CHANGE: 'creator-canvas-change',
 } as const;
 
 export type CreatorCurrentColorDetail = { color: string };

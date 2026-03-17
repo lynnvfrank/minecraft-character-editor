@@ -4,6 +4,7 @@ import {
   initCreator,
   getCreatorSkinCanvas,
   loadSkinFromPath,
+  getCreatorCanvasPopulated,
   getEditMode3D,
   getCreatorWorkSize,
   getLayer3DVisible,
@@ -16,8 +17,10 @@ import { createAnimationManager, type SequenceStep, type CharacterStateLike, typ
 import { createCharacterAI } from './characterAI';
 import { createFakeChatUI } from './fakeChatUI';
 import { setupTestControls } from './setupTestControls';
+import { initElectronStatus } from './electronStatus';
 import { logger } from './logger';
 import { setFacingLogContextProvider } from './debugFacing';
+import { subscribe, CREATOR_EVENTS } from './creatorEvents';
 import { SKIN_LAYER_BOUNDS, LAYER_KEYS, TEXTURE_LAYER_KEYS } from './skinLayout';
 import type { SkinEntry, AnimationEntry } from './types/catalog';
 import {
@@ -31,7 +34,6 @@ import {
   setupCreator3DPaint,
   updateOrbitControlsForEditMode,
   recreateOrbitControls,
-  resetCameraFor2DPreview,
   type TexturePreset,
   type AlphaMode
 } from './viewer';
@@ -89,49 +91,16 @@ function parseTurnStrategy(p: URLSearchParams): TurnStrategy {
   return 'lerp';
 }
 let turnStrategy: TurnStrategy = parseTurnStrategy(params);
-/** Animation keys included in creator preview (idle only for now) */
-const CREATOR_IDLE_KEYS = new Set([
-  'idle'
-]);
-
-function getCreatorAnimationKeys(): string[] {
-  return animationsList
-    .filter((a) => CREATOR_IDLE_KEYS.has(a.key.toLowerCase()))
-    .map((a) => a.key);
-}
-
-let creatorCyclerIndex = 0;
-
-function startCreatorAnimationCycler() {
-  animationManager?.stop();
-  animationManager?.stopIdleWanderer?.();
-  const char = characters['runningboy'];
-  const keys = getCreatorAnimationKeys();
-  if (!char || keys.length === 0) return;
-  creatorCyclerIndex = 0;
-  const key = keys[0]!;
-  const action = getAction('runningboy', key);
-  if (!action) return;
-  action.setLoop(THREE.LoopOnce, 0);
-  action.clampWhenFinished = true;
-  action.reset();
-  fadeToAction(char, action, 0.3);
-}
-
-function advanceCreatorCycler() {
-  if (getRoute() !== 'creator') return;
-  const char = characters['runningboy'];
-  const keys = getCreatorAnimationKeys();
-  if (!char || keys.length === 0) return;
-  creatorCyclerIndex = (creatorCyclerIndex + 1) % keys.length;
-  const key = keys[creatorCyclerIndex]!;
-  const action = getAction('runningboy', key);
-  if (!action) return;
-  action.setLoop(THREE.LoopOnce, 0);
-  action.clampWhenFinished = true;
-  action.reset();
-  fadeToAction(char, action, 0.3);
-}
+const CREATOR_CAMERA_TARGET = new THREE.Vector3(0, 1, 0);
+const CREATOR_CAMERA_POSITION = new THREE.Vector3(0, 1.5, 4);
+const CREATOR_REFERENCE_CHARACTER_POSITION = new THREE.Vector3(0, 0, 0);
+const CREATOR_CAMERA_OFFSET_FROM_CHARACTER = CREATOR_CAMERA_POSITION
+  .clone()
+  .sub(CREATOR_REFERENCE_CHARACTER_POSITION);
+const CREATOR_TARGET_OFFSET_FROM_CHARACTER = CREATOR_CAMERA_TARGET
+  .clone()
+  .sub(CREATOR_REFERENCE_CHARACTER_POSITION);
+let creatorTransitionInFlight = false;
 
 /** Hash-based routing: #/creator = character creator, #/ or #/home = viewer */
 function getRoute(): 'creator' | 'viewer' {
@@ -142,34 +111,275 @@ function getRoute(): 'creator' | 'viewer' {
 
 const characters: Record<string, CharacterState> = {};
 let animationManager: ReturnType<typeof createAnimationManager> | null = null;
+const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function logTransition(stage: string, extra: Record<string, unknown> = {}) {
+  const char = characters['runningboy'];
+  const payload: Record<string, unknown> = {
+    route: getRoute(),
+    ...extra
+  };
+  if (char) {
+    payload.characterPos = {
+      x: Number(char.container.position.x.toFixed(3)),
+      y: Number(char.container.position.y.toFixed(3)),
+      z: Number(char.container.position.z.toFixed(3))
+    };
+    payload.characterYawDeg = Number(THREE.MathUtils.radToDeg(char.model.rotation.y).toFixed(1));
+    if (char.currentAction) {
+      payload.currentAction = Object.entries(char.actions).find(([, a]) => a === char.currentAction)?.[0] ?? 'unknown';
+      payload.actionTime = Number(char.currentAction.time.toFixed(3));
+      payload.actionDuration = Number((char.currentAction.getClip()?.duration ?? 0).toFixed(3));
+    }
+  }
+  if (camera && controls) {
+    payload.cameraPos = {
+      x: Number(camera.position.x.toFixed(3)),
+      y: Number(camera.position.y.toFixed(3)),
+      z: Number(camera.position.z.toFixed(3))
+    };
+    payload.cameraTarget = {
+      x: Number(controls.target.x.toFixed(3)),
+      y: Number(controls.target.y.toFixed(3)),
+      z: Number(controls.target.z.toFixed(3))
+    };
+  }
+  logger.info('transition', stage, payload);
+}
+
+function updateRouteButtonsState() {
+  const designBtn = document.getElementById('enter-creator-btn') as HTMLButtonElement | null;
+  const homeBtn = document.getElementById('enter-viewer-btn') as HTMLButtonElement | null;
+  if (designBtn) {
+    designBtn.disabled = creatorTransitionInFlight;
+    designBtn.textContent = creatorTransitionInFlight ? 'Designing...' : 'Design';
+  }
+  if (homeBtn) {
+    homeBtn.disabled = creatorTransitionInFlight;
+    homeBtn.textContent = 'Home';
+  }
+}
+
+function lockCharacterToCreatorIdle() {
+  animationManager?.stop();
+  animationManager?.stopIdleWanderer?.();
+  const char = characters['runningboy'];
+  if (!char?.idleAction) return;
+  char.idleAction.setLoop(THREE.LoopRepeat, Infinity);
+  char.idleAction.clampWhenFinished = false;
+  fadeToAction(char, char.idleAction, 0.25);
+}
+
+function getCurrentActionRemainingSec(char: CharacterState): number {
+  const action = char.currentAction;
+  if (!action || action === char.idleAction) return 0;
+  const clipDuration = action.getClip()?.duration ?? 0;
+  if (clipDuration <= 0.01) return 0;
+  const time = ((action.time % clipDuration) + clipDuration) % clipDuration;
+  const remaining = clipDuration - time;
+  return remaining > 0.05 ? Math.min(remaining, 4) : 0;
+}
+
+type CameraPose = { target: THREE.Vector3; position: THREE.Vector3 };
+
+function getCreatorCameraPose(): CameraPose {
+  const char = characters['runningboy'];
+  if (!char) {
+    return {
+      target: CREATOR_CAMERA_TARGET.clone(),
+      position: CREATOR_CAMERA_POSITION.clone()
+    };
+  }
+
+  // Reuse the creator-mode "camera relative to character" template, then place it at the
+  // character's live position/orientation at transition time.
+  const yaw = char.model.rotation.y;
+  const upAxis = new THREE.Vector3(0, 1, 0);
+  const cameraOffset = CREATOR_CAMERA_OFFSET_FROM_CHARACTER.clone().applyAxisAngle(upAxis, yaw);
+  const targetOffset = CREATOR_TARGET_OFFSET_FROM_CHARACTER.clone().applyAxisAngle(upAxis, yaw);
+  const position = char.container.position.clone().add(cameraOffset);
+  const target = char.container.position.clone().add(targetOffset);
+  return { target, position };
+}
+
+function snapCameraToCreatorView(pose: CameraPose = getCreatorCameraPose()) {
+  if (!camera || !controls) return;
+  camera.position.copy(pose.position);
+  controls.target.copy(pose.target);
+  controls.update();
+}
+
+const CAMERA_TRAVEL_SPEED = 4; // units per second
+const CAMERA_TRANSITION_DURATION_MIN_MS = 400;
+const CAMERA_TRANSITION_DURATION_MAX_MS = 1500;
+
+function animateCameraToCreatorView(pose: CameraPose = getCreatorCameraPose()): Promise<void> {
+  if (!camera || !controls) return Promise.resolve();
+
+  const startPosition = camera.position.clone();
+  const endPosition = pose.position.clone();
+  const startTarget = controls.target.clone();
+  const endTarget = pose.target.clone();
+
+  const distance = startPosition.distanceTo(endPosition);
+  const durationMs = THREE.MathUtils.clamp(
+    (distance / CAMERA_TRAVEL_SPEED) * 1000,
+    CAMERA_TRANSITION_DURATION_MIN_MS,
+    CAMERA_TRANSITION_DURATION_MAX_MS
+  );
+
+  const startTime = performance.now();
+
+  return new Promise<void>((resolve) => {
+    const tick = () => {
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(elapsed / durationMs, 1);
+      const eased = easeOutCubic(t);
+
+      camera.position.copy(startPosition).lerp(endPosition, eased);
+      controls.target.copy(startTarget).lerp(endTarget, eased);
+      controls.update();
+
+      if (t < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        snapCameraToCreatorView(pose);
+        resolve();
+      }
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+async function transitionViewerToCreator() {
+  if (creatorTransitionInFlight || getRoute() !== 'viewer') return;
+  creatorTransitionInFlight = true;
+  updateRouteButtonsState();
+  const transitionStart = performance.now();
+  logTransition('design-clicked');
+  try {
+    // Finish only the current clip cycle (bounded), not full queued sequences.
+    const char = characters['runningboy'];
+    if (char) {
+      const remainingSec = getCurrentActionRemainingSec(char);
+      const waitSec = Math.min(remainingSec, 1.2);
+      if (waitSec > 0) {
+        logTransition('waiting-current-clip', { waitSec: Number(waitSec.toFixed(2)) });
+        await sleep(waitSec * 1000);
+      }
+    }
+
+    // Prevent long transition stalls from queued home behaviors.
+    animationManager?.stop();
+    animationManager?.stopIdleWanderer?.();
+    lockCharacterToCreatorIdle();
+    const pose = getCreatorCameraPose();
+    logTransition('camera-move-start', {
+      elapsedMs: Math.round(performance.now() - transitionStart),
+      endTarget: { x: Number(pose.target.x.toFixed(3)), y: Number(pose.target.y.toFixed(3)), z: Number(pose.target.z.toFixed(3)) },
+      endPosition: { x: Number(pose.position.x.toFixed(3)), y: Number(pose.position.y.toFixed(3)), z: Number(pose.position.z.toFixed(3)) }
+    });
+    await animateCameraToCreatorView(pose);
+    logTransition('camera-move-end', { elapsedMs: Math.round(performance.now() - transitionStart) });
+    location.hash = '#/creator';
+  } finally {
+    creatorTransitionInFlight = false;
+    updateRouteButtonsState();
+  }
+}
+
+function setupCreatorTransitionButton() {
+  const btn = document.getElementById('enter-creator-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    void transitionViewerToCreator();
+  });
+  updateRouteButtonsState();
+}
+
+function resumeHomeMode() {
+  const char = characters['runningboy'];
+  if (char?.idleAction) {
+    char.idleAction.setLoop(THREE.LoopRepeat, Infinity);
+    char.idleAction.clampWhenFinished = false;
+    fadeToAction(char, char.idleAction, 0.3);
+  }
+  const reacted = characterAI?.onUserActivity(true) ?? false;
+  if (!reacted) {
+    animationManager?.runOneWanderStep?.();
+  }
+}
+
+const CREATOR_EXIT_ANIMATION_MS = 450;
+
+async function transitionCreatorToViewer() {
+  if (creatorTransitionInFlight || getRoute() !== 'creator') return;
+  creatorTransitionInFlight = true;
+  updateRouteButtonsState();
+  try {
+    document.body.dataset.creatorExiting = '1';
+    await sleep(CREATOR_EXIT_ANIMATION_MS);
+    location.hash = '#/';
+    document.body.removeAttribute('data-creator-exiting');
+    await sleep(50);
+    if (getRoute() === 'viewer') {
+      resumeHomeMode();
+    }
+  } finally {
+    creatorTransitionInFlight = false;
+    updateRouteButtonsState();
+  }
+}
+
+function setupViewerTransitionButton() {
+  const btn = document.getElementById('enter-viewer-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    void transitionCreatorToViewer();
+  });
+  updateRouteButtonsState();
+}
+
+function ensureViewerFullWidthLayout() {
+  const app = document.getElementById('app');
+  const wrapper = document.getElementById('creator-view-wrapper');
+  if (!app || !wrapper) return;
+  if (app.parentElement !== wrapper) {
+    wrapper.appendChild(app);
+  }
+  onWindowResize();
+}
 
 function applyRoute(): void {
   const route = getRoute();
   document.body.dataset.route = route;
   if (route === 'creator') {
-    if (animationManager) {
-      animationManager.stop();
-      animationManager.stopIdleWanderer?.();
-    }
-    const char = characters['runningboy'];
-    if (char?.currentAction) {
-      char.currentAction.stop();
-      char.currentAction = null;
-    }
+    lockCharacterToCreatorIdle();
     initCreator();
     window.setTimeout(() => {
-      startCreatorAnimationCycler();
+      snapCameraToCreatorView(getCreatorCameraPose());
     }, 0);
     window.setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
       const c = characters['runningboy'];
-      if (c?.currentSkin) loadSkinFromPath(c.currentSkin);
+      if (c?.currentSkin) {
+        const shouldLoad = !getCreatorCanvasPopulated() || c.currentSkin !== lastCreatorLoadedPath;
+        if (shouldLoad) {
+          loadSkinFromPath(c.currentSkin);
+          lastCreatorLoadedPath = c.currentSkin;
+        }
+      }
     }, 0);
+  } else {
+    ensureViewerFullWidthLayout();
+    resumeHomeMode();
   }
+  updateRouteButtonsState();
 }
-
-applyRoute();
-window.addEventListener('hashchange', applyRoute);
 
 const container = document.getElementById('three-canvas-container');
 
@@ -190,6 +400,9 @@ type Sequence = { id: string; label: string; steps: SequenceStep[] };
 let sequencesList: Sequence[] = [];
 let socketManager: ReturnType<typeof createSocketManager> | null = null;
 let characterAI: ReturnType<typeof createCharacterAI> | null = null;
+
+applyRoute();
+window.addEventListener('hashchange', applyRoute);
 
 /** Debug: pause animation loop (used when ?movementcontrols=1). */
 let paused = false;
@@ -306,9 +519,8 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
             mixer.addEventListener('finished', () => {
               const char = characters[config.id];
               if (!char) return;
-              // In creator: cycle through non-locomotion animations
               if (getRoute() === 'creator') {
-                advanceCreatorCycler();
+                lockCharacterToCreatorIdle();
                 return;
               }
               if (!char.idleAction || char.currentAction === char.idleAction) return;
@@ -318,8 +530,6 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
             });
 
             if (idleAction) fadeToAction(characters[config.id], idleAction, 0);
-
-            if (getRoute() === 'creator') startCreatorAnimationCycler();
 
             if (Object.keys(characters).length === 1) {
               setupAnimationButtons(animationsList);
@@ -518,6 +728,7 @@ function setupSocketEvents() {
   });
 
   socketManager.on('animation', (data) => {
+    if (getRoute() === 'creator' || creatorTransitionInFlight) return;
     const char = characters['runningboy'];
     if (!char) return;
     characterAI?.onUserActivity(true);
@@ -551,7 +762,7 @@ function highlightActiveButton(charId: string, action: THREE.AnimationAction) {
 }
 
 function onWindowResize() {
-  if (!container) return;
+  if (!container || !camera || !renderer) return;
   const width = container.clientWidth;
   const height = container.clientHeight;
   camera.aspect = width / height;
@@ -561,6 +772,10 @@ function onWindowResize() {
 }
 
 let creatorPreviewTexture: THREE.CanvasTexture | null = null;
+let creatorPreviewDirty = false;
+let lastRouteForPreview = '';
+/** Path last loaded into creator (from gallery or route enter). Used to know when to reload from char.currentSkin (user picked different skin in home). */
+let lastCreatorLoadedPath: string | null = null;
 let creatorOverlayCanvas: HTMLCanvasElement | null = null;
 let creatorOverlayTexture: THREE.CanvasTexture | null = null;
 
@@ -635,7 +850,6 @@ function updateCreator3DViewPlacement() {
   } else {
     if (app.parentElement !== slot) {
       slot.appendChild(app);
-      resetCameraFor2DPreview(camera, controls);
     }
     onWindowResize();
   }
@@ -664,11 +878,36 @@ function updateCreatorPreviewTexture() {
   applyCreatorLayerVisibility(char.model, layerVisible);
 }
 
+function setupCreatorPreviewDirtySubscription() {
+  const markDirty = () => { creatorPreviewDirty = true; };
+  subscribe(CREATOR_EVENTS.CANVAS_CHANGE, markDirty);
+  subscribe(CREATOR_EVENTS.LAYER3D_CHANGE, markDirty);
+  subscribe(CREATOR_EVENTS.SKIN_LOAD_CHANGE, (e: CustomEvent) => {
+    markDirty();
+    const path = e.detail?.path;
+    if (typeof path === 'string') {
+      const char = characters['runningboy'];
+      if (char) {
+        char.currentSkin = path;
+        lastCreatorLoadedPath = path;
+        highlightActiveSkin('runningboy', path);
+      }
+    }
+  });
+}
+
 function animate() {
   requestAnimationFrame(animate);
-  if (getRoute() === 'creator') {
-    updateCreatorPreviewTexture();
+  const route = getRoute();
+  if (route === 'creator') {
+    if (lastRouteForPreview !== 'creator') creatorPreviewDirty = true;
+    lastRouteForPreview = 'creator';
+    if (creatorPreviewDirty) {
+      updateCreatorPreviewTexture();
+      creatorPreviewDirty = false;
+    }
   } else {
+    lastRouteForPreview = route;
     const char = characters['runningboy'];
     if (char) {
       const allVisible = Object.fromEntries(LAYER_KEYS.map((k) => [k, true]));
@@ -679,7 +918,7 @@ function animate() {
   const delta = clock.getDelta();
   Object.values(characters).forEach((char) => char.mixer.update(delta));
   if (animationManager) animationManager.tick(delta);
-  if (getRoute() !== 'creator') characterAI?.update(delta);
+  if (getRoute() !== 'creator' && !creatorTransitionInFlight) characterAI?.update(delta);
   controls.update();
   renderer.render(scene, camera);
 }
@@ -776,6 +1015,12 @@ async function main() {
   camera = sceneContext.camera;
   renderer = sceneContext.renderer;
   controls = sceneContext.controls;
+  setupCreatorTransitionButton();
+  setupViewerTransitionButton();
+
+  if (getRoute() === 'creator') {
+    snapCameraToCreatorView();
+  }
 
   let skins: SkinEntry[];
   try {
@@ -874,6 +1119,8 @@ async function main() {
   });
 
   window.addEventListener('resize', onWindowResize);
+  initElectronStatus();
+  setupCreatorPreviewDirtySubscription();
   animate();
 }
 

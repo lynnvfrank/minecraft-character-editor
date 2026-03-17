@@ -324,14 +324,14 @@ export function buildColorPickerPanel(ctx: ColorPickerContext): void {
     const inInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
     if (inInput) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === 'z' || e.key === 'Z') {
+    if (e.key === 'z' || e.key === 'Z' || e.key === 'ArrowLeft') {
       if (activeSwatchIndex <= 0) return;
       e.preventDefault();
       activeSwatchIndex--;
       lastChangeFromPickerSwatchClick = true;
       ctx.applyColor(swatchColors[activeSwatchIndex]!);
       updateActiveSwatchUI();
-    } else if (e.key === 'c' || e.key === 'C') {
+    } else if (e.key === 'c' || e.key === 'C' || e.key === 'ArrowRight') {
       if (activeSwatchIndex >= SWATCH_COUNT - 1) return;
       e.preventDefault();
       activeSwatchIndex++;
