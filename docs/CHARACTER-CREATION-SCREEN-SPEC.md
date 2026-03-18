@@ -190,7 +190,7 @@ Users can **focus on** or **toggle visibility** of body parts. This supports:
 
 ### 3. Skin Gallery
 
-- **Gallery in creator** — Fetches `/skins/index.json` and displays skin thumbnails. Clicking a thumbnail loads that skin into the 2D editor.
+- **Gallery in creator** — Fetches `/wardrobe/skins/index.json` and displays skin thumbnails. Clicking a thumbnail loads that skin into the 2D editor.
 - **Load as undoable** — Loading a skin pushes a `load` command onto the undo stack (before/after `ImageData`). Undo/redo works for skin loads (Ctrl+Z / Ctrl+Shift+Z).
 - **64×64 and 64×32** — Handles both formats: 64×64 draws full image; 64×32 draws upper half, leaves jacket/sleeves/pants regions transparent.
 
@@ -571,7 +571,7 @@ A compact overlay in the lower-right of the view area shows, for both 2D and 3D:
 
 ### Save to Webapp (Local)
 
-**Options:** LocalStorage/IndexedDB; File System Access API; local backend (`POST /api/skin/save`); same-origin shared state. Recommended: local API that saves to `public/skins/custom/` and updates `skins/index.json`.
+**Options:** LocalStorage/IndexedDB; File System Access API; local backend (`POST /api/skin/save`); same-origin shared state. Recommended: local API that saves to `public/wardrobe/skins/custom/` and updates `wardrobe/skins/index.json`.
 
 ---
 
@@ -661,8 +661,8 @@ See [Hover Info Panel (2D and 3D)](#hover-info-panel-2d-and-3d) for the floating
 ### Phase 4: Save to Webapp
 
 - Backend `POST /api/skin/save`.
-- Save to `public/skins/custom/`.
-- Update `skins/index.json`.
+- Save to `public/wardrobe/skins/custom/`.
+- Update `wardrobe/skins/index.json`.
 
 ### Phase 5: Paint on 3D Model
 
@@ -740,7 +740,7 @@ The character creator merges with the app that displays the 3D viewer. Same app,
 | Color picker panel | Floating lower-right; SV + hue; 5-swatch bar (±20/±40 brightness); minimize |
 | Presets | Per-layer templates |
 | Randomize | One-click random presets |
-| Download / Save | PNG download; POST to API → `public/skins/custom/` |
+| Download / Save | PNG download; POST to API → `public/wardrobe/skins/custom/` |
 | Template overlay | Toggle in tools; region outlines; body/jacket 24x16; dead zones excluded |
 
 **Related documents:**

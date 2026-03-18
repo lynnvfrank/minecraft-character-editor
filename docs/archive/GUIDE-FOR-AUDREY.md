@@ -54,11 +54,11 @@ A web app that renders a Minecraft-style character in 3D with:
 | `vite.config.ts` | Vite config; uses `server/vite-plugin-api.js` for `/api/*` in dev |
 | `server/api.js` | API handlers: `/api/skin`, `/api/animation`, `/api/events` (SSE) |
 | `server/index.js` | Production Express server (serves `dist/` + API) |
-| `scripts/generate-skins-manifest.js` | Scans `public/skins/`, writes `public/skins/index.json` |
+| `scripts/generate-skins-manifest.js` | Scans `public/wardrobe/skins/`, writes `public/wardrobe/skins/index.json` |
 | `scripts/generate-animations-manifest.js` | Scans `public/animations/`, writes `public/animations/index.json` |
 | `docs/minecraft-skin-layout-specification.md` | Skin layout reference (regions, UVs, troubleshooting) |
 | `public/models/RunningboyRig.fbx` | Base character rig |
-| `public/skins/` | Skin PNGs (auto-discovered) |
+| `public/wardrobe/skins/` | Skin PNGs (auto-discovered) |
 | `public/animations/` | Animation FBX files (auto-discovered) |
 
 ---
@@ -71,9 +71,11 @@ A web app that renders a Minecraft-style character in 3D with:
 | Build | `npm run build` | Generate manifests, build to `dist/` |
 | Preview | `npm run preview` | Serve `dist/` with Vite (no API) |
 | Start (prod) | `npm run start` | Serve `dist/` with Express (includes API) |
-| Generate skins | `npm run generate-skins` | Rebuild `public/skins/index.json` |
+| Generate skins | `npm run generate-skins` | Rebuild `public/wardrobe/skins/index.json` |
 | Generate animations | `npm run generate-animations` | Rebuild `public/animations/index.json` |
-| Generate skin previews | `npm run generate-skin-previews` | Puppeteer: capture 3D previews for each skin |
+| Generate previews | `npm run generate-previews` | Puppeteer: capture 3D previews for skins and wardrobe parts |
+| Clear skin previews | `npm run clear-previews-skins` | Delete generated full-skin preview PNGs and clear preview fields from `public/wardrobe/skins/index.json` |
+| Clear wardrobe part previews | `npm run clear-previews-parts` | Delete generated wardrobe preview PNGs and clear preview fields from wardrobe part manifests |
 | Set skin | `npm run set-skin -- skin-anime1` | POST skin change to running dev server |
 | Set animation | `npm run set-animation -- happy` | POST animation change to running dev server |
 
@@ -87,7 +89,7 @@ The app exposes REST + SSE endpoints so you can change skin/animation from the C
 
 | Endpoint | Method | Query Param | Description |
 |----------|--------|-------------|-------------|
-| `/api/skin` | POST | `name` | Change skin by path (e.g. `/skins/skin-anime1.png`) or label |
+| `/api/skin` | POST | `name` | Change skin by path (e.g. `/wardrobe/skins/skin-anime1.png`) or label |
 | `/api/animation` | POST | `name` | Change animation by key (e.g. `happy`, `bored`) |
 | `/api/events` | GET | — | Server-Sent Events stream (skin/animation updates) |
 
@@ -145,7 +147,7 @@ Most of the project works the same on both. Differences to watch for:
 | **Environment variables** | `VAR=value command` works in bash/zsh | Use CMD: `set VAR=value` then run command; or PowerShell: `$env:VAR="value"; command` |
 | **Terminal** | Use Terminal, iTerm, or Cursor’s integrated terminal (usually bash/zsh) | Use CMD, PowerShell, or Git Bash. Git Bash behaves like Unix for `VAR=value` syntax |
 | **curl** | Built-in | Built-in on Windows 10/11; older Windows may need to install or use `Invoke-WebRequest` in PowerShell |
-| **Puppeteer** (`generate-skin-previews`) | Usually works out of the box | First run may take longer to download Chromium; antivirus can block it—add an exception if needed |
+| **Puppeteer** (`generate-previews`) | Usually works out of the box | First run may take longer to download Chromium; antivirus can block it—add an exception if needed |
 | **Line endings** | LF | Git with `core.autocrlf=true` (default on Windows) converts on checkout; usually fine |
 | **Paths in scripts** | `path.join()` is used throughout, so cross-platform |
 
@@ -158,7 +160,7 @@ All `npm run` commands (e.g. `npm run dev`, `npm run set-skin -- skin-anime1`) w
 ### Adding a New Skin
 
 1. Get or create a 64×64 PNG following the Minecraft skin layout (see `docs/minecraft-skin-layout-specification.md`).
-2. Put it in `public/skins/`, e.g. `public/skins/skin-mycustom.png`.
+2. Put it in `public/wardrobe/skins/`, e.g. `public/wardrobe/skins/skin-mycustom.png`.
 3. Run `npm run dev` (or `npm run generate-skins`) so the manifest is updated.
 4. The skin appears in the skin selector automatically.
 
@@ -174,10 +176,10 @@ All `npm run` commands (e.g. `npm run dev`, `npm run set-skin -- skin-anime1`) w
 Run:
 
 ```bash
-npm run generate-skin-previews
+npm run generate-previews
 ```
 
-This starts the dev server, uses Puppeteer to load each skin and capture a screenshot, then writes preview paths into `public/skins/index.json`. Requires Puppeteer (already in devDependencies).
+This starts the dev server, uses Puppeteer to load each skin and capture a screenshot, then writes preview paths into `public/wardrobe/skins/index.json`. Requires Puppeteer (already in devDependencies).
 
 ---
 
@@ -225,7 +227,7 @@ This starts the dev server, uses Puppeteer to load each skin and capture a scree
 | Skin looks wrong | Ensure 64×64 PNG; check layout in `docs/minecraft-skin-layout-specification.md`; try toggling skin preprocessing |
 | Animation doesn’t play | Use FBX Binary, same rig as RunningboyRig; ensure file is in `public/animations/` and manifest is regenerated |
 | Model tiny/invisible | FBX scale is 0.01 in code; check `model.scale.setScalar(0.01)` in `main.ts` |
-| New skin not showing | Run `npm run generate-skins`; confirm `public/skins/index.json` includes it |
+| New skin not showing | Run `npm run generate-skins`; confirm `public/wardrobe/skins/index.json` includes it |
 | New animation not showing | Run `npm run generate-animations`; confirm `public/animations/index.json` includes it |
 | API/SSE not working | In dev: Vite API plugin must be used (default). In prod: use `npm run start`, not `vite preview` |
 | `set-skin` / `set-animation` fail | Ensure dev server is running; check port (default 5173); try `API_BASE=http://localhost:5173` |
@@ -238,7 +240,7 @@ This starts the dev server, uses Puppeteer to load each skin and capture a scree
 - **Character:** Loaded as FBX, scaled 0.01, skin applied to meshes via `applySkinToModel`.
 - **Skin flow:** Load PNG → `preprocessSkinTexture` (primary regions: transparent → solid) → apply to model.
 - **Animations:** `FBXLoader` loads clips; `AnimationMixer` + `AnimationAction`; cross-fade via `fadeToAction`.
-- **Manifests:** `skins/index.json` and `animations/index.json` are generated by scripts; the app fetches them on startup.
+- **Manifests:** `wardrobe/skins/index.json` and `animations/index.json` are generated by scripts; the app fetches them on startup.
 - **API:** POST `/api/skin` and `/api/animation` broadcast via SSE; client subscribes to `/api/events` and updates the viewer in real time.
 
 ---

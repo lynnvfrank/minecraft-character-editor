@@ -35,7 +35,7 @@ A comprehensive, configurable logging system for troubleshooting the Minecraft 3
 |--------|---------|--------------|
 | **animation** | Clip playback, cross-fades, sequence steps, walk phases | "Fade to walking", "Sequence step: walkTo [0,0,1.2]", "Turn phase complete" |
 | **stateMachine** | Character AI state transitions, timers | "idle → wandering", "lastExplicitActivity 12.3s ago" |
-| **messaging** | Incoming/outgoing messages, socket events | "Received: skin /skins/x.png", "User message: hello" |
+| **messaging** | Incoming/outgoing messages, socket events | "Received: skin /wardrobe/skins/x.png", "User message: hello" |
 | **position** | Character position, facing, head | "pos (0.5, 0, -1.2) facing 45° head yaw 0.1" |
 | **renderer** | Frame rate, draw calls, camera | "FPS 60, drawCalls 42" (optional, verbose) |
 | **input** | User activity, clicks, keypresses | "User activity (explicit)", "Sequence button: greet-walk-happy" |

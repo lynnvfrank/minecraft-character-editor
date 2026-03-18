@@ -1,7 +1,7 @@
 /**
  * Shared catalog types for skins and animations.
  * Used by main.ts (viewer) and creator.ts (skin gallery).
- * Matches API response shapes: /skins/index.json, /animations/index.json.
+ * Matches API response shapes: /wardrobe/skins/index.json, /animations/index.json.
  */
 
 export type SkinEntry = {

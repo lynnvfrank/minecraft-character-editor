@@ -31,3 +31,15 @@ export {
   resetCameraFor2DPreview,
   type Creator3DPaintDeps
 } from './controls';
+
+export {
+  WARDROBE_PART_PREVIEW_PRESETS,
+  PREVIEW_PRESET_KEYS,
+  getPreviewPreset,
+  getPreviewPresetLabel,
+  isPreviewPresetKey,
+  type PreviewPreset,
+  type PreviewPresetKey,
+  type PreviewVector,
+  type PreviewViewport,
+} from './previewPresets';

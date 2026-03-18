@@ -98,7 +98,7 @@ How to manage the character creator skin state, preserve it when switching betwe
 
 ### 4. URL / Query Params
 
-- `?skin=/skins/custom/my-skin.png` — Viewer reads on load; creator can link to "view this skin."
+- `?skin=/wardrobe/skins/custom/my-skin.png` — Viewer reads on load; creator can link to "view this skin."
 - Limited size; good for current skin path only.
 
 ### 5. Shared Store (Singleton)
@@ -140,7 +140,7 @@ How to manage the character creator skin state, preserve it when switching betwe
 
 1. User edits in creator.
 2. User clicks "Save" or "Apply" → `canvas.toBlob` → POST to `/api/skin/save` or pass to store.
-3. Server saves to `public/skins/custom/{id}.png`; updates manifest.
+3. Server saves to `public/wardrobe/skins/custom/{id}.png`; updates manifest.
 4. Store emits `skinUpdated` or viewer polls/refreshes skin list.
 5. Viewer calls `switchSkin(newPath)` — character texture updates.
 6. Optional: navigate to viewer automatically after save.

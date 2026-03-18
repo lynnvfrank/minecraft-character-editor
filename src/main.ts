@@ -6,6 +6,7 @@ import {
   loadSkinFromPath,
   getCreatorCanvasPopulated,
   getEditMode,
+  setEditMode,
   getCreatorWorkSize,
   getLayer3DVisible,
   setActiveTool,
@@ -13,6 +14,11 @@ import {
   unregisterCreatorShortcuts,
 } from './creator';
 import { preprocessSkinTexture } from './skinPreprocess';
+import {
+  ensurePreviewCameraPanel,
+  removePreviewCameraPanel,
+  updatePreviewCameraInfo,
+} from './previewCameraPanel';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { createSocketManager } from './socketManager';
@@ -24,7 +30,8 @@ import { initElectronStatus } from './electronStatus';
 import { logger } from './logger';
 import { setFacingLogContextProvider } from './debugFacing';
 import { subscribe, CREATOR_EVENTS } from './creatorEvents';
-import { SKIN_LAYER_BOUNDS, LAYER_KEYS, TEXTURE_LAYER_KEYS } from './skinLayout';
+import { SKIN_LAYER_BOUNDS, LAYER_KEYS, TEXTURE_LAYER_KEYS, type LayerKey } from './skinLayout';
+import { EDIT_MODE_3D, EDIT_MODE_2D, EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
 import type { SkinEntry, AnimationEntry } from './types/catalog';
 import {
   initScene as initViewerScene,
@@ -37,12 +44,15 @@ import {
   setupCreator3DPaint,
   updateOrbitControlsForEditMode,
   recreateOrbitControls,
+  getPreviewPreset,
+  isPreviewPresetKey,
+  type PreviewPresetKey,
   type TexturePreset,
   type AlphaMode
 } from './viewer';
 
 const FALLBACK_SKINS: SkinEntry[] = [
-  { path: '/skins/RunningboyRig.png', label: 'Default' }
+  { path: '/wardrobe/skins/RunningboyRig.png', label: 'Default' }
 ];
 
 const FALLBACK_ANIMATIONS: AnimationEntry[] = [
@@ -85,7 +95,12 @@ const USE_DEBUG_TEXTURE = false;
 const LOG_MODEL_INFO = false;
 
 const params = typeof window !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+const DEFAULT_SCENE_FOV = Number.parseFloat(params.get('fov') || '45');
 const isTestMode = params.get('movementcontrols') === '1';
+const SHOW_PREVIEW_CAMERA_CONTROLS = (() => {
+  const value = (params.get('previewcontrols') ?? params.get('previewControls') ?? '').toLowerCase();
+  return value === '1' || value === 'true' || value === 'on';
+})();
 
 const TURN_STRATEGIES: TurnStrategy[] = ['lerp', 'snap', 'reset'];
 function parseTurnStrategy(p: URLSearchParams): TurnStrategy {
@@ -104,12 +119,111 @@ const CREATOR_TARGET_OFFSET_FROM_CHARACTER = CREATOR_CAMERA_TARGET
   .clone()
   .sub(CREATOR_REFERENCE_CHARACTER_POSITION);
 let creatorTransitionInFlight = false;
+type AppRoute = 'creator' | 'viewer' | 'preview';
+type RouteInfo = { route: AppRoute; creatorMode: EditMode | null };
+let lastAppliedRouteInfo: RouteInfo | null = null;
+type PreviewRoutePartKey = Exclude<PreviewPresetKey, 'fullOutfit'>;
+type PreviewRouteStateInput = {
+  skin?: string | null;
+  skinPath?: string | null;
+  baseSkin?: string | null;
+  baseSkinPath?: string | null;
+  part?: string | null;
+  cameraPreset?: string | null;
+};
+type PreviewRouteInfo = {
+  skinPath: string | null;
+  baseSkinPath: string | null;
+  part: PreviewRoutePartKey | null;
+  cameraPreset: PreviewPresetKey;
+  signature: string;
+};
+type PreviewCaptureRuntimeApi = {
+  waitUntilReady: (timeoutMs?: number) => Promise<void>;
+  setPreviewState: (state: PreviewRouteStateInput) => Promise<PreviewRouteInfo>;
+  clearPreviewStateOverride: () => void;
+  getPreviewState: () => PreviewRouteInfo;
+};
+const PREVIEW_BASE_SKIN_CANDIDATES = ['/wardrobe/skins/skin-base.png', FALLBACK_SKINS[0]?.path].filter(Boolean) as string[];
 
-/** Hash-based routing: #/creator = character creator, #/ or #/home = viewer */
-function getRoute(): 'creator' | 'viewer' {
+/** Hash-based routing: #/creator/<mode>, #/preview, #/ or #/home */
+function getRouteInfo(): RouteInfo {
   const hash = (location.hash || '#/').toLowerCase().replace(/\/$/, '') || '#/';
-  if (hash === '#/creator') return 'creator';
-  return 'viewer';
+  if (hash === '#/preview') {
+    return { route: 'preview', creatorMode: null };
+  }
+  if (hash === '#/creator' || hash.startsWith('#/creator/')) {
+    const modeSegment = hash.slice('#/creator/'.length);
+    const creatorMode = modeSegment === EDIT_MODE_2D || modeSegment === EDIT_MODE_WARDROBE || modeSegment === EDIT_MODE_3D
+      ? modeSegment
+      : EDIT_MODE_3D;
+    return { route: 'creator', creatorMode };
+  }
+  return { route: 'viewer', creatorMode: null };
+}
+
+function getRoute(): AppRoute {
+  return getRouteInfo().route;
+}
+
+function getCreatorHash(mode: EditMode = EDIT_MODE_3D): string {
+  return `#/creator/${mode}`;
+}
+
+function normalizePreviewAssetPath(path: string | null): string | null {
+  if (!path) return null;
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function buildPreviewRouteInfo(source: {
+  skinPath?: string | null;
+  baseSkinPath?: string | null;
+  part?: string | null;
+  cameraPreset?: string | null;
+}): PreviewRouteInfo {
+  const part = isPreviewPresetKey(source.part) && source.part !== 'fullOutfit' ? source.part : null;
+  const cameraPreset = isPreviewPresetKey(source.cameraPreset)
+    ? source.cameraPreset
+    : (part ?? 'fullOutfit');
+  const skinPath = normalizePreviewAssetPath(source.skinPath ?? null);
+  const baseSkinPath = normalizePreviewAssetPath(source.baseSkinPath ?? null);
+  return {
+    skinPath,
+    baseSkinPath,
+    part,
+    cameraPreset,
+    signature: JSON.stringify({
+      skinPath,
+      baseSkinPath,
+      part,
+      cameraPreset,
+    }),
+  };
+}
+
+let previewRouteOverride: PreviewRouteInfo | null = null;
+
+function setPreviewRouteOverride(state: PreviewRouteStateInput | null): void {
+  if (!state) {
+    previewRouteOverride = null;
+    return;
+  }
+  previewRouteOverride = buildPreviewRouteInfo({
+    skinPath: state.skinPath ?? state.skin ?? null,
+    baseSkinPath: state.baseSkinPath ?? state.baseSkin ?? null,
+    part: state.part ?? null,
+    cameraPreset: state.cameraPreset ?? null,
+  });
+}
+
+function getPreviewRouteInfo(): PreviewRouteInfo {
+  if (previewRouteOverride) return previewRouteOverride;
+  return buildPreviewRouteInfo({
+    skinPath: params.get('skin'),
+    baseSkinPath: params.get('baseSkin'),
+    part: params.get('part'),
+    cameraPreset: params.get('cameraPreset'),
+  });
 }
 
 const characters: Record<string, CharacterState> = {};
@@ -288,7 +402,7 @@ async function transitionViewerToCreator() {
     });
     await animateCameraToCreatorView(pose);
     logTransition('camera-move-end', { elapsedMs: Math.round(performance.now() - transitionStart) });
-    location.hash = '#/creator';
+    location.hash = getCreatorHash(getEditMode());
   } finally {
     creatorTransitionInFlight = false;
     updateRouteButtonsState();
@@ -362,9 +476,28 @@ function ensureViewerFullWidthLayout() {
 }
 
 function applyRoute(): void {
-  const route = getRoute();
+  const routeInfo = getRouteInfo();
+  const route = routeInfo.route;
   document.body.dataset.route = route;
   if (route === 'creator') {
+    removePreviewPanelsContainer();
+    setPreviewRouteOverride(null);
+    activePreviewCameraPreset = null;
+    lastAppliedPreviewSignature = null;
+    restoreDefaultCameraFov();
+    const desiredMode = routeInfo.creatorMode ?? EDIT_MODE_3D;
+    if (lastAppliedRouteInfo?.route === 'creator') {
+      if (getEditMode() !== desiredMode) {
+        setEditMode(desiredMode, { syncUrl: false });
+        updateCreator3DViewPlacement();
+      }
+      updateRouteButtonsState();
+      lastAppliedRouteInfo = routeInfo;
+      return;
+    }
+    if (getEditMode() !== desiredMode) {
+      setEditMode(desiredMode, { syncUrl: false });
+    }
     lockCharacterToCreatorIdle();
     initCreator();
     // Re-apply creator layout for current mode (especially when returning in 2D).
@@ -384,12 +517,26 @@ function applyRoute(): void {
         }
       }
     }, 0);
+  } else if (route === 'preview') {
+    unregisterCreatorShortcuts();
+    ensureViewerFullWidthLayout();
+    lockCharacterToCreatorIdle();
+    window.setTimeout(() => {
+      void syncPreviewRouteState();
+      window.dispatchEvent(new Event('resize'));
+    }, 0);
   } else {
     unregisterCreatorShortcuts();
     ensureViewerFullWidthLayout();
+    removePreviewPanelsContainer();
+    setPreviewRouteOverride(null);
+    activePreviewCameraPreset = null;
+    lastAppliedPreviewSignature = null;
+    restoreDefaultCameraFov();
     resumeHomeMode();
   }
   updateRouteButtonsState();
+  lastAppliedRouteInfo = routeInfo;
 }
 
 const container = document.getElementById('three-canvas-container');
@@ -412,7 +559,10 @@ let sequencesList: Sequence[] = [];
 let socketManager: ReturnType<typeof createSocketManager> | null = null;
 let characterAI: ReturnType<typeof createCharacterAI> | null = null;
 
-applyRoute();
+// Defer initial routing until after module evaluation finishes.
+// `applyRoute()` may touch preview-related vars/functions that are declared later in this file,
+// and deferring avoids temporal-dead-zone runtime errors during initial load.
+window.setTimeout(() => applyRoute(), 0);
 window.addEventListener('hashchange', applyRoute);
 
 /** Debug: pause animation loop (used when ?movementcontrols=1). */
@@ -546,6 +696,12 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
               setupAnimationButtons(animationsList);
               setupSkinPreviews(skins);
               setupSequenceButtons(sequencesList);
+            }
+
+            if (getRoute() === 'preview') {
+              window.setTimeout(() => {
+                void syncPreviewRouteState();
+              }, 0);
             }
           }
         };
@@ -789,25 +945,108 @@ let lastRouteForPreview = '';
 let lastCreatorLoadedPath: string | null = null;
 let creatorOverlayCanvas: HTMLCanvasElement | null = null;
 let creatorOverlayTexture: THREE.CanvasTexture | null = null;
+let previewRouteCanvas: HTMLCanvasElement | null = null;
+let previewRouteTexture: THREE.CanvasTexture | null = null;
+let lastAppliedPreviewSignature: string | null = null;
+let previewRouteSyncToken = 0;
+const previewImageCache = new Map<string, Promise<HTMLImageElement>>();
+let activePreviewCameraPreset: PreviewPresetKey | null = null;
+let lastPreviewCameraPanelSignature = '';
 
-/** Build visibility texture: copy skin, zero alpha for hidden layer regions. Apply to all meshes. */
-function buildVisibilityTexture(
-  skinCanvas: HTMLCanvasElement,
-  layerVisible: Record<string, boolean>
-): THREE.Texture {
-  const workSize = getCreatorWorkSize();
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+async function waitForPreviewSceneReady(timeoutMs: number = 30000): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    if (getRoute() === 'preview' && !!characters['runningboy'] && !!camera && !!controls) {
+      return;
+    }
+    await sleep(50);
+  }
+  throw new Error('Preview scene did not become ready in time');
+}
+
+function getPreferredPreviewBaseSkinPath(): string | null {
+  for (const candidate of PREVIEW_BASE_SKIN_CANDIDATES) {
+    if (skinsList.some((skin) => skin.path === candidate)) return candidate;
+  }
+  return skinsList[0]?.path ?? FALLBACK_SKINS[0]?.path ?? null;
+}
+
+function ensurePreviewPanelsContainer(): HTMLElement | null {
+  const wrapper = document.getElementById('creator-view-wrapper');
+  if (!wrapper) return null;
+
+  let container = document.getElementById('preview-lower-right-panels');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'preview-lower-right-panels';
+    container.className = 'preview-lower-right-panels';
+    wrapper.appendChild(container);
+  }
+
+  let group = document.getElementById('preview-right-panels-group');
+  if (!group) {
+    group = document.createElement('div');
+    group.id = 'preview-right-panels-group';
+    group.className = 'preview-right-panels-group';
+    container.appendChild(group);
+  }
+
+  return group;
+}
+
+function removePreviewPanelsContainer(): void {
+  removePreviewCameraPanel();
+  document.getElementById('preview-lower-right-panels')?.remove();
+  lastPreviewCameraPanelSignature = '';
+}
+
+function buildLayerVisibleState(visibleLayers: readonly LayerKey[]): Record<string, boolean> {
+  const visibleSet = new Set<string>(visibleLayers);
+  return Object.fromEntries(LAYER_KEYS.map((layer) => [layer, visibleSet.has(layer)]));
+}
+
+function loadPreviewImage(path: string): Promise<HTMLImageElement> {
+  const cached = previewImageCache.get(path);
+  if (cached) return cached;
+  const pending = new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load preview image: ${path}`));
+    img.src = path;
+  });
+  previewImageCache.set(path, pending);
+  return pending;
+}
+
+function getImageSourceSize(source: HTMLCanvasElement | HTMLImageElement): number {
+  if (source instanceof HTMLCanvasElement) return source.width;
+  return source.naturalWidth || source.width || 64;
+}
+
+function buildLayerMaskedCanvas(
+  source: HTMLCanvasElement | HTMLImageElement,
+  layerVisible: Record<string, boolean>,
+  workSize: number
+): HTMLCanvasElement | null {
+  const sourceSize = getImageSourceSize(source);
+  if (!sourceSize) return null;
   const scale = workSize / 64;
 
-  if (!creatorOverlayCanvas || creatorOverlayCanvas.width !== workSize) {
+  if (!creatorOverlayCanvas || creatorOverlayCanvas.width !== workSize || creatorOverlayCanvas.height !== workSize) {
     creatorOverlayCanvas = document.createElement('canvas');
     creatorOverlayCanvas.width = workSize;
     creatorOverlayCanvas.height = workSize;
   }
   const ctx = creatorOverlayCanvas.getContext('2d');
-  if (!ctx) return creatorPreviewTexture!;
+  if (!ctx) return null;
 
   ctx.clearRect(0, 0, workSize, workSize);
-  ctx.drawImage(skinCanvas, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(source, 0, 0, sourceSize, sourceSize, 0, 0, workSize, workSize);
   const imageData = ctx.getImageData(0, 0, workSize, workSize);
   const data = imageData.data;
 
@@ -829,9 +1068,20 @@ function buildVisibilityTexture(
     }
   }
   ctx.putImageData(imageData, 0, 0);
+  return creatorOverlayCanvas;
+}
+
+/** Build visibility texture: copy skin, zero alpha for hidden layer regions. Apply to all meshes. */
+function buildVisibilityTexture(
+  skinCanvas: HTMLCanvasElement,
+  layerVisible: Record<string, boolean>
+): THREE.Texture {
+  const workSize = getCreatorWorkSize();
+  const maskedCanvas = buildLayerMaskedCanvas(skinCanvas, layerVisible, workSize);
+  if (!maskedCanvas) return creatorPreviewTexture!;
 
   if (!creatorOverlayTexture) {
-    creatorOverlayTexture = new THREE.CanvasTexture(creatorOverlayCanvas);
+    creatorOverlayTexture = new THREE.CanvasTexture(maskedCanvas);
     creatorOverlayTexture.colorSpace = THREE.SRGBColorSpace;
     creatorOverlayTexture.magFilter = THREE.NearestFilter;
     creatorOverlayTexture.minFilter = THREE.NearestFilter;
@@ -839,9 +1089,204 @@ function buildVisibilityTexture(
     creatorOverlayTexture.wrapS = creatorOverlayTexture.wrapT = THREE.ClampToEdgeWrapping;
     creatorOverlayTexture.flipY = true;
   }
-  creatorOverlayTexture.source.data = creatorOverlayCanvas;
+  creatorOverlayTexture.source.data = maskedCanvas;
   creatorOverlayTexture.needsUpdate = true;
   return creatorOverlayTexture;
+}
+
+function composePreviewSkinCanvas(
+  baseImage: HTMLImageElement | null,
+  skinImage: HTMLImageElement,
+  part: PreviewRoutePartKey | null
+): HTMLCanvasElement {
+  if (!previewRouteCanvas) {
+    previewRouteCanvas = document.createElement('canvas');
+    previewRouteCanvas.width = 64;
+    previewRouteCanvas.height = 64;
+  }
+  const ctx = previewRouteCanvas.getContext('2d');
+  if (!ctx) return previewRouteCanvas;
+
+  ctx.clearRect(0, 0, 64, 64);
+  ctx.imageSmoothingEnabled = false;
+
+  if (baseImage) {
+    const baseSize = baseImage.naturalWidth || baseImage.width || 64;
+    ctx.drawImage(baseImage, 0, 0, baseSize, baseSize, 0, 0, 64, 64);
+  }
+
+  const skinSize = skinImage.naturalWidth || skinImage.width || 64;
+  if (!part) {
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.drawImage(skinImage, 0, 0, skinSize, skinSize, 0, 0, 64, 64);
+    return previewRouteCanvas;
+  }
+
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = 64;
+  sourceCanvas.height = 64;
+  const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+  if (!sourceCtx) return previewRouteCanvas;
+  sourceCtx.imageSmoothingEnabled = false;
+  sourceCtx.drawImage(skinImage, 0, 0, skinSize, skinSize, 0, 0, 64, 64);
+
+  const bounds = SKIN_LAYER_BOUNDS[part] ?? [];
+  bounds.forEach((rect) => {
+    const partImageData = sourceCtx.getImageData(rect.x, rect.y, rect.w, rect.h);
+    ctx.putImageData(partImageData, rect.x, rect.y);
+  });
+  return previewRouteCanvas;
+}
+
+function applyPreviewTextureFromCanvas(char: CharacterState, canvas: HTMLCanvasElement, skinPath: string): void {
+  if (!previewRouteTexture) {
+    previewRouteTexture = new THREE.CanvasTexture(canvas);
+    previewRouteTexture.colorSpace = THREE.SRGBColorSpace;
+    previewRouteTexture.magFilter = THREE.NearestFilter;
+    previewRouteTexture.minFilter = THREE.NearestFilter;
+    previewRouteTexture.generateMipmaps = false;
+    previewRouteTexture.wrapS = previewRouteTexture.wrapT = THREE.ClampToEdgeWrapping;
+    previewRouteTexture.flipY = true;
+  }
+  previewRouteTexture.source.data = canvas;
+  previewRouteTexture.needsUpdate = true;
+  applySkinToModel(char.model, previewRouteTexture, char.texturePreset, char.alphaMode, skinPath);
+  char.currentSkin = skinPath;
+}
+
+function applyPreviewCameraPreset(previewInfo: PreviewRouteInfo): void {
+  if (!camera || !controls) return;
+  const preset = getPreviewPreset(previewInfo.cameraPreset);
+  camera.position.set(preset.cameraPosition.x, preset.cameraPosition.y, preset.cameraPosition.z);
+  controls.target.set(preset.cameraTarget.x, preset.cameraTarget.y, preset.cameraTarget.z);
+  camera.fov = preset.fov ?? DEFAULT_SCENE_FOV;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+function updatePreviewCameraDebugPanel(): void {
+  if (!SHOW_PREVIEW_CAMERA_CONTROLS || getRoute() !== 'preview' || !camera || !controls) return;
+  if (activePreviewCameraPreset) {
+    const preset = getPreviewPreset(activePreviewCameraPreset);
+    const matchesPreset =
+      Math.abs(camera.position.x - preset.cameraPosition.x) < 0.0005 &&
+      Math.abs(camera.position.y - preset.cameraPosition.y) < 0.0005 &&
+      Math.abs(camera.position.z - preset.cameraPosition.z) < 0.0005 &&
+      Math.abs(controls.target.x - preset.cameraTarget.x) < 0.0005 &&
+      Math.abs(controls.target.y - preset.cameraTarget.y) < 0.0005 &&
+      Math.abs(controls.target.z - preset.cameraTarget.z) < 0.0005 &&
+      Math.abs(camera.fov - (preset.fov ?? DEFAULT_SCENE_FOV)) < 0.0005;
+    if (!matchesPreset) {
+      activePreviewCameraPreset = null;
+    }
+  }
+  const signature = [
+    activePreviewCameraPreset ?? 'custom',
+    camera.position.x.toFixed(3),
+    camera.position.y.toFixed(3),
+    camera.position.z.toFixed(3),
+    controls.target.x.toFixed(3),
+    controls.target.y.toFixed(3),
+    controls.target.z.toFixed(3),
+    camera.fov.toFixed(3),
+  ].join('|');
+  if (signature === lastPreviewCameraPanelSignature) return;
+  lastPreviewCameraPanelSignature = signature;
+  updatePreviewCameraInfo({
+    activePreset: activePreviewCameraPreset,
+    position: camera.position,
+    target: controls.target,
+    fov: camera.fov,
+  });
+}
+
+function ensurePreviewCameraDebugPanel(previewInfo: PreviewRouteInfo): void {
+  if (!SHOW_PREVIEW_CAMERA_CONTROLS || getRoute() !== 'preview') {
+    removePreviewPanelsContainer();
+    return;
+  }
+  const container = ensurePreviewPanelsContainer();
+  if (!container) return;
+  ensurePreviewCameraPanel({
+    container,
+    activePreset: activePreviewCameraPreset ?? previewInfo.cameraPreset,
+    onSelectPreset: (preset) => {
+      activePreviewCameraPreset = preset;
+      applyPreviewCameraPreset({ ...previewInfo, cameraPreset: preset });
+      updatePreviewCameraDebugPanel();
+    },
+  });
+  updatePreviewCameraDebugPanel();
+}
+
+function restoreDefaultCameraFov(): void {
+  if (!camera) return;
+  if (camera.fov === DEFAULT_SCENE_FOV) return;
+  camera.fov = DEFAULT_SCENE_FOV;
+  camera.updateProjectionMatrix();
+}
+
+function installPreviewCaptureRuntimeApi(): void {
+  const host = window as Window & typeof globalThis & {
+    __previewCapture?: PreviewCaptureRuntimeApi;
+  };
+  host.__previewCapture = {
+    waitUntilReady: async (timeoutMs?: number) => {
+      await waitForPreviewSceneReady(timeoutMs);
+    },
+    setPreviewState: async (state: PreviewRouteStateInput) => {
+      await waitForPreviewSceneReady();
+      setPreviewRouteOverride(state);
+      const previewInfo = getPreviewRouteInfo();
+      await syncPreviewRouteState();
+      await nextAnimationFrame();
+      await nextAnimationFrame();
+      return previewInfo;
+    },
+    clearPreviewStateOverride: () => {
+      setPreviewRouteOverride(null);
+      lastAppliedPreviewSignature = null;
+    },
+    getPreviewState: () => getPreviewRouteInfo(),
+  };
+}
+
+async function syncPreviewRouteState(): Promise<void> {
+  if (getRoute() !== 'preview') return;
+  const char = characters['runningboy'];
+  if (!char || !camera || !controls) return;
+
+  const previewInfo = getPreviewRouteInfo();
+  activePreviewCameraPreset = previewInfo.cameraPreset;
+  applyPreviewCameraPreset(previewInfo);
+  ensurePreviewCameraDebugPanel(previewInfo);
+
+  if (!previewInfo.skinPath) {
+    lastAppliedPreviewSignature = previewInfo.signature;
+    return;
+  }
+  if (lastAppliedPreviewSignature === previewInfo.signature) return;
+
+  const token = ++previewRouteSyncToken;
+  const preset = getPreviewPreset(previewInfo.cameraPreset);
+  const layerVisible = buildLayerVisibleState(preset.visibleLayers);
+  const baseSkinPath = previewInfo.part
+    ? (previewInfo.baseSkinPath ?? getPreferredPreviewBaseSkinPath())
+    : previewInfo.baseSkinPath;
+
+  const [skinImage, baseImage] = await Promise.all([
+    loadPreviewImage(previewInfo.skinPath),
+    baseSkinPath ? loadPreviewImage(baseSkinPath).catch(() => null) : Promise.resolve(null),
+  ]);
+  if (token !== previewRouteSyncToken) return;
+
+  const composedCanvas = composePreviewSkinCanvas(baseImage, skinImage, previewInfo.part);
+  const maskedCanvas = buildLayerMaskedCanvas(composedCanvas, layerVisible, 64) ?? composedCanvas;
+  if (token !== previewRouteSyncToken) return;
+
+  applyPreviewTextureFromCanvas(char, maskedCanvas, previewInfo.skinPath);
+  applyCreatorLayerVisibility(char.model, layerVisible);
+  lastAppliedPreviewSignature = previewInfo.signature;
 }
 
 function updateCreator3DViewPlacement() {
@@ -919,6 +1364,9 @@ function animate() {
       updateCreatorPreviewTexture();
       creatorPreviewDirty = false;
     }
+  } else if (route === 'preview') {
+    lastRouteForPreview = 'preview';
+    updatePreviewCameraDebugPanel();
   } else {
     lastRouteForPreview = route;
     const char = characters['runningboy'];
@@ -931,7 +1379,7 @@ function animate() {
   const delta = clock.getDelta();
   Object.values(characters).forEach((char) => char.mixer.update(delta));
   if (animationManager) animationManager.tick(delta);
-  if (getRoute() !== 'creator' && !creatorTransitionInFlight) characterAI?.update(delta);
+  if (getRoute() === 'viewer' && !creatorTransitionInFlight) characterAI?.update(delta);
   controls.update();
   renderer.render(scene, camera);
 }
@@ -1033,11 +1481,16 @@ async function main() {
 
   if (getRoute() === 'creator') {
     snapCameraToCreatorView();
+  } else if (getRoute() === 'preview') {
+    const previewInfo = getPreviewRouteInfo();
+    activePreviewCameraPreset = previewInfo.cameraPreset;
+    applyPreviewCameraPreset(previewInfo);
+    ensurePreviewCameraDebugPanel(previewInfo);
   }
 
   let skins: SkinEntry[];
   try {
-    const res = await fetch('/skins/index.json');
+    const res = await fetch('/wardrobe/skins/index.json');
     const data = await res.json();
     skins = Array.isArray(data) && data.length > 0 ? data : FALLBACK_SKINS;
   } catch {
@@ -1113,7 +1566,7 @@ async function main() {
     });
   }
 
-  const initialSkin = skins[Math.floor(Math.random() * skins.length)]!;
+  const initialSkin = skins.find((skin) => skin.path === FALLBACK_SKINS[0]?.path) ?? skins[0]!;
   const config = buildCharacterConfig(initialSkin.path, animations);
   loadCharacter(config, skins);
   if (getRoute() === 'creator') {
@@ -1134,6 +1587,7 @@ async function main() {
   window.addEventListener('resize', onWindowResize);
   initElectronStatus();
   setupCreatorPreviewDirtySubscription();
+  installPreviewCaptureRuntimeApi();
   animate();
 }
 

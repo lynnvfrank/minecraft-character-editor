@@ -102,7 +102,7 @@ This app is a **Minecraft 3D character viewer and character creator**. It render
 
 - `public/models/` — RunningboyRig.fbx
 - `public/animations/` — Mixamo FBX files (auto-indexed via `scripts/generate-animations-manifest.js`)
-- `public/skins/` — 64×64 PNG skins (auto-indexed via `scripts/generate-skins-manifest.js`)
+- `public/wardrobe/skins/` — 64×64 PNG skins (auto-indexed via `scripts/generate-skins-manifest.js`)
 - `public/sequences/` — `index.json` for composite sequences
 
 These must be bundled in app resources and served correctly (e.g. from `app.get('/', ...)` or static middleware).

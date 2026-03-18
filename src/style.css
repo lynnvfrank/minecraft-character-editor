@@ -56,7 +56,9 @@ body[data-route="creator"] #app {
   min-height: 0;
 }
 body[data-route="creator"] #controls-bar,
-body[data-route="creator"] #test-controls {
+body[data-route="creator"] #test-controls,
+body[data-route="preview"] #controls-bar,
+body[data-route="preview"] #test-controls {
   display: none !important;
 }
 
@@ -100,17 +102,20 @@ body[data-route="creator"][data-edit-mode="wardrobe"] .creator-canvas-area {
 }
 
 /* Viewer route: creator-panel hidden, wrapper and app fill space */
-body[data-route="viewer"] {
+body[data-route="viewer"],
+body[data-route="preview"] {
   display: flex;
   flex-direction: column;
 }
-body[data-route="viewer"] #creator-view-wrapper {
+body[data-route="viewer"] #creator-view-wrapper,
+body[data-route="preview"] #creator-view-wrapper {
   display: flex !important;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
 }
-body[data-route="viewer"] .creator-canvas-area {
+body[data-route="viewer"] .creator-canvas-area,
+body[data-route="preview"] .creator-canvas-area {
   display: none !important;
 }
 
@@ -523,6 +528,18 @@ body[data-route="creator"] .creator-left-panels {
   flex-direction: column;
   gap: 0.5rem;
 }
+
+.creator-upper-right-panels-root {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
+  width: 250px;
+}
+body[data-route="creator"] .creator-upper-right-panels-root {
+  display: flex;
+}
 body[data-route="creator"] .creator-upper-left-panels {
   animation: creator-slide-in-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -591,11 +608,13 @@ body[data-creator-exiting="1"] .creator-upper-left-panels {
 body[data-route="viewer"] .app-lower-left-panels {
   display: block;
 }
-body[data-route="creator"] .app-lower-left-panels {
+body[data-route="creator"] .app-lower-left-panels,
+body[data-route="preview"] .app-lower-left-panels {
   display: none;
 }
 
-.creator-load-skins-panel {
+.creator-wardrobe-library-panel,
+.creator-wardrobe-outfits-panel {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -606,21 +625,85 @@ body[data-route="creator"] .app-lower-left-panels {
   font-size: 0.85rem;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
-.creator-load-skins-header {
+
+.creator-wardrobe-parts-panel {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.creator-wardrobe-parts-btn {
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.creator-wardrobe-parts-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.creator-wardrobe-parts-btn.active {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+.creator-wardrobe-library-header,
+.creator-wardrobe-outfits-header {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
   font-size: 0.8rem;
   margin-bottom: 0.5rem;
 }
-.creator-load-skins-panel .creator-skin-selector {
+.creator-wardrobe-library-selector,
+.creator-wardrobe-outfits-panel .creator-skin-selector {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
-.creator-load-skins-panel .creator-skin-selector .skin-preview {
+.creator-wardrobe-library-item,
+.creator-wardrobe-outfits-panel .creator-skin-selector .skin-preview {
   width: 48px;
   height: 48px;
+  outline: none;
+}
+.creator-wardrobe-library-item.active,
+.creator-wardrobe-outfits-panel .creator-skin-selector .skin-preview.active {
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.9);
+  border-radius: 4px;
+}
+.creator-wardrobe-library-item:focus-visible,
+.creator-wardrobe-outfits-panel .creator-skin-selector .skin-preview:focus-visible {
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.9);
+  border-radius: 4px;
+}
+.creator-wardrobe-library-item-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.92);
+}
+.creator-wardrobe-library-item-none-label {
+  font-size: 0.72rem;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .creator-home-panel {
@@ -672,6 +755,20 @@ body[data-creator-exiting="1"] .creator-lower-right-panels {
   animation: creator-slide-out-right 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+.preview-lower-right-panels {
+  display: none;
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+body[data-route="preview"] .preview-lower-right-panels {
+  display: flex;
+}
+
 /* Right panels group — wraps all lower-right panels for logical grouping and drag-drop safety */
 .creator-right-panels-group {
   display: flex;
@@ -683,6 +780,97 @@ body[data-creator-exiting="1"] .creator-lower-right-panels {
   border-radius: 10px;
   padding: 0.5rem;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.preview-right-panels-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  background: rgba(12, 16, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  width: 260px;
+}
+
+.preview-camera-panel,
+.preview-camera-info-panel {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.preview-camera-panel-title,
+.preview-camera-info-title {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.preview-camera-button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.preview-camera-preset-btn {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.preview-camera-preset-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.preview-camera-preset-btn.active {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.preview-camera-info-panel {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.preview-camera-info-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.preview-camera-info-line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.preview-camera-info-label {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.preview-camera-info-value {
+  color: rgba(255, 255, 255, 0.94);
+  word-break: break-word;
 }
 
 /* Layers panel — upper-left, visible in 2D and 3D only, animates in from left */
@@ -1378,7 +1566,8 @@ body[data-creator-exiting="1"] .creator-tools-panel:not(.creator-mode-anim-in-to
   cursor: wait;
 }
 
-body[data-route="viewer"] .floating-home-btn {
+body[data-route="viewer"] .floating-home-btn,
+body[data-route="preview"] .floating-home-btn {
   display: none;
 }
 
@@ -1516,8 +1705,9 @@ body[data-route="viewer"] .floating-home-btn {
   border-radius: 4px;
 }
 .nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
-body[data-route="creator"] a.nav-link[href="#/creator"] { color: #6db; font-weight: 600; }
+body[data-route="creator"] a.nav-link[href^="#/creator"] { color: #6db; font-weight: 600; }
 body[data-route="viewer"] a.nav-link[href="#/"] { color: #6db; font-weight: 600; }
+body[data-route="preview"] a.nav-link[href="#/preview"] { color: #6db; font-weight: 600; }
 
 .skin-control-group {
   flex-shrink: 0;

@@ -34,12 +34,7 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'rulers', title: 'Toggle rulers' }, 'Rulers'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'template', title: 'Show template overlay' }, 'Template')
   );
-  const loadSkinsPanel = document.getElementById('creator-load-skins-panel');
-  if (loadSkinsPanel) {
-    upperLeftPanels.insertBefore(overlaysPanel, loadSkinsPanel);
-  } else {
-    upperLeftPanels.appendChild(overlaysPanel);
-  }
+  upperLeftPanels.appendChild(overlaysPanel);
 
   const oldPanel = document.getElementById('creator-tools-panel');
   if (oldPanel) oldPanel.remove();

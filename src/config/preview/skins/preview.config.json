@@ -1,0 +1,7 @@
+{
+  "visibleLayers": ["hat", "head", "jacket", "body", "sleeves", "arms", "pants", "legs"],
+  "cameraPosition": { "x": 0, "y": 1.45, "z": 4 },
+  "cameraTarget": { "x": 0, "y": 1, "z": 0 },
+  "fov": 35,
+  "viewport": { "width": 400, "height": 600 }
+}

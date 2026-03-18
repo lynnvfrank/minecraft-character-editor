@@ -1,0 +1,7 @@
+{
+  "visibleLayers": ["pants", "legs"],
+  "cameraPosition": { "x": 0, "y": 0.5, "z": 2.6 },
+  "cameraTarget": { "x": 0, "y": 0.4, "z": 0 },
+  "fov": 29,
+  "viewport": { "width": 400, "height": 450 }
+}

@@ -59,7 +59,7 @@ npm run build
 
 That command also refreshes generated asset manifests before building:
 
-- `public/skins/index.json`
+- `public/wardrobe/skins/index.json`
 - `public/animations/index.json`
 
 Preview the built site:
@@ -101,7 +101,9 @@ Notes:
 ```bash
 npm run generate-skins
 npm run generate-animations
-npm run generate-skin-previews
+npm run generate-previews
+npm run clear-previews-skins
+npm run clear-previews-parts
 npm run set-skin <skin-name>
 npm run set-animation <animation-key>
 ```

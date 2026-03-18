@@ -19,6 +19,12 @@ import {
   buildSkinLayersPanel,
   buildEditorToolsPanel,
   unregisterEditorModeShortcuts,
+  buildWardrobePartsPanel,
+  buildWardrobeLibraryPanels,
+  renderWardrobeLibraryPanel,
+  unregisterWardrobeShortcuts,
+  WARDROBE_PART_PANEL_CONFIGS,
+  getWardrobePanelIdForLayer,
   buildTexturePositionPanel,
 } from './creator/index';
 import * as skinIO from './creator/skinIO';
@@ -97,13 +103,98 @@ type ModePanelConfig = {
 
 const MODE_PANEL_HIDDEN_CLASS = 'creator-mode-panel-hidden';
 const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
-  { id: 'creator-load-skins-panel', modes: ['wardrobe'], enterFrom: 'left', exitTo: 'left' },
+  { id: 'creator-wardrobe-parts-panel', modes: ['wardrobe'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-canvas-overlays-panel', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-layers-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-tools-panel', modes: ['2d', '3d'], enterFrom: 'top', exitTo: 'top' },
   { id: 'creator-right-panels-group', modes: ['2d', '3d'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-3d-preview-slot', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
 ];
+
+import type { WardrobeLayerKey, WardrobePartKey } from './creator/wardrobePartsPanel';
+import { WARDROBE_PART_KEYS } from './creator/wardrobePartsPanel';
+let wardrobeSelectedLayer: WardrobeLayerKey = 'fullOutfit';
+let wardrobeCompositeToken = 0;
+let creatorCurrentSkinPath: string | null = null;
+let wardrobeBaseSkinPath: string | null = null;
+let wardrobeBaseSkinData: ImageData | null = null;
+let wardrobeLibrariesLoaded = false;
+let wardrobeLibrariesPromise: Promise<void> | null = null;
+const wardrobeImageCache = new Map<string, Promise<HTMLImageElement>>();
+type WardrobeSelectionState = Record<WardrobePartKey, string | null>;
+type WardrobeLibraryState = Record<WardrobePartKey, SkinEntry[]>;
+const wardrobeSelections: WardrobeSelectionState = {
+  hat: null,
+  head: null,
+  jacket: null,
+  body: null,
+  arms: null,
+  sleeves: null,
+  pants: null,
+  legs: null,
+};
+const wardrobeLibraries: WardrobeLibraryState = {
+  hat: [],
+  head: [],
+  jacket: [],
+  body: [],
+  arms: [],
+  sleeves: [],
+  pants: [],
+  legs: [],
+};
+
+function clearAnim(el: HTMLElement): void {
+  el.classList.remove(
+    'creator-mode-anim-in-left',
+    'creator-mode-anim-in-right',
+    'creator-mode-anim-in-top',
+    'creator-mode-anim-out-left',
+    'creator-mode-anim-out-right',
+    'creator-mode-anim-out-top'
+  );
+}
+
+function setHidden(el: HTMLElement, hidden: boolean): void {
+  el.classList.toggle(MODE_PANEL_HIDDEN_CLASS, hidden);
+}
+
+function hideAllWardrobeLibraryPanels(): void {
+  const panels = document.querySelectorAll<HTMLElement>('.creator-wardrobe-library-panel');
+  panels.forEach((panel) => {
+    clearAnim(panel);
+    setHidden(panel, true);
+  });
+}
+
+function showWardrobeLibraryPanel(layer: WardrobeLayerKey | null): void {
+  const targetPanelId = layer ? getWardrobePanelIdForLayer(layer) : null;
+  const targetPanel = targetPanelId ? document.getElementById(targetPanelId) as HTMLElement | null : null;
+  const currentPanel = document.querySelector<HTMLElement>(
+    '.creator-wardrobe-library-panel:not(.creator-mode-panel-hidden)',
+  );
+
+  if (!targetPanel) {
+    hideAllWardrobeLibraryPanels();
+    return;
+  }
+
+  if (!currentPanel || currentPanel === targetPanel) {
+    clearAnim(targetPanel);
+    setHidden(targetPanel, false);
+    return;
+  }
+
+  clearAnim(currentPanel);
+  setHidden(currentPanel, true);
+  clearAnim(targetPanel);
+  setHidden(targetPanel, false);
+}
+
+function setWardrobeSelectedLayer(layer: WardrobeLayerKey): void {
+  wardrobeSelectedLayer = layer;
+  showWardrobeLibraryPanel(state.editMode === 'wardrobe' ? layer : null);
+}
 
 function getAnimClass(prefix: 'in' | 'out', dir: PanelDirection): string {
   return `creator-mode-anim-${prefix}-${dir}`;
@@ -309,6 +400,193 @@ function getOverlayCanvas(): HTMLCanvasElement | null {
   return document.getElementById('creator-overlay-canvas') as HTMLCanvasElement | null;
 }
 
+function captureCanvasImageData(canvas: HTMLCanvasElement): ImageData | null {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+function cloneImageData(data: ImageData): ImageData {
+  return new ImageData(new Uint8ClampedArray(data.data), data.width, data.height);
+}
+
+function applyProgrammaticCanvasImage(data: ImageData): void {
+  const canvas = getSkinCanvas();
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return;
+  ctx.putImageData(data, 0, 0);
+  creatorCanvasPopulated = true;
+  state.skinSwatchColors = extractColorsFromSkin(canvas);
+  if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
+  updateAllUndoRedoButtons();
+  publish(CREATOR_EVENTS.CANVAS_CHANGE);
+}
+
+function resetWardrobeSelections(): void {
+  wardrobeCompositeToken += 1;
+  WARDROBE_PART_KEYS.forEach((part) => {
+    wardrobeSelections[part] = null;
+  });
+}
+
+function captureWardrobeBaseFromCurrentCanvas(path: string | null = creatorCurrentSkinPath): void {
+  if (!creatorCanvasPopulated) return;
+  const snapshot = captureCanvasImageData(getSkinCanvas());
+  if (!snapshot) return;
+  wardrobeBaseSkinData = snapshot;
+  wardrobeBaseSkinPath = path;
+}
+
+function hasActiveWardrobeSelections(): boolean {
+  return WARDROBE_PART_KEYS.some((part) => wardrobeSelections[part] != null);
+}
+
+function loadWardrobeImage(path: string): Promise<HTMLImageElement> {
+  const cached = wardrobeImageCache.get(path);
+  if (cached) return cached;
+  const pending = new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load wardrobe part: ${path}`));
+    img.src = path;
+  });
+  wardrobeImageCache.set(path, pending);
+  return pending;
+}
+
+async function resolveWardrobeComposite(): Promise<void> {
+  if (!wardrobeBaseSkinData) return;
+  const token = ++wardrobeCompositeToken;
+  const result = cloneImageData(wardrobeBaseSkinData);
+  const destCanvas = document.createElement('canvas');
+  destCanvas.width = WORK_SIZE;
+  destCanvas.height = WORK_SIZE;
+  const destCtx = destCanvas.getContext('2d', { willReadFrequently: true });
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = WORK_SIZE;
+  srcCanvas.height = WORK_SIZE;
+  const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
+  if (!destCtx || !srcCtx) return;
+  destCtx.putImageData(result, 0, 0);
+  srcCtx.imageSmoothingEnabled = false;
+
+  for (const part of WARDROBE_PART_KEYS) {
+    const selectedPath = wardrobeSelections[part];
+    if (!selectedPath) continue;
+    let img: HTMLImageElement;
+    try {
+      img = await loadWardrobeImage(selectedPath);
+    } catch {
+      continue;
+    }
+    if (token !== wardrobeCompositeToken) return;
+
+    srcCtx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
+    srcCtx.drawImage(img, 0, 0, WORK_SIZE, WORK_SIZE);
+    const bounds = SKIN_LAYER_BOUNDS[part] ?? [];
+    bounds.forEach((rect) => {
+      const x = rect.x * RESOLUTION_MULTIPLIER;
+      const y = rect.y * RESOLUTION_MULTIPLIER;
+      const w = rect.w * RESOLUTION_MULTIPLIER;
+      const h = rect.h * RESOLUTION_MULTIPLIER;
+      const partData = srcCtx.getImageData(x, y, w, h);
+      destCtx.putImageData(partData, x, y);
+    });
+  }
+
+  if (token !== wardrobeCompositeToken) return;
+  const composed = destCtx.getImageData(0, 0, WORK_SIZE, WORK_SIZE);
+  applyProgrammaticCanvasImage(composed);
+}
+
+async function applyWardrobePartSelection(part: WardrobePartKey, path: string | null): Promise<void> {
+  if (!wardrobeBaseSkinData) {
+    captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
+  }
+  wardrobeSelections[part] = path;
+  syncWardrobeLibraryActiveStates();
+  await resolveWardrobeComposite();
+}
+
+async function selectWardrobeOutfit(path: string): Promise<void> {
+  resetWardrobeSelections();
+  await loadSkinFromPath(path);
+  captureWardrobeBaseFromCurrentCanvas(path);
+  syncWardrobeLibraryActiveStates();
+}
+
+function renderWardrobeLibraries(): void {
+  WARDROBE_PART_PANEL_CONFIGS.forEach((config) => {
+    renderWardrobeLibraryPanel({
+      selectorId: config.selectorId,
+      items: wardrobeLibraries[config.key],
+      activePath: wardrobeSelections[config.key],
+      includeNone: true,
+      noneLabel: config.noneLabel,
+      onSelect: (path) => {
+        void applyWardrobePartSelection(config.key, path);
+      },
+    });
+  });
+  syncWardrobeLibraryActiveStates();
+}
+
+function syncWardrobeLibraryActiveStates(): void {
+  const activeOutfitPath = wardrobeBaseSkinPath ?? creatorCurrentSkinPath;
+  const outfitsContainer = document.getElementById('creator-skin-selector');
+  if (outfitsContainer) {
+    outfitsContainer.querySelectorAll<HTMLElement>('.creator-skin-preview').forEach((el) => {
+      el.classList.toggle('active', el.dataset.path === activeOutfitPath);
+    });
+  }
+
+  WARDROBE_PART_PANEL_CONFIGS.forEach((config) => {
+    const selector = document.getElementById(config.selectorId);
+    if (!selector) return;
+    selector.querySelectorAll<HTMLElement>('.creator-wardrobe-library-item').forEach((el) => {
+      const isNone = el.dataset.none === '1';
+      const isActive = isNone
+        ? wardrobeSelections[config.key] == null
+        : el.dataset.path === wardrobeSelections[config.key];
+      el.classList.toggle('active', isActive);
+    });
+  });
+}
+
+async function ensureWardrobeLibrariesLoaded(): Promise<void> {
+  if (wardrobeLibrariesLoaded) {
+    renderWardrobeLibraries();
+    return;
+  }
+  if (wardrobeLibrariesPromise) {
+    await wardrobeLibrariesPromise;
+    return;
+  }
+
+  wardrobeLibrariesPromise = (async () => {
+    buildWardrobeLibraryPanels();
+    await Promise.all(
+      WARDROBE_PART_PANEL_CONFIGS.map(async (config) => {
+        try {
+          const res = await fetch(`/wardrobe/parts/${config.key}/index.json`);
+          const data = await res.json();
+          wardrobeLibraries[config.key] = Array.isArray(data) ? data : [];
+        } catch {
+          wardrobeLibraries[config.key] = [];
+        }
+      }),
+    );
+    wardrobeLibrariesLoaded = true;
+    renderWardrobeLibraries();
+  })();
+
+  try {
+    await wardrobeLibrariesPromise;
+  } finally {
+    wardrobeLibrariesPromise = null;
+  }
+}
+
 
 export { getBrushCursorStyleFor3D } from './creator/brush';
 
@@ -417,12 +695,13 @@ function extractColorsFromSkin(canvas: HTMLCanvasElement): string[] {
   return selected;
 }
 
-const FALLBACK_SKINS: SkinEntry[] = [{ path: '/skins/RunningboyRig.png', label: 'Default' }];
+const FALLBACK_SKINS: SkinEntry[] = [{ path: '/wardrobe/skins/RunningboyRig.png', label: 'Default' }];
 
 export async function loadSkinFromPath(path: string): Promise<void> {
   const canvas = getSkinCanvas();
   const result = await skinIO.loadSkinToCanvas(path, canvas, skinIO.captureCanvasImageData);
   if (!result) return;
+  creatorCurrentSkinPath = path;
   creatorCanvasPopulated = true;
   const { beforeData, afterData } = result;
   state.redoStack = [];
@@ -433,25 +712,110 @@ export async function loadSkinFromPath(path: string): Promise<void> {
   publish(CREATOR_EVENTS.CANVAS_CHANGE);
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
   updateAllUndoRedoButtons();
+
+  // Highlight active skin in creator load-skins panel.
+  const selector = document.getElementById('creator-skin-selector');
+  if (selector) {
+    selector.querySelectorAll<HTMLElement>('.creator-skin-preview').forEach((el) => {
+      el.classList.toggle('active', el.dataset.path === (wardrobeBaseSkinPath ?? path));
+    });
+  }
+  if (state.editMode === 'wardrobe' && !hasActiveWardrobeSelections()) {
+    captureWardrobeBaseFromCurrentCanvas(path);
+    syncWardrobeLibraryActiveStates();
+  }
 }
 
 function setupCreatorSkinGallery(skins: SkinEntry[]): void {
   const container = document.getElementById('creator-skin-selector');
   if (!container) return;
   container.innerHTML = '';
-  skins.forEach((skin) => {
+  skins.forEach((skin, index) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'skin-preview creator-skin-preview';
+    btn.className = 'skin-preview creator-skin-preview creator-wardrobe-library-item';
     btn.dataset.path = skin.path;
+    btn.dataset.index = String(index);
     btn.setAttribute('aria-label', `Load skin: ${skin.label}`);
     const img = document.createElement('img');
     img.src = skin.preview ?? skin.path;
     img.alt = skin.label;
     img.loading = 'lazy';
     btn.appendChild(img);
-    btn.addEventListener('click', () => loadSkinFromPath(skin.path));
+    btn.addEventListener('click', () => {
+      if (state.editMode === 'wardrobe') {
+        void selectWardrobeOutfit(skin.path);
+        return;
+      }
+      void loadSkinFromPath(skin.path);
+    });
     container.appendChild(btn);
+  });
+
+  // Keyboard navigation within skins grid (arrow keys).
+  container.addEventListener('keydown', (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (!target || !target.classList.contains('creator-skin-preview')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    const buttons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('.creator-skin-preview')
+    );
+    if (buttons.length === 0) return;
+
+    const currentIndex = buttons.indexOf(target as HTMLButtonElement);
+    if (currentIndex === -1) return;
+
+    const cols = 4; // grid width: 4 skins per row
+    let nextIndex = currentIndex;
+
+    if (e.key === 'ArrowRight') {
+      if (currentIndex < buttons.length - 1) {
+        nextIndex = currentIndex + 1;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    } else if (e.key === 'ArrowLeft') {
+      if (currentIndex > 0) {
+        nextIndex = currentIndex - 1;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    } else if (e.key === 'ArrowDown') {
+      const candidate = currentIndex + cols;
+      if (candidate < buttons.length) {
+        nextIndex = candidate;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    } else if (e.key === 'ArrowUp') {
+      const candidate = currentIndex - cols;
+      if (candidate >= 0) {
+        nextIndex = candidate;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    } else if (e.key === ' ') {
+      // Spacebar: return focus to wardrobe parts panel, do not change selection.
+      const wardrobePanel = document.getElementById('creator-wardrobe-parts-panel');
+      if (wardrobePanel) {
+        const activeBtn = wardrobePanel.querySelector<HTMLButtonElement>(
+          '.creator-wardrobe-parts-btn.active'
+        );
+        (activeBtn ?? wardrobePanel.querySelector<HTMLButtonElement>('.creator-wardrobe-parts-btn'))
+          ?.focus();
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+
+    if (nextIndex !== currentIndex) {
+      const nextBtn = buttons[nextIndex];
+      if (nextBtn) {
+        nextBtn.focus();
+        nextBtn.click(); // keep current skin in sync with selection
+      }
+    }
   });
 }
 
@@ -562,6 +926,12 @@ function buildCreatorPanels(): void {
   buildSwatchesPanel(swatchesCtx);
   buildSkinLayersPanel(skinLayersCtx);
   buildEditorToolsPanel(editorToolsCtx);
+  buildWardrobeLibraryPanels();
+  buildWardrobePartsPanel({
+    getEditMode: () => state.editMode,
+    getSelectedLayer: () => wardrobeSelectedLayer,
+    setSelectedLayer: (layer) => setWardrobeSelectedLayer(layer),
+  });
   buildTexturePositionPanel();
   applyModePanelsImmediate(state.editMode);
 }
@@ -640,6 +1010,10 @@ export function initCreator(): void {
     undoLimit: UNDO_LIMIT,
   };
   buildCreatorPanels();
+  if (state.editMode === 'wardrobe') {
+    captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
+  }
+  showWardrobeLibraryPanel(state.editMode === 'wardrobe' ? wardrobeSelectedLayer : null);
   blockyEditor.buildBlockyGrid();
   blockyEditor.buildRulers();
   blockyEditor.setupBlockyGridEvents(blockyCtx);
@@ -649,14 +1023,17 @@ export function initCreator(): void {
 
   (async () => {
     try {
-      const res = await fetch('/skins/index.json');
+      const res = await fetch('/wardrobe/skins/index.json');
       const data = await res.json();
       const skins: SkinEntry[] = Array.isArray(data) && data.length > 0 ? data : FALLBACK_SKINS;
       setupCreatorSkinGallery(skins);
+      renderWardrobeLibraries();
     } catch {
       setupCreatorSkinGallery(FALLBACK_SKINS);
+      renderWardrobeLibraries();
     }
   })();
+  void ensureWardrobeLibrariesLoaded();
 
   const downloadBtn = document.getElementById('creator-download-btn');
   downloadBtn?.addEventListener('click', () => {
@@ -733,13 +1110,20 @@ export function getEditMode(): EditMode {
   return state.editMode;
 }
 
+function syncCreatorModeUrl(mode: EditMode): void {
+  if (document.body.dataset.route !== 'creator') return;
+  const nextHash = `#/creator/${mode}`;
+  if (location.hash.toLowerCase() === nextHash) return;
+  history.replaceState(null, '', `${location.pathname}${location.search}${nextHash}`);
+}
+
 /** Whether Edit 3D mode is active (paint on 3D model). */
 export function getEditMode3D(): boolean {
   return state.editMode === EDIT_MODE_3D;
 }
 
 /** Set edit mode and dispatch EDIT_MODE_CHANGE with { mode }. */
-export function setEditMode(mode: EditMode): void {
+export function setEditMode(mode: EditMode, options: { syncUrl?: boolean } = {}): void {
   const wasEditMode = isCreatorEditMode(state.editMode);
   const willBeEditMode = isCreatorEditMode(mode);
   if (wasEditMode && !willBeEditMode) {
@@ -750,6 +1134,18 @@ export function setEditMode(mode: EditMode): void {
   state.editMode = mode;
   document.body.dataset.editMode = mode;
   publish(CREATOR_EVENTS.EDIT_MODE_CHANGE, { mode: state.editMode });
+
+  if (mode === 'wardrobe') {
+    resetWardrobeSelections();
+    captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
+    renderWardrobeLibraries();
+    setWardrobeSelectedLayer('fullOutfit');
+  } else {
+    showWardrobeLibraryPanel(null);
+  }
+  if (options.syncUrl !== false) {
+    syncCreatorModeUrl(mode);
+  }
 }
 
 /** Save current layer visibility/lock and force all visible+unlocked (used when leaving creator route from 2D/3D). */
@@ -766,6 +1162,7 @@ export function setEditMode3D(is3D: boolean): void {
 /** Remove creator mode-button number shortcuts (called when leaving creator route). */
 export function unregisterCreatorShortcuts(): void {
   unregisterEditorModeShortcuts();
+  unregisterWardrobeShortcuts();
 }
 
 /** 3D layers panel: visibility state (layer hidden = not rendered, brush ignored). */

@@ -1,10 +1,10 @@
 #!/bin/bash
 # Generate 10 Minecraft skins: life, death, spring, winter themes
 # Per docs/MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md
-# Output: public/skins/skin-cursor-01.png through skin-cursor-10.png
+# Output: public/wardrobe/skins/skin-cursor-01.png through skin-cursor-10.png
 
 set -e
-OUTDIR="public/skins"
+OUTDIR="public/wardrobe/skins"
 mkdir -p "$OUTDIR"
 
 # Skin tone (warm brown per spec)

@@ -214,10 +214,5 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     });
   });
 
-  const loadSkinsPanel = document.getElementById('creator-load-skins-panel');
-  if (loadSkinsPanel) {
-    upperLeftPanels.insertBefore(panel, loadSkinsPanel);
-  } else {
-    upperLeftPanels.appendChild(panel);
-  }
+  upperLeftPanels.appendChild(panel);
 }

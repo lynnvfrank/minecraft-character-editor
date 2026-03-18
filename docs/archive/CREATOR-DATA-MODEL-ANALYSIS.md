@@ -172,7 +172,7 @@ type SkinEntry = { path: string; label: string; preview?: string };
 
 ### Problems
 
-1. API response shapes (`/skins/index.json`, `/animations/index.json`) are not typed; structure can drift.
+1. API response shapes (`/wardrobe/skins/index.json`, `/animations/index.json`) are not typed; structure can drift.
 2. Creator and main both fetch/use skins; shared type would enforce consistency.
 
 ### Recommendation

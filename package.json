@@ -4,25 +4,27 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "dev": "npm run generate-skins && npm run generate-animations && vite",
-    "dev:log": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=info LOG_SYSTEMS=animation,stateMachine,messaging VITE_LOG_RELAY=true vite",
-    "dev:log:info": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=info LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
-    "dev:log:debug": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=debug LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
-    "dev:log:trace": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=trace LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
+    "dev:server": "vite",
+    "dev": "npm run assets:generate && npm run dev:server",
+    "dev:log": "npm run assets:generate && cross-env LOG_RELAY=1 LOG_LEVEL=info LOG_SYSTEMS=animation,stateMachine,messaging VITE_LOG_RELAY=true npm run dev:server",
+    "dev:log:info": "npm run assets:generate && cross-env LOG_RELAY=1 LOG_LEVEL=info LOG_SYSTEMS=* VITE_LOG_RELAY=true npm run dev:server",
+    "dev:log:debug": "npm run assets:generate && cross-env LOG_RELAY=1 LOG_LEVEL=debug LOG_SYSTEMS=* VITE_LOG_RELAY=true npm run dev:server",
+    "dev:log:trace": "npm run assets:generate && cross-env LOG_RELAY=1 LOG_LEVEL=trace LOG_SYSTEMS=* VITE_LOG_RELAY=true npm run dev:server",
     "dev:debug": "npm run dev:log:debug",
     "dev:trace": "npm run dev:log:trace",
-    "build": "npm run generate-skins && npm run generate-animations && vite build",
+    "build": "npm run assets:generate && vite build",
     "start": "node server/index.js",
     "preview": "vite preview",
-    "generate-skins": "node scripts/generate-skins-manifest.js",
-    "generate-animations": "node scripts/generate-animations-manifest.js",
-    "generate-skin-previews": "npm run generate-skins && node scripts/generate-skin-previews.js",
+    "wardrobe:generate": "node scripts/generate-skins-manifest.js && node scripts/generate-wardrobe-parts.js && node scripts/generate-skin-previews.js",
+    "wardrobe:clean": "node scripts/clear-previews.js wardrobe",
+    "animations:generate": "node scripts/generate-animations-manifest.js",
+    "animations:clean": "node scripts/clear-animations-manifest.js",
+    "assets:generate": "node scripts/generate-skins-manifest.js && node scripts/generate-animations-manifest.js && node scripts/generate-wardrobe-parts.js && node scripts/generate-skin-previews.js",
+    "assets:clean": "npm run wardrobe:clean && npm run animations:clean",
     "set-skin": "node scripts/set-skin.js",
     "set-animation": "node scripts/set-animation.js",
-    "refresh": "npm run generate-skins && npm run generate-animations",
-    "dev:debug-url": "echo \"http://localhost:5173/?log=animation:debug,stateMachine:debug&logRelay=1&controls=1\"",
     "electron": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron .",
-    "electron:dev": "cross-env VITE_SOCKET_ENABLED=true vite build && electron .",
+    "electron:dev": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron .",
     "pack": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron-builder --dir",
     "dist": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron-builder"
   },
@@ -41,15 +43,23 @@
     "mac": {
       "icon": "electron/icons/dock.png",
       "category": "public.app-category.graphics",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
       "icon": "electron/icons/icon.png",
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
       "icon": "electron/icons/icon.png",
-      "target": ["AppImage"]
+      "target": [
+        "AppImage"
+      ]
     }
   },
   "dependencies": {
@@ -62,6 +72,7 @@
   },
   "devDependencies": {
     "@types/three": "^0.165.0",
+    "canvas": "^3.2.1",
     "cross-env": "^7.0.3",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
