@@ -4,11 +4,65 @@
     <meta charset="UTF-8" />
     <title>3D Character Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        var p = new URLSearchParams(location.search);
+        var show = function (v) { return v === '1' || v === 'on' || v === 'true'; };
+        if (!show(p.get('chat'))) document.documentElement.dataset.chatHidden = '1';
+        if (!show(p.get('controls'))) document.documentElement.dataset.controlsHidden = '1';
+        if (p.get('movementcontrols') === '1') document.documentElement.dataset.testMode = '1';
+      })();
+    </script>
   </head>
   <body>
-    <div id="app">
+    <div id="creator-panel" class="creator-panel" aria-label="Character creator">
+      <main class="creator-main">
+        <div class="creator-toolbar" role="toolbar" aria-label="Editor tools"></div>
+        <div class="creator-actions">
+          <button type="button" id="creator-download-btn" class="creator-btn">Download</button>
+        </div>
+      </main>
+    </div>
+    <div id="creator-view-wrapper" class="creator-view-wrapper">
+      <div id="creator-left-panels" class="creator-left-panels">
+        <div id="creator-left-top-row" class="creator-left-top-row">
+          <div id="creator-upper-left-panels" class="creator-upper-left-panels">
+            <div id="creator-load-skins-panel" class="creator-load-skins-panel" aria-label="Load skin">
+              <div class="creator-load-skins-header">Load skin</div>
+              <div id="creator-skin-selector" class="creator-skin-selector" role="listbox" aria-label="Available skins"></div>
+            </div>
+          </div>
+        </div>
+        <div id="creator-lower-left-panels" class="creator-lower-left-panels">
+          <div class="creator-3d-preview-slot" id="creator-3d-preview-slot" aria-hidden="true"></div>
+          <div id="creator-home-panel" class="creator-home-panel" aria-label="Navigation">
+            <button type="button" id="enter-viewer-btn" class="creator-home-btn" aria-label="Return to home mode">Home</button>
+          </div>
+        </div>
+      </div>
+      <div id="app-lower-left-panels" class="app-lower-left-panels">
+        <div class="creator-home-panel" aria-label="Navigation">
+          <button type="button" id="enter-creator-btn" class="creator-home-btn" aria-label="Enter character design mode">Design</button>
+        </div>
+      </div>
+      <div class="creator-canvas-area" id="creator-canvas-area">
+        <div class="creator-canvas-wrap" id="creator-canvas-wrap">
+          <div class="creator-ruler-corner" id="creator-ruler-corner"></div>
+          <div id="creator-ruler-top" class="creator-ruler-top" role="presentation" aria-hidden="true"></div>
+          <div id="creator-ruler-left" class="creator-ruler-left" role="presentation" aria-hidden="true"></div>
+          <div class="creator-canvas-inner">
+            <div id="creator-blocky-grid" class="creator-blocky-grid" aria-label="64×64 blocky pixel grid" role="img"></div>
+            <canvas id="creator-overlay-canvas" class="creator-overlay-canvas" width="512" height="512" aria-hidden="true"></canvas>
+          </div>
+        </div>
+      </div>
+      <div id="app">
       <div id="three-canvas-container"></div>
       <div id="controls-bar">
+        <nav class="control-group nav-control-group">
+          <a href="#/" class="nav-link">Viewer</a>
+          <a href="#/creator" class="nav-link">Creator</a>
+        </nav>
         <div class="control-group skin-control-group">
           <span class="group-label">Skin</span>
           <div id="skin-selector" class="skin-selector" role="listbox" aria-label="Available skins"></div>
@@ -17,7 +71,13 @@
           <span class="group-label">Animation</span>
           <div id="anim-selector" class="button-row" role="group" aria-label="Available animations"></div>
         </div>
+        <div class="control-group sequence-control-group">
+          <span class="group-label">Sequences</span>
+          <div id="sequence-selector" class="button-row" role="group" aria-label="Composite sequences"></div>
+        </div>
       </div>
+      <div id="test-controls" class="test-controls" aria-label="Debug test controls"></div>
+    </div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

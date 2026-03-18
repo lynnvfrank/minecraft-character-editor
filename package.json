@@ -2,8 +2,15 @@
   "name": "minecraft-3d-viewer",
   "version": "1.0.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "npm run generate-skins && npm run generate-animations && vite",
+    "dev:log": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=info LOG_SYSTEMS=animation,stateMachine,messaging VITE_LOG_RELAY=true vite",
+    "dev:log:info": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=info LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
+    "dev:log:debug": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=debug LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
+    "dev:log:trace": "npm run generate-skins && npm run generate-animations && cross-env LOG_RELAY=1 LOG_LEVEL=trace LOG_SYSTEMS=* VITE_LOG_RELAY=true vite",
+    "dev:debug": "npm run dev:log:debug",
+    "dev:trace": "npm run dev:log:trace",
     "build": "npm run generate-skins && npm run generate-animations && vite build",
     "start": "node server/index.js",
     "preview": "vite preview",
@@ -11,14 +18,53 @@
     "generate-animations": "node scripts/generate-animations-manifest.js",
     "generate-skin-previews": "npm run generate-skins && node scripts/generate-skin-previews.js",
     "set-skin": "node scripts/set-skin.js",
-    "set-animation": "node scripts/set-animation.js"
+    "set-animation": "node scripts/set-animation.js",
+    "refresh": "npm run generate-skins && npm run generate-animations",
+    "dev:debug-url": "echo \"http://localhost:5173/?log=animation:debug,stateMachine:debug&logRelay=1&controls=1\"",
+    "electron": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron .",
+    "electron:dev": "cross-env VITE_SOCKET_ENABLED=true vite build && electron .",
+    "pack": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron-builder --dir",
+    "dist": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "com.blockygotchi.app",
+    "productName": "Blockygotchi",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "server/**",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "electron/icons/dock.png",
+      "category": "public.app-category.graphics",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "icon": "electron/icons/icon.png",
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "icon": "electron/icons/icon.png",
+      "target": ["AppImage"]
+    }
   },
   "dependencies": {
+    "@tweenjs/tween.js": "^25.0.0",
+    "electron-store": "^10.0.0",
     "express": "^4.21.0",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "three": "^0.165.0"
   },
   "devDependencies": {
     "@types/three": "^0.165.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
     "puppeteer": "^24.38.0",
     "typescript": "^5.6.0",
     "vite": "^6.0.0"

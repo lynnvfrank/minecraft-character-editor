@@ -1,11 +1,16 @@
 # Character Creation Screen Specification
 
+<<<<<<< HEAD
 A specification for building a character creation screen that lets users draw on a Minecraft-style character, choose partial layers (arms, legs, jacket, pants, hats, heads, etc.), randomize combinations, and save/download skins — with integration into the local webapp instead of relying on right-click-to-save.
+=======
+A specification for building a character creation screen that lets users draw on a Minecraft-style character, choose partial layers (arms, legs, jacket, pants, hats, heads, etc.), randomize combinations, and save/download skins — with integration into the local webapp instead of relying on right-click-to-save. This document reflects the current implementation: blocky 2D editor as sole 2D view, floating tools/layers panels over both 2D and 3D, simplified left sidebar, and related UI changes.
+>>>>>>> CHARACTER-CREATION-SCREEN-SPEC
 
 ---
 
 ## Table of Contents
 
+<<<<<<< HEAD
 1. [Context and Goals](#context-and-goals)
 2. [Existing Skin Editor Assumptions](#existing-skin-editor-assumptions)
 3. [Character Creation Features](#character-creation-features)
@@ -18,6 +23,82 @@ A specification for building a character creation screen that lets users draw on
 10. [Toggleable Template Layer (Model-to-2D Translation)](#toggleable-template-layer-model-to-2d-translation)
 11. [Tools: Undo, Paint, Fill, Select, Delete, Color Picker](#tools-undo-paint-fill-select-delete-color-picker)
 12. [Existing Libraries and Tools](#existing-libraries-and-tools)
+=======
+1. [Implementation Status](#implementation-status)
+2. [Context and Goals](#context-and-goals)
+3. [Existing Skin Editor Assumptions](#existing-skin-editor-assumptions)
+4. [Character Creation Features](#character-creation-features)
+5. [Blocky 2D Editor and Tools Panel Consolidation](#blocky-2d-editor-and-tools-panel-consolidation)
+6. [Paint on 3D Model](#paint-on-3d-model)
+7. [Layer System](#layer-system)
+8. [Layers Panel — Floating Over 2D and 3D](#layers-panel--floating-over-2d-and-3d)
+9. [Solo-Layer Visibility and Lock (Alt/Option + Click)](#solo-layer-visibility-and-lock-altoption--click)
+10. [Tools Panel — Floating Over 2D and 3D](#tools-panel--floating-over-2d-and-3d)
+11. [Color Swatch Management System](#color-swatch-management-system)
+12. [Cursor Behavior (2D and 3D)](#cursor-behavior-2d-and-3d)
+13. [Hover Info Panel (2D and 3D)](#hover-info-panel-2d-and-3d)
+14. [Randomization](#randomization)
+15. [Save and Download Integration](#save-and-download-integration)
+16. [Rulers and Grid](#rulers-and-grid)
+17. [Technical Architecture](#technical-architecture)
+18. [Implementation Phases](#implementation-phases)
+19. [Integration with 3D Model Viewer](#integration-with-3d-model-viewer)
+20. [Toggleable Template Layer (Model-to-2D Translation)](#toggleable-template-layer-model-to-2d-translation)
+21. [Tools: Undo, Paint, Fill, Select, Delete, Color Picker](#tools-undo-paint-fill-select-delete-color-picker)
+22. [Existing Libraries and Tools](#existing-libraries-and-tools)
+23. [Summary](#summary)
+
+---
+
+## Implementation Status
+
+| Status | Meaning |
+|--------|---------|
+| ⬜ | Not started |
+| 🚧 | In progress |
+| ✅ | Done |
+| 📋 | Future / planned |
+
+| Feature | Status |
+|---------|--------|
+| Color swatch manager (multi-palette: History + Skin, tab UI) | ✅ |
+| Color picker panel (SV + hue, 5-swatch bar, minimize, floating lower-right) | ✅ |
+| Swatch grid display (colorful squares, capacity limit) — History & Skin palettes | ✅ |
+| Select more colors (Add color button → picker) | ⬜ |
+| Eyedropper tool (2D/3D pixel sampling, prepend to swatch, tool exclusivity) | ✅ |
+| Auto-load from skin (Skin palette extracts colors on load, dedupe + diversity) | ✅ |
+| Blocky 2D editor as sole 2D view (Canvas 2D drawing removed) | ✅ |
+| Rulers (HTML/CSS, crisp text, 0–64 labels) | ✅ |
+| Tools panel — floating over both 2D and 3D views | ✅ |
+| Layers panel — floating over both 2D and 3D views | ✅ |
+| 2D/3D edit mode toggle in tools panel | ✅ |
+| Default tool: Navigate (not Brush) on load | ✅ |
+| Layers panel (3D) — floating lower-right, lock + visibility | ✅ |
+| Hidden layer behavior (3D part hidden, brush ignored) | ✅ |
+| Solo-layer visibility (Alt+click eye) | ✅ |
+| Solo-layer lock (Alt+click lock) | ✅ |
+| Brush size fixed at 1 cell (2D and 3D) | ✅ |
+| 2D view tools: Navigate, Brush, Eraser, Fill, Rulers, Grid, Template | ✅ |
+| Left sidebar: Edit (Undo/Redo), Skin gallery; Swatches in right-side panel (Download hidden) | ✅ |
+| Grid mode toggle (1px black pixel overlay) | ⬜ |
+| Cursor (2D and 3D) — block outline for Brush/Eraser | ✅ |
+| Visual body-diagram layer toggles | 📋 |
+| Hover info panel — specific part (Right leg, Left sleeve, etc.) + skin coords | ✅ |
+| Lock respected in 2D view (no draw on locked layers) | ✅ |
+| Drag-to-toggle: click and drag over layers to apply visibility/lock | ✅ |
+| Layer row highlight when hovering over skin part | ✅ |
+| Dead zones excluded from template overlay and hover info | ✅ |
+| Undo/Redo buttons split width in tools panel | ✅ |
+| Keyboard shortcuts (Tab, H, B, E, G, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z) | ✅ |
+| Tool icons for Navigate, Brush, Eraser, Fill, Eyedropper (no text labels) | ✅ |
+| Color picker minimize (collapses to 5 swatches) | ✅ |
+| Swatches panel minimize (collapses to "Swatches (N)") | ✅ |
+| Multi-palette swatches (History + Skin tabs) | ✅ |
+| Skin palette color extraction (dedupe + diversity) | ✅ |
+| Left sidebar size (220–380px) | ✅ |
+
+*Update this table and the status indicator in each section heading when implementation changes.*
+>>>>>>> CHARACTER-CREATION-SCREEN-SPEC
 
 ---
 
@@ -64,10 +145,21 @@ If no skin editor exists, the spec below describes building one from scratch wit
 
 ### 1. Drawing / Painting
 
+<<<<<<< HEAD
 - **Canvas** — 64×64 pixel grid (or zoomed view for usability).
 - **Tools:** Brush, eraser, fill, color picker.
 - **Brush size:** 1–4 px typical.
 - **Layer awareness:** Drawing affects only the selected layer(s). See [Layer System](#layer-system).
+=======
+- **Canvas** — 64×64 pixel grid (or zoomed view for usability). Higher-resolution working canvas (e.g., 128×128) with downscale export for pixel-perfect 64×64 output.
+- **Display quality** — Use `image-rendering: pixelated` and `imageSmoothingEnabled = false` for blocky, non-blurry pixel art. Account for device pixel ratio where needed.
+- **Rulers** — Toggleable rulers in **separate strips** above and to the left of the canvas (not overlaying the image). Coordinate system: (0, 0) at upper-left, (64, 64) at lower-right.
+- **Grid lines** — Toggleable grid overlay. Default: every 4 pixels (vertical and horizontal). Extensible settings (spacing, color, line width).
+- **Tools:** Brush, eraser, fill, color picker.
+- **Brush** — Square block brush (not round). Sizes: 1, 2, 4, 8 pixels. A click fills the entire square. **Current implementation:** Brush size fixed at 1 cell (2×2 working pixels).
+- **Brush cursor** — Custom box-outline cursor that matches the brush size. Sizes correctly with canvas scale and `devicePixelRatio` so the cursor visually matches the drawn area.
+- **Layer awareness:** Drawing affects only the selected layer(s). Locked layers do not accept brush, eraser, or fill (2D and 3D). See [Layer System](#layer-system).
+>>>>>>> CHARACTER-CREATION-SCREEN-SPEC
 
 ### 2. Layer Selection (Partial Layers)
 
@@ -96,17 +188,359 @@ Users can **focus on** or **toggle visibility** of body parts. This supports:
 - **Multi-select** — Allow editing multiple layers at once (e.g., arms + sleeves).
 - **Dim/lock** — When a layer is not selected, show it dimmed or read-only in the canvas.
 
-### 3. Presets / Templates
+### 3. Skin Gallery
+
+- **Gallery in creator** — Fetches `/skins/index.json` and displays skin thumbnails. Clicking a thumbnail loads that skin into the 2D editor.
+- **Load as undoable** — Loading a skin pushes a `load` command onto the undo stack (before/after `ImageData`). Undo/redo works for skin loads (Ctrl+Z / Ctrl+Shift+Z).
+- **64×64 and 64×32** — Handles both formats: 64×64 draws full image; 64×32 draws upper half, leaves jacket/sleeves/pants regions transparent.
+
+### 4. Presets / Templates
 
 - **Pre-made layer graphics** — E.g., "Jacket 1", "Jacket 2", "Pants A", "Hat styles".
 - User selects a preset for a layer; it replaces that layer's pixels.
 - Presets stored as 64×64 PNGs with only the relevant region filled (rest transparent).
 
-### 4. Color Palette
+### 5. Color Palette
 
 - **Recent colors** — Last N used colors.
 - **Preset palettes** — Skin tones, common Minecraft colors, custom.
 - **Hex input** — For exact colors.
+- **Swatch palette extractor** — When a skin (or selected layer regions) is loaded, extract all unique colors from that image and add them to the swatch. Supports:
+  - **Full skin load** — Loading a skin image (e.g., from file or preset) adds all colors used in the 64×64 texture to the swatch.
+  - **Partial extraction** — When loading a preset into a layer, or when a subset of layers is selected, extract colors only from the relevant region(s) and add to the swatch.
+  - **Deduplication** — Merge with existing swatch; avoid duplicates. Optionally sort by frequency (most-used colors first) or by hue.
+
+---
+
+## Blocky 2D Editor and Tools Panel Consolidation
+
+### Scope
+
+The character creator uses a blocky 64×64 grid as the sole 2D editor. The Canvas 2D drawing method has been removed. Tools, brushes, layers, and view overlays are consolidated into floating panels that hover over both 2D and 3D views. The left sidebar is simplified to Edit (Undo/Redo), Color, and Swatch only.
+
+### Blocky 2D Editor
+
+- **Single 2D mode** — The blocky grid is the only 2D drawing surface. Each cell maps to a 2×2 block of the 128×128 working skin.
+- **No Canvas 2D drawing** — The previous canvas-based 2D editor (with `fillText`, `getImageData`, pixel-level drawing) has been removed. All 2D editing is via the blocky grid.
+- **Template support** — The Template overlay (region outlines for skin layout) is drawn on the overlay canvas above the blocky grid and is toggled via the tools panel.
+- **Borders toggle removed** — Cell borders are no longer toggleable; the grid uses the default styling.
+
+### Rulers (HTML/CSS)
+
+- **Implementation** — Rulers use HTML + CSS instead of canvas for crisp, non-blocky text rendering.
+- **Labels** — Major ticks at 0, 8, 16, … 64. Numbers are positioned correctly (0 at left/top, 64 at right/bottom) with alignment so they are not cut off.
+- **Font** — `system-ui, -apple-system, sans-serif` for legibility.
+- **Visibility** — Rulers toggle via the tools panel when in 2D mode.
+
+### Left Sidebar (Simplified)
+
+- **Edit** — Undo, Redo.
+- **Skin gallery** — Load skin selector. Color swatch and hex input removed (color selection via color picker and swatches panels).
+- **Download** — Hidden (present in DOM but not visible).
+- **Removed** — Tools (Brush, Eraser, Fill), Brush sizes, 2D/3D toggle, Layers, Rulers, Grid, Template. These now live in the floating tools panel.
+
+### Default Tool
+
+- **On load** — The active tool defaults to **Navigate** (not Brush), so the user starts in navigation mode and must explicitly select Brush, Eraser, or Fill to paint.
+
+### References
+
+- [src/creator.ts](../src/creator.ts) — `buildToolsPanel3D`, `buildBlockyGrid`, `buildRulers`, `renderToDisplay`.
+- [src/style.css](../src/style.css) — `.creator-tools-panel`, `.creator-blocky-grid`, `.creator-ruler-*`.
+
+---
+
+## Paint on 3D Model
+
+In addition to the 2D canvas, users can **paint directly on the 3D character model**. This provides spatial context: users see exactly where strokes land on the body (face, arms, legs, etc.) and can rotate the model to reach occluded areas.
+
+### Behavior
+
+- **3D preview** — A live 3D view of the character using the same model as the viewer. Texture updates in real time as the user edits.
+- **Paint mode** — When painting on 3D, mouse click/drag performs raycasting: screen position → 3D ray → mesh intersection → UV coordinates → 64×64 pixel position. The same brush, eraser, and color picker apply; edits write to the shared skin texture.
+- **Layer awareness** — Layer selection (head, arms, jacket, etc.) restricts which regions accept paint. Clicks on non-selected regions are ignored or trigger "select this layer" feedback.
+- **Orbit/rotate** — Camera controls (orbit, zoom) let the user rotate the character to paint all sides. Pan/zoom should not conflict with paint gestures (e.g., distinguish click-drag for paint vs. orbit).
+
+### Technical Approach
+
+- **Raycasting** — Use Three.js `Raycaster` with `Mesh.raycast()` to find the intersected face. Read face UVs from geometry to map hit point → (u, v) → pixel (x, y) on the 64×64 texture. Flip V if the texture uses top-left origin.
+- **UV → pixel** — `pixelX = Math.floor(u * 64)`, `pixelY = Math.floor((1 - v) * 64)` (adjust for coordinate system).
+- **Shared texture** — The 3D model's texture is the same `CanvasTexture` or `DataTexture` as the 2D editor. Editing in either view updates the other.
+- **Fill on 3D** — Flood fill from the clicked UV/pixel; same algorithm as 2D but seed from raycast result.
+- **Eyedropper on 3D** — Sample the pixel at the raycast hit; add to color swatch.
+
+### UI
+
+- **Edit mode toggle** — "2D" vs. "3D" buttons in the tools panel (floating upper-left). Default: **3D mode** (paint on 3D model).
+- **Layout by mode:**
+  - **Edit 3D:** Large 3D view fills the right panel; 2D canvas is hidden. Left-drag paints; right-drag orbits.
+  - **Edit 2D:** Large 2D canvas fills the right panel; 3D preview moves to creator panel (after toolbar, 256px height). 2D canvas scales to fill available space.
+- **Undo/redo** — Same command stack; 3D paint strokes are recorded the same way as 2D (pixel coordinates + color).
+- **Sync** — 2D canvas and 3D texture always reflect the same skin state. No separate "apply" step.
+
+### Implementation Notes
+
+- **Mesh structure** — The model may use merged geometry (e.g., single Character mesh) or per-part meshes (head, body, arm, etc.). UV mapping must be known and consistent with `minecraft-skin-layout-specification`. If the FBX supplies UVs, use them; otherwise the UV table from `main.ts` applies.
+- **Performance** — Real-time texture updates (e.g., `texture.needsUpdate = true` on each stroke) are typically fine for 64×64. Coalesce rapid brush moves if needed.
+- **Depth buffer** — Ensure the 3D character is rendered and raycastable; avoid UI or overlay elements blocking rays.
+- **Mouse buttons in Edit 3D** — Disable OrbitControls LEFT for rotate; use LEFT for paint, RIGHT for orbit. In Edit 2D, LEFT restores orbit for the small preview.
+- **OrbitControls and DOM movement** — When the 3D view is moved in the DOM (e.g., between main area and preview slot on mode switch), OrbitControls event handling can break. **Recreate OrbitControls** (dispose + new instance) when switching back to 3D mode.
+- **Camera reset for 2D preview** — When switching to Edit 2D, re-center and zoom out the camera (e.g., position `(0, 1.5, 4)`, target `(0, 1, 0)`) so the full character fits in the small preview.
+
+---
+
+## Layer System
+
+See [Layers Panel — Floating Over 2D and 3D](#layers-panel--floating-over-2d-and-3d) for the current floating panel implementation.
+
+---
+
+## Layers Panel — Floating Over 2D and 3D
+
+### Scope
+
+A floating panel in the lower-right corner of the view area lists all skin layers (head, hat, body, jacket, arms, sleeves, legs, pants). It appears over both 2D blocky view and 3D model view. Each layer has lock and visibility toggles. Hidden layers are not rendered in 3D and do not accept brush input, enabling the user to reach underlying parts (e.g., hide jacket to paint on body).
+
+### Layout
+
+- **Position** — Lower-right corner of the view area (2D blocky view or 3D viewport).
+- **Style** — Floating panel; semi-transparent background; border; z-index above the WebGL canvas. Non-intrusive; does not block critical view.
+- **Contents** — One row per layer, ordered: Hat, Head | Jacket, Body | Sleeves, Arms | Pants, Legs (separators between groups).
+
+### Minimize / Expand Button
+
+- **Header** — The panel has a header row with the title "Layers" and a collapse button.
+- **When expanded** — The button shows a minimize icon. Clicking shrinks the panel to a compact overlay.
+- **When minimized** — Clicking restores the full panel. Collapsed state is session-only.
+
+### Per-Layer Controls
+
+| Control | Behavior |
+|---------|----------|
+| **Lock toggle** | When locked, brush, eraser, and fill actions on that layer are ignored (2D and 3D). |
+| **Visibility (eye) toggle** | When hidden: (1) the layer is treated as locked; (2) the corresponding part of the 3D model is hidden or transparent. This allows reaching underlying parts. |
+
+**Independence:** Lock and visibility are independent. A layer can be visible but locked, or hidden (which implies effectively locked).
+
+### Drag-to-Toggle
+
+- **Visibility and lock** — Click and hold on a visibility or lock toggle, then drag over other layer rows. Each row crossed adopts the same toggle value (e.g., drag to hide multiple layers at once). Simple click still toggles a single layer normally.
+- **Implementation** — Uses a drag threshold (4px); movement beyond threshold starts drag mode. Alt+click on visibility or lock bypasses drag and triggers solo mode.
+
+### Paint Eligibility
+
+```mermaid
+flowchart TD
+    subgraph layerState [Layer State]
+        V[Visible?]
+        L[Locked?]
+    end
+    subgraph paintResult [Paint on Layer]
+        P[Paint allowed]
+        I[Ignore brush]
+    end
+    V -->|No| I
+    V -->|Yes| L
+    L -->|Yes| I
+    L -->|No| P
+```
+
+### Texture-Region Transparency (Single Merged Overlay Mesh)
+
+Some models (e.g., RunningboyRig) use a **single mesh** for jacket, sleeves, and pants (`2nd_Layer`). You cannot hide jacket without sleeves and pants via `mesh.visible` alone. Use texture-region transparency instead:
+
+- **Principle** — Assign a **separate texture** to the overlay mesh. Copy the main skin into it, then set alpha = 0 for the UV regions corresponding to hidden parts.
+- **Implementation:** Main skin texture for head, body, arms, legs, hat. Overlay texture (copy of skin) for the overlay mesh; zero alpha for hidden part regions using `SKIN_LAYER_BOUNDS`. Rebuild on visibility change.
+
+### Future: Visual Body-Diagram Layer Toggles
+
+A later version may replace or supplement checkboxes with a 2D body diagram where parts are spatially arranged and clickable. See the main spec's layer categories for region layout.
+
+---
+
+## Solo-Layer Visibility and Lock (Alt/Option + Click)
+
+### Scope
+
+Hold Alt (Windows/Linux) or Option (macOS) and click a layer control to enter "solo" mode for that control. Both the visibility (eye) toggle and the lock toggle support this behavior.
+
+### Solo Visibility (Alt + Eye Click)
+
+| Action | Result |
+|--------|--------|
+| **First click (Alt/Option held)** | Enter solo visibility. Hide all other layers; show only the clicked layer. Store the previous visibility state. |
+| **Second click (Alt/Option held)** | Exit solo visibility. Restore all layers to their stored visibility. |
+
+### Solo Lock (Alt + Lock Click)
+
+| Action | Result |
+|--------|--------|
+| **First click (Alt/Option held)** | Enter solo lock. Lock all other layers; unlock only the clicked layer. Store the previous lock state. This focuses editing on a single layer. |
+| **Second click (Alt/Option held)** | Exit solo lock. Restore all layers to their stored lock state. |
+
+### Edge Cases
+
+- **Alt released before second click** — Solo mode persists until the next Alt+click on the same control type (eye or lock).
+- **Click without Alt** — Normal toggle; does not enter or exit solo mode.
+- **Alt+click on lock** — Bypasses drag-to-toggle (same as visibility).
+
+---
+
+## Tools Panel — Floating Over 2D and 3D
+
+### Scope
+
+A floating tools panel appears in the upper-left corner of the view area for both 2D and 3D edit modes. It contains the 2D/3D mode toggle, drawing tools (Navigate, Brush, Eraser, Fill), and in 2D mode the view overlays (Rulers, Grid, Template).
+
+### Contents
+
+| Tool | Purpose |
+|------|---------|
+| **2D / 3D** | Edit mode toggle. Switch between blocky 2D canvas and 3D model view. |
+| **Navigate** | Disables paint, eraser, and fill. Restores full orbit/camera control. Default tool on page load. |
+| **Brush** | Paint on the skin (2D blocky grid or 3D raycast hit). Mutually exclusive with Eyedropper. |
+| **Eraser** | Erase (set pixels to transparent). Mutually exclusive with Eyedropper. |
+| **Fill** | Flood fill from clicked pixel. Mutually exclusive with Eyedropper. |
+| **Eyedropper** | Sample pixel color on 2D or 3D; add to swatches (prepended). See [Color Swatch Management System](#color-swatch-management-system). Mutually exclusive with Brush, Eraser, and Fill. |
+| **Rulers** | (2D only) Toggle rulers above and left of the blocky grid. |
+| **Grid** | (2D only) Toggle grid overlay. |
+| **Template** | (2D only) Toggle skin region outlines for layout reference. |
+
+### Layout
+
+- **Position** — Upper-left corner of the view area.
+- **Style** — Vertical list; floating panel; semi-transparent background.
+- **Dividers** — Between 2D/3D toggle and tools; between Navigate and Brush; (2D only) between Fill and Rulers.
+- **Undo/Redo** — Undo and Redo buttons split the full width of the tools panel (50% each).
+- **Tool icons** — Navigate, Brush, Eraser, Fill, and Eyedropper are shown as icons (not text labels). Use recognizable paint-tool iconography (e.g., hand for Navigate, brush tip for Brush, eraser for Eraser, paint bucket for Fill, eyedropper for Eyedropper). Optional: show the shortcut key in a tooltip on hover.
+
+### Keyboard Shortcuts
+
+Shortcuts follow conventions familiar to users of Adobe Photoshop and similar paint tools. Use Ctrl on Windows/Linux; Command (⌘) on macOS.
+
+| Action | Shortcut (Win/Linux) | Shortcut (Mac) |
+|--------|----------------------|----------------|
+| 2D / 3D toggle | `Tab` | `Tab` |
+| Navigate mode | `H` | `H` |
+| Brush | `B` | `B` |
+| Eraser | `E` | `E` |
+| Fill | `G` | `G` |
+| Undo | `Ctrl+Z` | `Cmd+Z` |
+| Redo | `Ctrl+Shift+Z` | `Cmd+Shift+Z` |
+
+**Notes:** The 2D/3D toggle uses Tab (common for switching edit modes). Navigate, Brush, Eraser, and Fill use the same single-letter shortcuts as Photoshop (H = Hand, B = Brush, E = Eraser, G = Paint Bucket). Undo/Redo use the standard system shortcuts.
+
+### Brush Size
+
+- **Fixed at 1 cell** — Brush and eraser paint one grid cell (2×2 working pixels) per dab.
+
+---
+
+## Color Swatch Management System
+
+### Scope
+
+A system to manage color swatches with multiple palettes, allow users to select and add more colors, and auto-load colors from the loaded skin texture.
+
+### Multi-Palette Swatches Panel
+
+- **Palettes** — Two palettes in tab UI:
+  - **History** — Most recently used colors (newest first). Editable; drag-drop to set swatch color.
+  - **Skin** — Colors extracted from the currently loaded skin. Read-only; click to apply color.
+- **Tab UI** — Horizontal tabs at top (History | Skin). Active tab highlighted (bold, blue bottom border).
+- **Minimize** — Panel can minimize to "Swatches (N)" with expand button.
+- **Capacity** — Max 25 colors (5×5 grid) per palette.
+- **Display** — Swatches presented as a grid of colorful squares. Active palette's grid is visible; inactive hidden.
+
+### Color Picker Panel
+
+- **Design** — Saturation/brightness square (SV) + hue bar. Below: **5-swatch bar** showing color variations (±20, ±40 brightness from active). Active swatch has white border.
+- **5-swatch behavior** — Middle swatch active by default. When user picks from SV/hue, active swatch updates. Other swatches show deltas from active. User can click any swatch to make it active.
+- **Position** — Floating panel, bottom-right corner.
+- **Minimize** — Panel can minimize to show only the 5 swatches.
+- **Sync** — When a swatch or picker color is selected, color picker updates.
+
+### Select More Colors
+
+- **"Add color" flow** — Button opens the color picker panel.
+- **Behavior** — Selected color is added to the swatch and set as current. Deduplicate before adding.
+
+### Eyedropper Tool
+
+- **Access** — The eyedropper appears in the tools panel, in the same group as Brush, Eraser, and Fill (not in the color picker panel).
+- **Behavior** — When the eyedropper tool is active and the user left-clicks on the 2D blocky grid or 3D model, the system determines the pixel and color at that point. This works in both 2D and 3D.
+- **Tool exclusivity** — When the eyedropper tool is enabled, the Brush, Eraser, and Fill tools are not enabled. Likewise, when Brush, Eraser, or Fill is enabled, the eyedropper is not enabled.
+- **Color addition** — A color selected via eyedropper is prepended to the swatch list (pushing other swatches over). If the color already exists in the swatch list, it is removed from its previous position and prepended. The capacity limit applies; the oldest swatch may be dropped when at capacity.
+
+### Auto-Load from Skin (Skin Palette)
+
+When a skin is loaded via "Load skin", the **Skin palette** is updated:
+
+| Load type | Extraction scope |
+|-----------|------------------|
+| Full skin load | Entire working canvas (128×128) |
+| Partial load / preset | Only `SKIN_LAYER_BOUNDS` for affected layer(s) — future |
+
+**Deduplication:** Unique hex colors only (transparent pixels skipped).
+
+**Variety:** When unique colors exceed palette capacity (25), **farthest-point sampling** selects a diverse subset: repeatedly pick the color farthest from all already-selected colors (Euclidean distance in RGB). This avoids clumping similar shades.
+
+### References
+
+- [src/creator/swatches.ts](../src/creator/swatches.ts) — Multi-palette UI; subscribes to `SKIN_LOAD_CHANGE`.
+- [src/creator.ts](../src/creator.ts) — `extractColorsFromSkin`, farthest-point diversity; `loadSkinFromPath` publishes `SKIN_LOAD_CHANGE`.
+- [src/skinLayout.ts](../src/skinLayout.ts) — `SKIN_LAYER_BOUNDS` for region bounds.
+
+---
+
+## Cursor Behavior (2D and 3D)
+
+### Scope
+
+The cursor changes based on the active tool when hovering over the 2D blocky grid or the 3D viewport.
+
+### Per-Tool Cursors
+
+| Tool | Cursor |
+|------|--------|
+| **Brush** | Block outline, 1 cell. Hotspot at center. |
+| **Eraser** | Same as Brush: box outline, 1 cell. |
+| **Fill** | Default cursor. |
+| **Eyedropper** | Eyedropper/crosshair cursor. |
+| **Navigate** | Default cursor. |
+
+### Implementation
+
+- **2D cursor** — `getBrushCursorStyle()` in [src/creator.ts](../src/creator.ts); size = 1 cell; divided by `devicePixelRatio` for Retina.
+- **3D cursor** — `getBrushCursorStyleFor3D()`; fixed 8px per brush unit.
+- **3D brush painting** — Paints 2×2 working pixels (one full cell) per dab.
+
+### Known Issue: Cursor ghosting on Mac
+
+On Mac with Retina (Safari and Chrome), the brush/eraser cursor may show faint ghosting. See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md#character-creator-cursor-ghosting-on-mac-safari-and-chrome).
+
+---
+
+## Hover Info Panel (2D and 3D)
+
+### Scope
+
+A compact overlay in the lower-right of the view area shows, for both 2D and 3D:
+
+1. **Current skin part** — Granular per [minecraft-skin-layout-specification.md](./minecraft-skin-layout-specification.md): Head, Hat, Body, Jacket, Right leg, Left leg, Right pants, Left pants, Right arm, Left arm, Right sleeve, Left sleeve. When an overlay is **hidden** in 3D, show the underlying base part.
+2. **Current skin coordinates** — (x, y) in the 64×64 texture.
+3. **Layer row highlight** — When hovering over a skin part, the corresponding layer row in the layers panel is highlighted (e.g., hovering over "Right sleeve" highlights the Sleeves row).
+
+### Display Format
+
+- **Part visible:** `PartName (skinX, skinY)` — e.g. `Right sleeve (44, 36)`
+- **Overlay hidden (3D):** `BasePart (skinX, skinY)` — e.g. `Right arm (44, 20)` when Sleeves hidden
+- **Not over skin:** `—` (including dead zones — see [minecraft-skin-layout-specification.md](./minecraft-skin-layout-specification.md#dead-zones--non-skin-zones-reference-diagrams))
+
+### References
+
+- [src/creator.ts](../src/creator.ts) — `updateHoverInfo`, `getPartDisplayNameAtCoords`
+- [src/skinLayout.ts](../src/skinLayout.ts) — `SKIN_PART_BOUNDS`, `SKIN_DEAD_ZONES`, `isInDeadZone`
 
 ---
 
@@ -114,20 +548,15 @@ Users can **focus on** or **toggle visibility** of body parts. This supports:
 
 ### "Randomize" Button
 
-- **Full random** — Pick random preset for each layer (from available presets) and combine.
+- **Full random** — Pick random preset for each layer and combine.
 - **Partial random** — Randomize only selected layers (e.g., only hat and jacket).
-- **Color shift** — Optionally randomize hue/saturation of the result for variety.
+- **Color shift** — Optionally randomize hue/saturation.
 
 ### Randomization Sources
 
-- **Preset pool** — Each layer has a list of presets (images or procedural patterns).
-- **Procedural** — Generate random colors/patterns per region (simple: random solid colors; complex: noise, stripes).
+- **Preset pool** — Each layer has a list of presets.
+- **Procedural** — Random colors/patterns per region.
 - **Weighted** — Some presets more common than others.
-
-### Result
-
-- Combined into a single 64×64 skin.
-- User can further edit, then save or download.
 
 ---
 
@@ -136,51 +565,33 @@ Users can **focus on** or **toggle visibility** of body parts. This supports:
 ### Download Button
 
 - **Explicit "Download" button** — No right-click required.
-- **Filename** — Auto-generated (e.g., `skin-{timestamp}.png`) or user-provided.
+- **Filename** — Auto-generated or user-provided.
 - **Format** — PNG, 64×64.
-- **Implementation:** `canvas.toDataURL('image/png')` → create `<a download="...">` and click programmatically.
+- **Implementation:** `canvas.toDataURL('image/png')` → create `<a download="...">` and click.
 
 ### Save to Webapp (Local)
 
-**Goal:** Save the created skin so the running viewer can use it immediately.
+**Options:** LocalStorage/IndexedDB; File System Access API; local backend (`POST /api/skin/save`); same-origin shared state. Recommended: local API that saves to `public/skins/custom/` and updates `skins/index.json`.
 
-**Options:**
+---
 
-1. **LocalStorage / IndexedDB**
-   - Store PNG as base64 or Blob in IndexedDB.
-   - Viewer reads from a "custom skins" list on load.
-   - **Limitation:** Size limits; no persistence across devices.
+## Rulers and Grid
 
-2. **File System Access API** (if available)
-   - Let user pick a folder (e.g., `public/skins/`) and save the file there.
-   - Requires user gesture and support (Chrome).
+### Rulers
 
-3. **Local Backend / Dev Server**
-   - Character creator runs in the same app or a sibling route (e.g., `/creator`).
-   - "Save" POSTs the PNG to a local API (e.g., `POST /api/skin/save`).
-   - Server writes to `public/skins/custom/` and updates `skins/index.json`.
-   - Viewer reloads skin list or receives socket event to refresh.
-   - **Best for local dev:** Vite dev server + simple Express/Fastify route.
+- **Toggle** — Via tools panel in 2D mode.
+- **Implementation** — HTML + CSS; labels 0, 8, 16, … 64; strips above and left of canvas.
+- **Coordinate system** — (0, 0) upper-left, (64, 64) lower-right.
 
-4. **Same-Origin Same-App**
-   - Creator and viewer are on the same origin (e.g., `localhost:5173`).
-   - Creator exposes a way to pass the skin data (e.g., `postMessage` to parent, or shared state).
-   - "Apply to viewer" — Viewer receives the PNG, adds to its skin list, applies to character.
-   - No file system write; skin lives in memory until page reload.
+### Grid Lines
 
-### Recommended Approach for Local Development
+- **Toggle** — Via tools panel in 2D mode.
+- **Default spacing** — Every 4 pixels. Extensible settings.
+- **Future** — 1px black pixel overlay toggle (Grid mode).
 
-- **Download** — Always provide; works everywhere.
-- **Save to webapp** — Implement via local API:
-  - Add `POST /api/skin/save` that accepts multipart/form-data or base64 PNG.
-  - Server saves to `public/skins/custom/{id}.png`.
-  - Server appends to `public/skins/index.json` (or merges with existing).
-  - Viewer: either reload page, or socket/API to "refresh skins" and then `switchSkin` to the new one.
+### Hover Info Panel
 
-### Creator as Separate Route vs. Separate Page
-
-- **Same app, different route** — e.g., `/` = viewer, `/creator` = character creator. Shared code (skin layout, API client).
-- **Separate HTML page** — Creator is `creator.html`; communicates with viewer via `postMessage` or shared backend. More isolation but more setup.
+See [Hover Info Panel (2D and 3D)](#hover-info-panel-2d-and-3d) for the floating panel showing part name and (x, y) coords.
 
 ---
 
@@ -190,6 +601,7 @@ Users can **focus on** or **toggle visibility** of body parts. This supports:
 
 ```
 /creator (route or page)
+<<<<<<< HEAD
 ├── Canvas (64×64, zoomed for usability)
 ├── Layer selector (checkboxes/tabs)
 ├── Toolbar (brush, eraser, fill, color picker)
@@ -197,30 +609,32 @@ Users can **focus on** or **toggle visibility** of body parts. This supports:
 ├── Randomize button
 ├── Preview (3D or 2D flattened view of character)
 ├── Download button
+=======
+├── Creator panel (left sidebar, min 220px, max 380px)
+│   ├── Edit (Undo, Redo)
+│   ├── Skin gallery (Load skin)
+│   ├── 3D preview slot (Edit 2D only; 256px)
+│   └── Actions (Download hidden)
+├── Creator view wrapper (right; main area)
+│   ├── Tools panel (floating, upper-left) — 2D/3D, Navigate, Brush, Eraser, Fill, Eyedropper (icons), Rulers, Template
+│   ├── Layers panel (floating, lower-right)
+│   ├── Color picker panel (floating, lower-right) — SV + hue, 5-swatch bar; minimize
+│   ├── Swatches panel (floating, lower-right) — History & Skin palettes (tabs); minimize
+│   ├── Hover info panel (lower-right)
+│   ├── Blocky 2D canvas (Edit 2D) or 3D view (Edit 3D)
+│   └── Rulers (2D only; when toggled)
+├── Preset panel (per layer)
+├── Randomize button
+>>>>>>> CHARACTER-CREATION-SCREEN-SPEC
 └── Save to webapp button
 ```
 
 ### Data Flow
 
 - **Skin state** — Single `ImageData` or offscreen canvas (64×64). All edits write here.
-- **Layer mask** — When editing "arms only", only pixels in arm regions are writable.
-- **Presets** — Loaded as images; `drawImage` into the appropriate region of the skin canvas.
+- **Layer mask** — Only pixels in selected, unlocked layer regions are writable.
+- **Presets** — Loaded as images; drawn into the appropriate region.
 - **Export** — `canvas.toDataURL('image/png')` or `toBlob()`.
-
-### File Locations (Suggested)
-
-| File | Purpose |
-|------|---------|
-| `public/creator/` or `src/creator/` | Creator UI and logic |
-| `public/skins/custom/` | Saved custom skins (gitignored or committed) |
-| `public/skins/index.json` | Manifest; updated when saving |
-| `scripts/save-skin-api.js` or Vite/Express route | `POST /api/skin/save` |
-
-### Skin Layout Constants
-
-- Reuse or import from `minecraft-skin-layout-specification.md` / existing `MINECRAFT_SKIN_UVS` or equivalent.
-- Map UV regions to pixel bounds: e.g., head = (0,0)-(32,16) in 64×64.
-- Use for layer masks and preset blitting.
 
 ---
 
@@ -228,34 +642,37 @@ Users can **focus on** or **toggle visibility** of body parts. This supports:
 
 ### Phase 1: Basic Creator
 
-- Canvas, brush, eraser, color picker.
+- Canvas (blocky grid), brush, eraser, color picker.
 - Full skin editing (all layers at once).
 - Download button.
-- Optional: 2D preview (flattened skin layout).
 
 ### Phase 2: Layer Selection
 
-- Layer checkboxes/tabs.
-- Restrict drawing to selected layer regions (mask).
-- Dim non-selected regions.
+- Layer checkboxes in floating panel.
+- Lock and visibility per layer.
+- Dim/hide non-selected regions.
 
 ### Phase 3: Presets and Randomization
 
-- Preset images per layer (or procedural).
+- Preset images per layer.
 - "Apply preset" per layer.
-- "Randomize" button — combine random presets.
+- "Randomize" button.
 
 ### Phase 4: Save to Webapp
 
-- Backend route `POST /api/skin/save`.
+- Backend `POST /api/skin/save`.
 - Save to `public/skins/custom/`.
 - Update `skins/index.json`.
-- Creator "Save" button calls API.
-- Viewer: refresh skin list, optionally switch to new skin.
 
-### Phase 5: Polish
+### Phase 5: Paint on 3D Model
 
-- 3D preview (optional) — Use same model as viewer; update texture in real time.
+- Edit 2D / Edit 3D toggle.
+- Raycasting: screen → UV → pixel.
+- Brush, eraser, fill, eyedropper on 3D.
+- Shared texture.
+
+### Phase 6: Polish
+
 - Undo/redo.
 - Export to legacy 64×32 if needed.
 
@@ -263,144 +680,44 @@ Users can **focus on** or **toggle visibility** of body parts. This supports:
 
 ## Integration with 3D Model Viewer
 
-The character creator should merge with the app that currently displays the 3D model viewer (character's home), so users can switch between editing and viewing their character in the same session.
-
-### Integration Approach
-
-- **Same app, different route** — e.g., `/` or `/home` = 3D viewer, `/creator` = character editor. Single HTML entry, shared code.
-- **Shared code** — Skin layout constants (`MINECRAFT_SKIN_UVS` or equivalent from `main.ts`), skin loading, `applySkinToModel` logic. Both use the same 64×64 format and preprocessing.
-- **Shared state** — Current skin path; when user saves from creator, the viewer can apply the new skin immediately. See [Creator–Viewer State Management](./CREATOR-VIEWER-STATE-MANAGEMENT.md) for preserving draft state, switching, and scene transitions.
-- **Entry points** — "Edit character" button in viewer → navigate to `/creator`. "View character" / "Home" in creator → navigate to `/` or `/home`.
-
-### Effort Estimate
-
-| Task | Effort | Notes |
-|------|--------|-------|
-| Add routing (Vite + simple router or hash-based) | Low | No React; use `history.pushState` + route handler or `<a href="#/creator">` |
-| Extract skin layout constants to shared module | Low | Move from `main.ts` to `src/skinLayout.ts` or similar |
-| Creator route/page with canvas | Medium | New HTML structure, CSS, creator entry script |
-| Shared skin list + apply flow | Low | Creator saves; viewer listens for refresh or reads from shared store |
-| "Edit" / "Home" navigation UI | Low | Buttons that switch route |
-
-### Router Options (No Framework)
-
-- **Hash-based** — `location.hash` = `#/creator` or `#/`. Listen for `hashchange`. Zero dependencies.
-- **History API** — `history.pushState`, `popstate`. Requires server to serve `index.html` for `/creator` (Vite dev server can be configured).
-- **Tiny router** — e.g., `navigo`, `page.js` if a minimal library is acceptable.
+The character creator merges with the app that displays the 3D viewer. Same app, `/creator` route; shared skin layout; "Edit" / "Home" navigation. See [Creator–Viewer State Management](./CREATOR-VIEWER-STATE-MANAGEMENT.md) for state and transitions.
 
 ---
 
 ## Toggleable Template Layer (Model-to-2D Translation)
 
-A **toggleable template overlay** helps users understand how the 2D skin texture maps to the 3D model. When enabled, it shows region boundaries, labels, or a reference diagram overlaid on the canvas.
-
-### Reference Images
-
-- **`docs/minecraft-skin-layout-detailed.png`** — Annotated skin layout with face labels (TOP HEAD, FACE HEAD, etc.).
-- **`docs/minecraft-skin-64x64-detailed.png`** — 64×64 grid layout diagram.
-
-### Behavior
-
-- **Toggle** — Checkbox or button: "Show template" / "Hide template".
-- **Overlay** — Render the reference image as a semi-transparent layer above the canvas (e.g., `opacity: 0.3`) or draw region outlines programmatically.
-- **Non-destructive** — Template is visual only; it does not affect the canvas pixels. User draws underneath or with template visible as a guide.
-- **Region labels** — Optional: draw text labels (head, hat, body, etc.) at region centers using the bounds from [minecraft-skin-layout-specification.md](./minecraft-skin-layout-specification.md).
-
-### Implementation
-
-- **Asset location** — Copy `docs/minecraft-skin-layout-detailed.png` and `docs/minecraft-skin-64x64-detailed.png` to `public/` (e.g., `public/skin-template.png`) so they are served. The `docs/` folder is not typically served by Vite.
-- Load reference image: `new Image(); img.src = '/skin-template.png'`.
-- Draw on a separate canvas layer or as a CSS `background-image` with `mix-blend-mode` for non-destructive overlay.
-- Or: use the region bounds table to draw rectangles + labels; no image dependency.
+- **Toggle** — "Template" in tools panel (2D mode). Shows region outlines on the blocky grid.
+- **Implementation** — Draw from `SKIN_LAYER_BOUNDS`; dead zones (top-left, top-middle, right-side legend) are excluded per [minecraft-skin-layout-specification.md](./minecraft-skin-layout-specification.md#dead-zones--non-skin-zones-reference-diagrams). Body and jacket are drawn as single 24×16 boxes.
+- **Non-destructive** — Visual only.
 
 ---
 
 ## Tools: Undo, Paint, Fill, Select, Delete, Color Picker
 
-### Robust Undo
+### Undo
 
-- **Command pattern** — Store operations (brush stroke, fill, delete, paste) as reversible commands. Undo = execute inverse; redo = re-execute.
-- **Point-based history** (recommended) — For brush strokes: record `[{x,y,color}, ...]` per stroke. Undo = redraw canvas from initial state up to previous stroke. More memory-efficient than full canvas snapshots.
-- **Snapshot fallback** — For complex ops (paste, fill large area), store a before/after `ImageData` or canvas PNG. Use sparingly to avoid memory bloat.
-- **History limit** — Cap at N steps (e.g., 50–100). Drop oldest when full.
-- **Coalescing** — Merge consecutive brush moves into a single stroke for undo (one undo = entire stroke, not per pixel).
+- Command pattern; point-based for brush; snapshot for fill; load command for skin loads. History limit 50–100.
 
 ### Paint Brush
 
-- **Size** — 1–4 px typical for 64×64; configurable.
-- **Shape** — Round (circle) or square. Use `ctx.arc` or `ctx.fillRect`.
-- **Anti-aliasing** — `ctx.imageSmoothingEnabled = false` for pixel-perfect (Minecraft style).
-- **Layer mask** — Only draw on selected layer regions; ignore clicks outside.
+- Size 1 cell (2×2 px). Square block. Layer mask applies. Locked layers are excluded (2D and 3D).
 
 ### Fill
 
-- **Flood fill** — Seed at click; fill connected pixels matching target color. Use iterative (stack-based) algorithm to avoid recursion overflow.
-- **Tolerance** — Optional delta for anti-aliased edges (e.g., fill pixels within ±5 of target RGB).
-- **Layer-aware** — Restrict fill to selected layer region(s); do not bleed into other layers.
+- Flood fill; optional tolerance; layer-aware.
 
-### Select Region
+### Select / Delete / Color Picker
 
-- **Marquee** — Click-drag rectangle. Store `{x, y, w, h}`.
-- **Region preset** — "Select head", "Select arms" etc. — use layer bounds from spec.
-- **Visual feedback** — Dashed rectangle or highlight overlay.
-
-### Delete
-
-- **Delete selection** — Clear pixels in selected region to transparent (or base color). Respect layer mask.
-- **Clear layer** — "Clear head", "Clear arms" — reset that layer's region to transparent/base.
-
-### Color Picker
-
-- **Eyedropper** — Click on canvas to sample pixel color. Use `ctx.getImageData(x, y, 1, 1).data`.
-- **Swatch maintainer** — Store last N used colors (e.g., 8–16). Display as clickable swatches. Add to swatch when user picks or applies a color.
-- **Palette presets** — Skin tones, common Minecraft colors. Load from config or image.
-- **Hex input** — Text field for exact `#RRGGBB` entry.
+- Marquee select; delete selection; eyedropper (2D/3D pixel sampling, prepends to swatch, mutually exclusive with Brush/Eraser/Fill); swatch grid; hex input. See [Color Swatch Management System](#color-swatch-management-system).
 
 ---
 
 ## Existing Libraries and Tools
 
-### Canvas / Drawing
-
-| Library | Purpose | Fit |
-|---------|---------|-----|
-| **Fabric.js** | Canvas library with objects, brushes, filters | Full-featured; may be heavyweight for 64×64 pixel editor. Good for brushes, I/O. |
-| **Konva** | 2D canvas framework, React/Vue/Svelte support | Good if using React. Object-oriented; may abstract away raw pixel access. |
-| **Raw Canvas API** | `CanvasRenderingContext2D`, `ImageData` | Lightweight; full control. Sufficient for 64×64 pixel editing. **Recommended** for minimal deps. |
-
-### Undo / Redo
-
-| Library | Purpose | Fit |
-|---------|---------|-----|
-| **undo-canvas** | Adds undo/redo to `CanvasRenderingContext2D` | Direct canvas integration. |
-| **canvas-history.js** | Binds undo/redo to canvas 2D context | Similar; check maintenance. |
-| **Reddo.js** | Framework-agnostic history (commands) | Lightweight; use with custom commands (brush, fill, delete). |
-| **Custom command stack** | Implement command pattern in-house | ~50–100 LOC; full control. **Recommended** for predictable behavior. |
-
-### Color Picker / Swatch
-
-| Library | Purpose | Fit |
-|---------|---------|-----|
-| **Coloris** | Vanilla JS color picker, accessible | Full picker (HSL, hex). Good for "choose color" dialog. |
-| **Swatchy.js** | Swatch picker, predefined palette | Good for quick palette selection. |
-| **Vanilla Color Picker** | Minimal color picker | Lightweight. |
-| **Custom** | Canvas eyedropper + swatch div | Simple; `getImageData` + stored hex array. **Recommended** for 64×64 editor. |
-
-### Fill Algorithm
-
-- **No library** — Flood fill is ~30–50 LOC. Stack-based iterative; use `getImageData`/`putImageData`. See William Malone's "Paint Bucket Tool" article, or Stack Overflow "flood fill canvas javascript".
-
-### Select / Marquee
-
-- **No library** — Click-drag rectangle is straightforward with `mousedown`/`mousemove`/`mouseup`. Store bounds; use for delete or copy.
-
-### Summary Recommendation
-
-- **Canvas:** Raw `CanvasRenderingContext2D` + `ImageData` for pixel control.
+- **Canvas:** Raw `CanvasRenderingContext2D` + `ImageData`.
 - **Undo:** Custom command stack or Reddo.js.
-- **Color:** Custom eyedropper + swatch; optionally Coloris for full picker.
+- **Color:** Custom eyedropper + swatch; optionally Coloris.
 - **Fill:** Custom flood fill (stack-based).
-- **Fabric.js/Konva:** Consider only if you need higher-level features (layers, transforms, exports) and are okay with added weight.
 
 ---
 
@@ -408,17 +725,24 @@ A **toggleable template overlay** helps users understand how the 2D skin texture
 
 | Feature | Description |
 |---------|-------------|
-| Drawing | Canvas, brush, eraser, fill, color picker, select region, delete |
-| Layers | Head, hat, body, jacket, arms, sleeves, legs, pants — select to edit |
-| Presets | Per-layer template images |
-| Randomize | One-click random combination of presets |
-| Download | Explicit button → PNG file |
-| Save to webapp | POST to local API → save to `public/skins/custom/`, update index, viewer can use |
-| Integration | Same app, `/creator` route; shared skin layout, "Edit" / "Home" navigation |
-| Template overlay | Toggleable reference (`docs/minecraft-skin-layout-detailed.png`) for model-to-2D translation |
-| Undo | Command stack; point-based history for brush; snapshot for fill/paste |
-| Color picker | Eyedropper + swatch maintainer; optional Coloris for full picker |
+| Blocky 2D editor | Sole 2D drawing method; 64×64 grid; no Canvas 2D drawing |
+| Tools panel | Floating upper-left; 2D/3D toggle; Navigate, Brush, Eraser, Fill, Eyedropper (icon-only); Rulers, Template (2D); Undo/Redo; shortcuts (Tab, H, B, E, G, Ctrl/Cmd+Z) |
+| Layers panel | Floating lower-right; lock + visibility per layer; solo visibility (Alt+click eye) and solo lock (Alt+click lock); drag-to-toggle; row highlight on hover |
+| Left sidebar | Edit (Undo/Redo), Skin gallery; Download hidden (220–380px width) |
+| Right panels (top→bottom) | Color picker (minimize), Swatches (History/Skin tabs, minimize), Layers, Hover info |
+| Default tool | Navigate on load |
+| Brush size | Fixed at 1 cell (2×2 px) |
+| Rulers | HTML/CSS; labels 0–64; toggled from tools panel |
+| Cursor | Brush/Eraser: block outline; Fill/Navigate: default. Ghosting issue on Mac. |
+| Hover info panel | Lower-right; specific part + skin (x,y); respects hidden overlays; highlights layer row |
+| Paint on 3D | Raycast → UV → pixel; shared texture; left-drag paint, right-drag orbit |
+| Color swatches | Multi-palette: History (editable) + Skin (from loaded skin, read-only); tab UI; eyedropper prepends to History; diversity sampling for Skin palette |
+| Color picker panel | Floating lower-right; SV + hue; 5-swatch bar (±20/±40 brightness); minimize |
+| Presets | Per-layer templates |
+| Randomize | One-click random presets |
+| Download / Save | PNG download; POST to API → `public/skins/custom/` |
+| Template overlay | Toggle in tools; region outlines; body/jacket 24x16; dead zones excluded |
 
-**Bridge from existing skin editor:** If an editor exists, add the layer UI, preset system, randomization, and save/API integration. Replace right-click save with Download + Save buttons. If building from scratch, follow the phases above and use `minecraft-skin-layout-specification.md` for region bounds.
-
-**State management and scene transitions:** See [Creator–Viewer State Management](./CREATOR-VIEWER-STATE-MANAGEMENT.md) for preserving skin state, switching between creator and viewer, and transition behavior.
+**Related documents:**
+- [Creator–Viewer State Management](./CREATOR-VIEWER-STATE-MANAGEMENT.md) — State and transitions.
+- [CHARACTER-CREATOR-DELIVERABLE-STEPS.md](./CHARACTER-CREATOR-DELIVERABLE-STEPS.md) — Implementation steps.

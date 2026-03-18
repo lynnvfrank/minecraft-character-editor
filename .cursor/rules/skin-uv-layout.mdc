@@ -1,0 +1,34 @@
+---
+description: Skin rendering, UV mapping, and layout conventions
+globs: "**/skinPreprocess.ts,**/creator*.ts,**/skinLayout*.ts,**/main.ts"
+alwaysApply: false
+---
+
+# Skin and UV Layout
+
+## Reference
+See `docs/minecraft-skin-layout-specification.md` for full pixel-level spec.
+
+## Layer Bounds (64×64)
+| Layer | Region (X, Y, W, H) |
+|-------|---------------------|
+| Head | 0–32, 0–16 |
+| Hat | 32–64, 0–16 |
+| Body | 16–32, 16–32 |
+| Jacket | 16–32, 32–48 |
+| Arms | 40–56 (right), 32–48 (left) |
+| Sleeves | 40–56 (right), 48–64 (left) |
+| Legs | 0–16 (right), 16–32 (left) |
+| Pants | 0–16, 32–48 (right), 0–16, 48–64 (left) |
+
+## Pixel Art Display
+- `image-rendering: pixelated`
+- `ctx.imageSmoothingEnabled = false`
+
+## Preprocessing
+- `skinPreprocess.ts` — transparency handling in primary regions
+- `SKIN_PREPROCESS_CONFIG`: enabled, replacementColor, alphaThreshold
+
+## Overlay Meshes
+- `renderOrder = 1` for hat, jacket, sleeves, pants
+- Optional `OVERLAY_SCALE.factor` (e.g. 1.03) for jacket/sleeves/pants

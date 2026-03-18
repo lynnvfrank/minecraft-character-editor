@@ -1,0 +1,10 @@
+---
+description: Character creator (skin editor) patterns and spec
+globs: "**/creator*.ts"
+alwaysApply: false
+---
+
+# Character Creator
+
+## Spec
+See `docs/CHARACTER-CREATION-SCREEN-SPEC.md` and `docs/CREATOR-VIEWER-STATE-MANAGEMENT.md`.

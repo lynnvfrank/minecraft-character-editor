@@ -2,7 +2,9 @@
 
 **Purpose:** Reference document for troubleshooting skin texture mapping issues and for translating skins between different layout formats (e.g., 64×64 ↔ 64×32, or custom formats).
 
-**Canvas:** 64×64 pixels (modern skins). Origin (0,0) is top-left.  
+**See also:** [`MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md`](MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md) — artist pixel boundaries and AI-agent instructions for generating skins (color theory, fashion patterns, prints, ImageMagick).
+
+**Canvas:** 64×64 pixels (modern skins). Origin (0,0) is top-left.
 **Legacy:** Crop to 64×32 for pre-1.8 skins (upper half only).
 
 ---
@@ -21,10 +23,26 @@
 
 ---
 
+## Dead Zones / Non-Skin Zones (Reference Diagrams)
+
+Reference diagrams (e.g., `minecraft-skin-layout-detailed.png`) often include **dead zones** — areas with black backgrounds and white text that contain meta-information, not actual skin texture data. These zones appear in layout guides for understanding and should be ignored when extracting or creating skin textures.
+
+| Zone | Bounds (X, Y, W, H) | Purpose |
+|------|---------------------|---------|
+| **Top-left corner** | X: 0–7, Y: 0–7 (8×8) | Cropping instructions: how to extract the usable skin (crop to 64×64 for standard skins, or 64×32 for pre-1.8). |
+| **Top-middle** | X: 24–39, Y: 0–7 (16×8) | Source/provenance: link to forum post or guide describing how skins work across Minecraft versions. |
+| **Right-side legend** | X: 56–63, Y: 16–47 (8×32) | Abbreviation key: explains 1st letter (R/L = Right/Left), 2nd letter (L/A/P/S = Leg/Arm/Pants/Sleeves), BT = Bottom, plus disclaimer that the diagram is for comparison only, not a template. |
+
+**Important:** Actual Minecraft skin PNG files (64×64) contain only texture data in the regions described in sections 1–12. Dead zones exist only in reference diagrams. When using a diagram as a guide, crop out or ignore these zones before creating or editing a skin.
+
+**Implementation:** The character creator excludes dead zones from the template overlay and from the hover info panel (`—` is shown when the cursor is over a dead zone). See `SKIN_DEAD_ZONES` and `isInDeadZone()` in `src/skinLayout.ts`.
+
+---
+
 ## 1. Head (Primary Layer)
 
-**Region:** Upper-left quadrant  
-**Bounds:** X: 0–32, Y: 0–16  
+**Region:** Upper-left quadrant
+**Bounds:** X: 0–32, Y: 0–16
 **Face size:** 8×8 pixels each
 
 | Face | X | Y | Width | Height |
@@ -40,8 +58,8 @@
 
 ## 2. Hat (Outer Layer for Head)
 
-**Region:** Upper-right quadrant  
-**Bounds:** X: 32–64, Y: 0–16  
+**Region:** Upper-right quadrant
+**Bounds:** X: 32–64, Y: 0–16
 **Face size:** 8×8 pixels each
 
 | Face | X | Y | Width | Height |
@@ -57,8 +75,8 @@
 
 ## 3. Body (Primary Layer)
 
-**Region:** Central area  
-**Bounds:** X: 16–32, Y: 16–32  
+**Region:** Central area
+**Bounds:** X: 16–32, Y: 16–32
 **Top/Bottom:** 8×4 pixels | **Sides:** 4×12 (right/left) or 8×12 (front/back)
 
 | Face | X | Y | Width | Height |
@@ -74,8 +92,8 @@
 
 ## 4. Jacket (Outer Layer for Body)
 
-**Region:** Below primary body  
-**Bounds:** X: 16–32, Y: 32–48  
+**Region:** Below primary body
+**Bounds:** X: 16–32, Y: 32–48
 **Dimensions:** Same as Body
 
 | Face | X | Y | Width | Height |
@@ -91,8 +109,8 @@
 
 ## 5. Right Leg (RL) — Primary Layer
 
-**Region:** Lower-left  
-**Bounds:** X: 0–16, Y: 16–32  
+**Region:** Lower-left
+**Bounds:** X: 0–16, Y: 16–32
 **Top/Bottom:** 4×4 each | **Sides:** 4×12 each
 
 | Face | X | Y | Width | Height |
@@ -108,8 +126,8 @@
 
 ## 6. Right Pants (RP) — Outer Layer for Right Leg
 
-**Region:** Below Right Leg  
-**Bounds:** X: 0–16, Y: 32–48  
+**Region:** Below Right Leg
+**Bounds:** X: 0–16, Y: 32–48
 **Dimensions:** Same as Right Leg
 
 | Face | X | Y | Width | Height |
@@ -125,8 +143,8 @@
 
 ## 7. Left Leg (LL) — Primary Layer
 
-**Region:** Lower-middle  
-**Bounds:** X: 16–32, Y: 48–64  
+**Region:** Lower-middle
+**Bounds:** X: 16–32, Y: 48–64
 **Dimensions:** Same as Right Leg
 
 | Face | X | Y | Width | Height |
@@ -142,8 +160,8 @@
 
 ## 8. Left Pants (LP) — Outer Layer for Left Leg
 
-**Region:** Below Right Pants / same column as Left Leg  
-**Bounds:** X: 0–16, Y: 48–64  
+**Region:** Below Right Pants / same column as Left Leg
+**Bounds:** X: 0–16, Y: 48–64
 **Dimensions:** Same as Right Pants
 
 | Face | X | Y | Width | Height |
@@ -159,8 +177,8 @@
 
 ## 9. Right Arm (RA) — Primary Layer
 
-**Region:** Right of body  
-**Bounds:** X: 40–56, Y: 16–32  
+**Region:** Right of body
+**Bounds:** X: 40–56, Y: 16–32
 **Dimensions:** Same as Right Leg (4×4 top/bottom, 4×12 sides)
 
 | Face | X | Y | Width | Height |
@@ -176,8 +194,8 @@
 
 ## 10. Right Sleeves (RS) — Outer Layer for Right Arm
 
-**Region:** Below Right Arm  
-**Bounds:** X: 40–56, Y: 32–48  
+**Region:** Below Right Arm
+**Bounds:** X: 40–56, Y: 32–48
 **Dimensions:** Same as Right Arm
 
 | Face | X | Y | Width | Height |
@@ -193,8 +211,8 @@
 
 ## 11. Left Arm (LA) — Primary Layer
 
-**Region:** Lower-right, right of Left Leg  
-**Bounds:** X: 32–48, Y: 48–64  
+**Region:** Lower-right, right of Left Leg
+**Bounds:** X: 32–48, Y: 48–64
 **Dimensions:** Same as Right Arm
 
 | Face | X | Y | Width | Height |
@@ -210,8 +228,8 @@
 
 ## 12. Left Sleeves (LS) — Outer Layer for Left Arm
 
-**Region:** Far lower-right  
-**Bounds:** X: 48–64, Y: 48–64  
+**Region:** Far lower-right
+**Bounds:** X: 48–64, Y: 48–64
 **Dimensions:** Same as Left Arm
 
 | Face | X | Y | Width | Height |
@@ -270,8 +288,8 @@ For converting between formats:
 |------|---|---|---|---|
 | Head | 0 | 0 | 32 | 16 |
 | Hat | 32 | 0 | 32 | 16 |
-| Body | 16 | 16 | 16 | 16 |
-| Jacket | 16 | 32 | 16 | 16 |
+| Body | 16 | 16 | 24 | 16 |
+| Jacket | 16 | 32 | 24 | 16 |
 | Right Leg | 0 | 16 | 16 | 16 |
 | Right Pants | 0 | 32 | 16 | 16 |
 | Left Leg | 16 | 48 | 16 | 16 |
@@ -371,19 +389,19 @@ Both `loadCharacter` (initial load) and `switchSkin` (skin change) use this flow
 
 `_getMinecraftPartFromMeshName(meshName)` maps mesh names to body parts using substring matching (lowercase, alphanumeric only):
 
-- `hat` → hat  
-- `jacket` or `body`+`layer` → jacket  
-- `sleeve`+`r/l` → sleeveR / sleeveL  
-- `pant`+`r/l` → pantsR / pantsL  
-- `head` (no hat/layer) → head  
-- `body` (no layer) → body  
-- `arm` (no sleeve) + left/right → armL / armR  
-- `leg` (no pant) + left/right → legL / legR  
+- `hat` → hat
+- `jacket` or `body`+`layer` → jacket
+- `sleeve`+`r/l` → sleeveR / sleeveL
+- `pant`+`r/l` → pantsR / pantsL
+- `head` (no hat/layer) → head
+- `body` (no layer) → body
+- `arm` (no sleeve) + left/right → armL / armR
+- `leg` (no pant) + left/right → legL / legR
 
-**Runningboy mapping:**  
-- `Character` → null (no match)  
-- `Steve_Hat` → `hat`  
-- `2nd_Layer` → null (no match)  
+**Runningboy mapping:**
+- `Character` → null (no match)
+- `Steve_Hat` → `hat`
+- `2nd_Layer` → null (no match)
 
 `2nd_Layer` is detected separately: `meshName.toLowerCase().includes('2nd') && meshName.toLowerCase().includes('layer')`.
 

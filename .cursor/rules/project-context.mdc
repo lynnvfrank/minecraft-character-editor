@@ -1,0 +1,43 @@
+---
+description: Core project context — stack, key files, doc workflow
+alwaysApply: true
+---
+
+# Minecraft 3D Viewer — Project Context
+
+## Tech Stack
+- **3D:** Three.js
+- **Language:** TypeScript
+- **Build:** Vite
+- **Skins:** 64×64 PNG, standard Minecraft layout
+- **Animations:** Mixamo FBX, RunningboyRig
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/main.ts` | Entry point: orchestration, model load, skin/anim logic, API events |
+| `src/viewer/` | Scene setup, skin application, orbit/pointer controls (`scene.ts`, `skinApplication.ts`, `controls.ts`) |
+| `src/creator.ts` | Character creator (2D/3D skin editor) |
+| `src/skinPreprocess.ts` | Skin texture preprocessing (transparent → solid in primary regions) |
+| `docs/minecraft-skin-layout-specification.md` | Skin layout, region bounds, UVs |
+| `server/api.js` | API handlers: `/api/skin`, `/api/animation`, `/api/events` |
+
+## Doc Reference
+
+- **Plans/specs:** `PLAN-GUIDE.md`
+- **Skin/UV:** `docs/minecraft-skin-layout-specification.md`
+- **Skin artist/agent:** `docs/MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md` (pixel bounds, color theory, patterns, ImageMagick)
+- **Creator:** `docs/CHARACTER-CREATION-SCREEN-SPEC.md`
+- **Debugging:** `docs/TROUBLESHOOTING.md`
+
+## Conventions
+
+- Use `SKIN_LAYER_BOUNDS` or `MINECRAFT_SKIN_UVS` for skin regions
+- FBX scale: `model.scale.setScalar(0.01)`
+- Mesh→skin mapping: `getMinecraftPartFromMeshName()` in `meshPartMapping.ts`
+
+## Dev Environment
+
+- **Mac:** MacBook Pro 13-inch, M1, 2020, 16GB RAM, macOS Tahoe 26.2
+- **Shell:** Zsh (default when Cursor runs terminal commands on macOS)
