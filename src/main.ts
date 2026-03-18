@@ -9,6 +9,7 @@ import {
   getCreatorWorkSize,
   getLayer3DVisible,
   setActiveTool,
+  normalizeLayerStateForNonEditMode,
   unregisterCreatorShortcuts,
 } from './creator';
 import { preprocessSkinTexture } from './skinPreprocess';
@@ -321,6 +322,7 @@ const CREATOR_EXIT_ANIMATION_MS = 450;
 async function transitionCreatorToViewer() {
   if (creatorTransitionInFlight || getRoute() !== 'creator') return;
   creatorTransitionInFlight = true;
+  normalizeLayerStateForNonEditMode();
   // Ensure creator leaves with a non-painting tool selected so we don't
   // accidentally keep brush/eraser semantics when returning.
   setActiveTool('navigate');

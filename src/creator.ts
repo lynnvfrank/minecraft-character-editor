@@ -48,9 +48,43 @@ let creatorCanvasPopulated = false;
 let modePanelsBound = false;
 let modePanelsCurrentMode: EditMode | null = null;
 let modeTransitionToken = 0;
+let savedLayerStateBeforeNonEditMode: { visible: Record<string, boolean>; locked: Record<string, boolean> } | null = null;
 
 export function getCreatorCanvasPopulated(): boolean {
   return creatorCanvasPopulated;
+}
+
+function isCreatorEditMode(mode: EditMode): boolean {
+  return mode === EDIT_MODE_2D || mode === EDIT_MODE_3D;
+}
+
+function clearLayerSoloModes(): void {
+  state.layer3DSoloMode = false;
+  state.layer3DSoloBeforeState = null;
+  state.layer3DSoloCurrentLayer = null;
+  state.layer3DSoloLockMode = false;
+  state.layer3DSoloLockBeforeState = null;
+  state.layer3DSoloLockCurrentLayer = null;
+}
+
+function saveLayerStateAndNormalizeForNonEditMode(): void {
+  if (!savedLayerStateBeforeNonEditMode) {
+    savedLayerStateBeforeNonEditMode = {
+      visible: { ...state.layer3DVisible },
+      locked: { ...state.layer3DLocked },
+    };
+  }
+  clearLayerSoloModes();
+  setLayer3DVisibleAll(Object.fromEntries(LAYER_KEYS.map((k) => [k, true])));
+  setLayer3DLockedAll(Object.fromEntries(LAYER_KEYS.map((k) => [k, false])));
+}
+
+function restoreLayerStateForEditMode(): void {
+  if (!savedLayerStateBeforeNonEditMode) return;
+  clearLayerSoloModes();
+  setLayer3DVisibleAll(savedLayerStateBeforeNonEditMode.visible);
+  setLayer3DLockedAll(savedLayerStateBeforeNonEditMode.locked);
+  savedLayerStateBeforeNonEditMode = null;
 }
 
 type PanelDirection = 'left' | 'right' | 'top';
@@ -422,19 +456,48 @@ function setupCreatorSkinGallery(skins: SkinEntry[]): void {
 }
 
 /** Report texture position under pointer. Publishes event; subscribers update hover info and layers panel. */
-function reportTexturePosition(part: string | null, skinX: number, skinY: number): void {
+function reportTexturePosition(part: string | null, skinX: number, skinY: number, hoverColorHint: string | null = null): void {
   const layer = part != null ? partToLayer(part) : null;
+  const tool = state.activeTool;
+  let hoverColor: string | null = hoverColorHint;
+  if (tool === 'eyedropper' && skinX >= 0 && skinY >= 0) {
+    if (hoverColor != null) {
+      // 3D controls may provide a precomputed "through transparency" sample.
+      publish(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, {
+        part,
+        layer,
+        skinX,
+        skinY,
+        tool,
+        currentColor: state.currentColor,
+        hoverColor,
+      });
+      return;
+    }
+    // Hover info must never block drawing interactions; ignore sampling errors.
+    try {
+      const wx = Math.floor(skinX * RESOLUTION_MULTIPLIER);
+      const wy = Math.floor(skinY * RESOLUTION_MULTIPLIER);
+      const sample = sampleColorAtWithAlpha(wx, wy);
+      if (sample && sample.alpha >= EYEDROPPER_ALPHA_THRESHOLD) hoverColor = sample.hex;
+    } catch {
+      hoverColor = null;
+    }
+  }
   publish(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, {
     part,
     layer,
     skinX,
     skinY,
+    tool,
+    currentColor: state.currentColor,
+    hoverColor,
   });
 }
 
-/** Update the hover info panel with current part and skin coords. Pass null to clear. Public API for 2D/3D views. */
-export function updateHoverInfo(part: string | null, skinX: number, skinY: number): void {
-  reportTexturePosition(part, skinX, skinY);
+/** Update hover info payload for 2D/3D views. Optional hoverColor is used by eyedropper hover in 3D. */
+export function updateHoverInfo(part: string | null, skinX: number, skinY: number, hoverColor: string | null = null): void {
+  reportTexturePosition(part, skinX, skinY, hoverColor);
 }
 
 function buildCreatorPanels(): void {
@@ -527,6 +590,9 @@ export function initCreator(): void {
 
   if (!creatorCanvasPopulated) {
     ctx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
+  }
+  if (isCreatorEditMode(state.editMode)) {
+    restoreLayerStateForEditMode();
   }
   document.body.dataset.editMode = state.editMode;
   const wrapper = document.getElementById('creator-view-wrapper');
@@ -674,9 +740,22 @@ export function getEditMode3D(): boolean {
 
 /** Set edit mode and dispatch EDIT_MODE_CHANGE with { mode }. */
 export function setEditMode(mode: EditMode): void {
+  const wasEditMode = isCreatorEditMode(state.editMode);
+  const willBeEditMode = isCreatorEditMode(mode);
+  if (wasEditMode && !willBeEditMode) {
+    saveLayerStateAndNormalizeForNonEditMode();
+  } else if (!wasEditMode && willBeEditMode) {
+    restoreLayerStateForEditMode();
+  }
   state.editMode = mode;
   document.body.dataset.editMode = mode;
   publish(CREATOR_EVENTS.EDIT_MODE_CHANGE, { mode: state.editMode });
+}
+
+/** Save current layer visibility/lock and force all visible+unlocked (used when leaving creator route from 2D/3D). */
+export function normalizeLayerStateForNonEditMode(): void {
+  if (!isCreatorEditMode(state.editMode)) return;
+  saveLayerStateAndNormalizeForNonEditMode();
 }
 
 /** Set Edit 3D mode (true = 3d, false = 2d) and dispatch change event. */
@@ -702,17 +781,26 @@ export function getLayer3DLocked(): Record<string, boolean> {
 /** Set visibility for a layer and dispatch change event. */
 export function setLayer3DVisible(layer: string, visible: boolean): void {
   if (isLayerKey(layer)) {
+    const previous = state.layer3DVisible[layer];
     state.layer3DVisible[layer] = visible;
-    publish(CREATOR_EVENTS.LAYER3D_CHANGE);
+    if (previous !== visible) {
+      publish(CREATOR_EVENTS.LAYER3D_CHANGE, { layer, property: 'visibility', visible });
+    }
   }
 }
 
 /** Set visibility for all layers at once (used by solo visibility). */
 function setLayer3DVisibleAll(visible: Record<string, boolean>): void {
+  let changed = false;
   for (const k of LAYER_KEYS) {
-    if (visible[k] !== undefined) state.layer3DVisible[k] = visible[k];
+    if (visible[k] !== undefined && state.layer3DVisible[k] !== visible[k]) {
+      state.layer3DVisible[k] = visible[k];
+      changed = true;
+    }
   }
-  publish(CREATOR_EVENTS.LAYER3D_CHANGE);
+  if (changed) {
+    publish(CREATOR_EVENTS.LAYER3D_CHANGE, { property: 'visibility', all: true, visibleMap: { ...state.layer3DVisible } });
+  }
 }
 
 /** Set lock for all layers at once (used by solo lock). */
@@ -765,6 +853,8 @@ function setupDragToToggle(
     if (!layer) return;
     label.addEventListener('mousedown', (e) => {
       if (!(e instanceof MouseEvent) || e.button !== 0 || !canStartDrag(e)) return;
+      // Prevent browser text selection while click-dragging across layer rows.
+      e.preventDefault();
       const startX = e.clientX;
       const startY = e.clientY;
       const dragValue = !getValue(layer);

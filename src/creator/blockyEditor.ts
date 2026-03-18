@@ -8,11 +8,108 @@ import { WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skinCoordinates';
 import { rgbToHex } from '../types/color';
 import * as brush from './brush';
 import type { CreatorState } from './creatorState';
+import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
 
 const ZOOM = 4;
 const DISPLAY_SIZE = WORK_SIZE * ZOOM;
 const RULER_SCALE = DISPLAY_SIZE / WORK_SIZE;
 const BLOCKY_GRID_SIZE = 512;
+const TEMPLATE_LABEL_FONT = '600 14px Inter, system-ui, -apple-system, sans-serif';
+
+const TEMPLATE_LAYER_STYLES: Record<string, { stroke: string }> = {
+  head: { stroke: 'rgba(56, 189, 248, 0.95)' },
+  hat: { stroke: 'rgba(192, 132, 252, 0.95)' },
+  body: { stroke: 'rgba(34, 197, 94, 0.95)' },
+  jacket: { stroke: 'rgba(249, 115, 22, 0.95)' },
+  arms: { stroke: 'rgba(99, 102, 241, 0.95)' },
+  sleeves: { stroke: 'rgba(236, 72, 153, 0.95)' },
+  legs: { stroke: 'rgba(16, 185, 129, 0.95)' },
+  pants: { stroke: 'rgba(234, 179, 8, 0.95)' },
+};
+
+const DEFAULT_TEMPLATE_STYLE = {
+  stroke: 'rgba(100, 200, 255, 0.9)',
+};
+
+const HIDDEN_TEMPLATE_STYLE = {
+  stroke: 'rgba(148, 163, 184, 0.95)',
+};
+
+const TEMPLATE_LABEL_TEXT_VISIBLE = 'rgba(241, 245, 249, 0.96)';
+const TEMPLATE_LABEL_TEXT_HIDDEN = 'rgba(226, 232, 240, 0.82)';
+
+let activeBlockyContext: BlockyEditorContext | null = null;
+let unbindLayerVisibilityListener: (() => void) | null = null;
+let overlayPointerPx: { x: number; y: number } | null = null;
+const flippedTemplateLabelKeys = new Set<string>();
+const hoveredTemplateLabelKeys = new Set<string>();
+const templateLabelTransitions = new Map<string, {
+  fromFlipped: boolean;
+  toFlipped: boolean;
+  startedAtMs: number;
+  durationMs: number;
+}>();
+const TEMPLATE_LABEL_FADE_MS = 280;
+let templateAnimationFrameHandle: number | null = null;
+
+function pointInRect(
+  point: { x: number; y: number } | null,
+  x: number,
+  y: number,
+  w: number,
+  h: number
+): boolean {
+  if (!point) return false;
+  return point.x >= x && point.x <= x + w && point.y >= y && point.y <= y + h;
+}
+
+function clamp01(v: number): number {
+  if (v < 0) return 0;
+  if (v > 1) return 1;
+  return v;
+}
+
+function getTemplateLabelText(layerKey: string, bounds: { x: number; y: number; w: number; h: number }): string {
+  if (layerKey === 'arms') {
+    if (bounds.x === 40 && bounds.y === 16) return 'Right Arm';
+    if (bounds.x === 32 && bounds.y === 48) return 'Left Arm';
+  }
+  if (layerKey === 'sleeves') {
+    if (bounds.x === 40 && bounds.y === 32) return 'Right Sleeve';
+    if (bounds.x === 48 && bounds.y === 48) return 'Left Sleeve';
+  }
+  if (layerKey === 'pants') {
+    if (bounds.x === 0 && bounds.y === 32) return 'Right Pants';
+    if (bounds.x === 0 && bounds.y === 48) return 'Left Pants';
+  }
+  if (layerKey === 'legs') {
+    if (bounds.x === 0 && bounds.y === 16) return 'Right Leg';
+    if (bounds.x === 16 && bounds.y === 48) return 'Left Leg';
+  }
+  return layerKey.charAt(0).toUpperCase() + layerKey.slice(1);
+}
+
+function scheduleTemplateAnimationFrame(): void {
+  if (templateAnimationFrameHandle != null) return;
+  templateAnimationFrameHandle = window.requestAnimationFrame(() => {
+    templateAnimationFrameHandle = null;
+    if (!activeBlockyContext) return;
+    renderRulersAndGrid(activeBlockyContext);
+  });
+}
+
+function startLabelFlipTransition(labelKey: string, currentFlipped: boolean): void {
+  const nextFlipped = !currentFlipped;
+  templateLabelTransitions.set(labelKey, {
+    fromFlipped: currentFlipped,
+    toFlipped: nextFlipped,
+    startedAtMs: performance.now(),
+    durationMs: TEMPLATE_LABEL_FADE_MS,
+  });
+  if (nextFlipped) flippedTemplateLabelKeys.add(labelKey);
+  else flippedTemplateLabelKeys.delete(labelKey);
+  scheduleTemplateAnimationFrame();
+}
 
 export interface BlockyEditorContext {
   state: CreatorState;
@@ -177,23 +274,36 @@ export function renderRulersAndGrid(ctx: BlockyEditorContext): void {
       overlay.height = DISPLAY_SIZE;
       overlayCtx.clearRect(0, 0, DISPLAY_SIZE, DISPLAY_SIZE);
       if (ctx.state.showTemplate) {
-        overlayCtx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
-        overlayCtx.lineWidth = 2;
-        overlayCtx.fillStyle = 'rgba(100, 200, 255, 0.2)';
         const templateScale = RULER_SCALE * RESOLUTION_MULTIPLIER;
-        for (const bounds of Object.values(SKIN_LAYER_BOUNDS)) {
+        const labelPaddingX = 6;
+        const labelPaddingY = 3;
+        const labelInset = 0;
+        const minLabelWidth = 22;
+        const minLabelHeight = 16;
+        overlayCtx.lineWidth = 2;
+        overlayCtx.font = TEMPLATE_LABEL_FONT;
+        overlayCtx.textAlign = 'left';
+        overlayCtx.textBaseline = 'top';
+
+        for (const [layerKey, bounds] of Object.entries(SKIN_LAYER_BOUNDS)) {
+          const isVisible = ctx.state.layer3DVisible[layerKey] !== false;
+          const style = isVisible
+            ? (TEMPLATE_LAYER_STYLES[layerKey] ?? DEFAULT_TEMPLATE_STYLE)
+            : HIDDEN_TEMPLATE_STYLE;
           for (const b of bounds) {
             const x = b.x * templateScale;
             const y = b.y * templateScale;
             const w = b.w * templateScale;
             const h = b.h * templateScale;
-            overlayCtx.fillRect(x, y, w, h);
+            overlayCtx.strokeStyle = style.stroke;
             overlayCtx.strokeRect(x, y, w, h);
           }
         }
         overlayCtx.globalCompositeOperation = 'destination-out';
         overlayCtx.fillStyle = 'rgba(0,0,0,1)';
         for (const z of SKIN_DEAD_ZONES) {
+          // Preserve full head/hat template boxes by skipping top-row dead zones.
+          if (z.y < 16) continue;
           const x = z.x * templateScale;
           const y = z.y * templateScale;
           const w = z.w * templateScale;
@@ -201,6 +311,86 @@ export function renderRulersAndGrid(ctx: BlockyEditorContext): void {
           overlayCtx.fillRect(x, y, w, h);
         }
         overlayCtx.globalCompositeOperation = 'source-over';
+
+        // Draw labels after dead-zone punch-out so text remains readable.
+        for (const [layerKey, bounds] of Object.entries(SKIN_LAYER_BOUNDS)) {
+          const isVisible = ctx.state.layer3DVisible[layerKey] !== false;
+          const style = isVisible
+            ? (TEMPLATE_LAYER_STYLES[layerKey] ?? DEFAULT_TEMPLATE_STYLE)
+            : HIDDEN_TEMPLATE_STYLE;
+          for (let i = 0; i < bounds.length; i++) {
+            const b = bounds[i];
+            const labelText = getTemplateLabelText(layerKey, b);
+            const x = b.x * templateScale;
+            const y = b.y * templateScale;
+            const w = b.w * templateScale;
+            const h = b.h * templateScale;
+            const maxLabelW = w - labelInset * 2;
+            const maxLabelH = h - labelInset * 2;
+            if (maxLabelW < minLabelWidth || maxLabelH < minLabelHeight) continue;
+            const desiredLabelW = overlayCtx.measureText(labelText).width + labelPaddingX * 2;
+            const labelW = Math.min(desiredLabelW, maxLabelW);
+            const labelH = Math.min(14 + labelPaddingY * 2, maxLabelH);
+            const topLeftX = x + labelInset;
+            const topLeftY = y + labelInset;
+            const bottomRightX = x + w - labelW - labelInset;
+            const bottomRightY = y + h - labelH - labelInset;
+            const labelKey = `${layerKey}:${i}:${b.x}:${b.y}:${b.w}:${b.h}`;
+            const pointerInBox = pointInRect(overlayPointerPx, x, y, w, h);
+            if (!pointerInBox) {
+              flippedTemplateLabelKeys.delete(labelKey);
+              hoveredTemplateLabelKeys.delete(labelKey);
+              templateLabelTransitions.delete(labelKey);
+            } else {
+              const wasFlipped = flippedTemplateLabelKeys.has(labelKey);
+              const currentLabelX = wasFlipped ? bottomRightX : topLeftX;
+              const currentLabelY = wasFlipped ? bottomRightY : topLeftY;
+              const pointerInCurrentLabel = pointInRect(overlayPointerPx, currentLabelX, currentLabelY, labelW, labelH);
+              const wasHoveringLabel = hoveredTemplateLabelKeys.has(labelKey);
+              if (pointerInCurrentLabel && !wasHoveringLabel) {
+                startLabelFlipTransition(labelKey, wasFlipped);
+              }
+              if (pointerInCurrentLabel) hoveredTemplateLabelKeys.add(labelKey);
+              else hoveredTemplateLabelKeys.delete(labelKey);
+            }
+            const flipped = flippedTemplateLabelKeys.has(labelKey);
+            const labelX = flipped ? bottomRightX : topLeftX;
+            const labelY = flipped ? bottomRightY : topLeftY;
+            const transition = templateLabelTransitions.get(labelKey);
+
+            const drawLabel = (drawX: number, drawY: number, alpha: number) => {
+              if (alpha <= 0) return;
+              overlayCtx.save();
+              overlayCtx.globalAlpha = alpha;
+              overlayCtx.fillStyle = style.stroke;
+              overlayCtx.fillRect(drawX, drawY, labelW, labelH);
+              overlayCtx.fillStyle = isVisible ? TEMPLATE_LABEL_TEXT_VISIBLE : TEMPLATE_LABEL_TEXT_HIDDEN;
+              overlayCtx.beginPath();
+              overlayCtx.rect(drawX, drawY, labelW, labelH);
+              overlayCtx.clip();
+              overlayCtx.fillText(labelText, drawX + labelPaddingX, drawY + labelPaddingY);
+              overlayCtx.restore();
+            };
+
+            if (transition) {
+              const elapsed = performance.now() - transition.startedAtMs;
+              const t = clamp01(elapsed / transition.durationMs);
+              const fromX = transition.fromFlipped ? bottomRightX : topLeftX;
+              const fromY = transition.fromFlipped ? bottomRightY : topLeftY;
+              const toX = transition.toFlipped ? bottomRightX : topLeftX;
+              const toY = transition.toFlipped ? bottomRightY : topLeftY;
+              drawLabel(fromX, fromY, 1 - t);
+              drawLabel(toX, toY, t);
+              if (t >= 1) {
+                templateLabelTransitions.delete(labelKey);
+              } else {
+                scheduleTemplateAnimationFrame();
+              }
+            } else {
+              drawLabel(labelX, labelY, 1);
+            }
+          }
+        }
       }
     }
   }
@@ -247,19 +437,41 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
   const skin = ctx.getSkinCanvas();
   const skinCtx = skin?.getContext('2d', { willReadFrequently: true });
   if (!grid || !skinCtx) return;
+  const gridEl: HTMLElement = grid;
+  const drawCtx: CanvasRenderingContext2D = skinCtx;
+  activeBlockyContext = ctx;
+  if (!unbindLayerVisibilityListener) {
+    unbindLayerVisibilityListener = subscribe(CREATOR_EVENTS.LAYER3D_CHANGE, () => {
+      if (!activeBlockyContext) return;
+      renderRulersAndGrid(activeBlockyContext);
+    });
+  }
 
   const canPaintAtBound = (wx: number, wy: number) => canPaintAt(ctx, wx, wy);
   const getCurrentColor = () => ctx.state.currentColor;
 
   function handleBlockyPointer(e: MouseEvent): void {
+    const gridRect = gridEl.getBoundingClientRect();
+    const relX = e.clientX - gridRect.left;
+    const relY = e.clientY - gridRect.top;
+    const inGrid = relX >= 0 && relX <= gridRect.width && relY >= 0 && relY <= gridRect.height;
+    overlayPointerPx = inGrid
+      ? { x: (relX / gridRect.width) * DISPLAY_SIZE, y: (relY / gridRect.height) * DISPLAY_SIZE }
+      : null;
     const cell = clientToBlockyCell(e.clientX, e.clientY);
     if (cell) {
       const wx = cell.cx * RESOLUTION_MULTIPLIER;
       const wy = cell.cy * RESOLUTION_MULTIPLIER;
       const part = ctx.getPartDisplayNameAtCoords(wx, wy);
       ctx.updateHoverInfo(part, cell.cx, cell.cy);
+      if (ctx.state.showTemplate) renderRulersAndGrid(ctx);
     } else if (e.type === 'mouseleave') {
+      overlayPointerPx = null;
+      flippedTemplateLabelKeys.clear();
+      hoveredTemplateLabelKeys.clear();
+      templateLabelTransitions.clear();
       ctx.updateHoverInfo(null, -1, -1);
+      if (ctx.state.showTemplate) renderRulersAndGrid(ctx);
     }
     if (!cell) return;
     const wx = cell.cx * RESOLUTION_MULTIPLIER;
@@ -281,7 +493,7 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
 
     if (e.type === 'mousedown' && e.button === 0) {
       if (ctx.state.activeTool === 'fill') {
-        const changed = brush.floodFill(skinCtx, wx, wy, canPaintAtBound, getCurrentColor);
+        const changed = brush.floodFill(drawCtx, wx, wy, canPaintAtBound, getCurrentColor);
         if (changed.length > 0) {
           ctx.pushUndoFill(changed, ctx.state.currentColor);
           ctx.onCanvasChange?.();
@@ -299,7 +511,7 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
           recorded: new Set<string>(),
         };
         brush.brushAt(
-          skinCtx,
+          drawCtx,
           wx,
           wy,
           isEraser,
@@ -315,7 +527,7 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
     } else if (e.type === 'mousemove' && ctx.state.isDrawing && ctx.state.activeTool !== 'fill' && ctx.state.currentStroke) {
       const isEraser = ctx.state.currentStroke.isEraser;
       brush.drawLine(
-        skinCtx,
+        drawCtx,
         ctx.state.lastSkinX,
         ctx.state.lastSkinY,
         wx,
@@ -357,11 +569,11 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
     }
   }
 
-  grid.addEventListener('mousedown', handleBlockyPointer);
-  grid.addEventListener('mousemove', handleBlockyPointer);
-  grid.addEventListener('mouseup', handleBlockyPointer);
-  grid.addEventListener('mouseleave', handleBlockyPointer);
-  grid.title = 'Blocky 64×64 grid — drag to paint, Alt+click to pick color';
+  gridEl.addEventListener('mousedown', handleBlockyPointer);
+  gridEl.addEventListener('mousemove', handleBlockyPointer);
+  gridEl.addEventListener('mouseup', handleBlockyPointer);
+  gridEl.addEventListener('mouseleave', handleBlockyPointer);
+  gridEl.title = 'Blocky 64×64 grid — drag to paint, Alt+click to pick color';
 }
 
 /** Get brush cursor style for 2D grid. Uses grid rect for cell size. */

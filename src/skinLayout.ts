@@ -34,12 +34,10 @@ export const SKIN_LAYER_BOUNDS: Record<string, Bounds[]> = {
   arms: [
     { x: 40, y: 16, w: 16, h: 16 },
     { x: 32, y: 48, w: 16, h: 16 },
-    { x: 56, y: 16, w: 8, h: 16 }, // right strip (gap in spec bounds)
   ],
   sleeves: [
     { x: 40, y: 32, w: 16, h: 16 },
     { x: 48, y: 48, w: 16, h: 16 },
-    { x: 56, y: 32, w: 8, h: 16 }, // right strip
   ],
   legs: [
     { x: 0, y: 16, w: 16, h: 16 },
@@ -124,8 +122,8 @@ export const SKIN_PART_BOUNDS: { part: string; bounds: Bounds[] }[] = [
   { part: 'Right pants', bounds: [{ x: 0, y: 32, w: 16, h: 16 }] },
   { part: 'Left leg', bounds: [{ x: 16, y: 48, w: 16, h: 16 }] },
   { part: 'Left pants', bounds: [{ x: 0, y: 48, w: 16, h: 16 }] },
-  { part: 'Right arm', bounds: [{ x: 40, y: 16, w: 16, h: 16 }, { x: 56, y: 16, w: 8, h: 16 }] },
-  { part: 'Right sleeve', bounds: [{ x: 40, y: 32, w: 16, h: 16 }, { x: 56, y: 32, w: 8, h: 16 }] },
+  { part: 'Right arm', bounds: [{ x: 40, y: 16, w: 16, h: 16 }] },
+  { part: 'Right sleeve', bounds: [{ x: 40, y: 32, w: 16, h: 16 }] },
   { part: 'Left arm', bounds: [{ x: 32, y: 48, w: 16, h: 16 }] },
   { part: 'Left sleeve', bounds: [{ x: 48, y: 48, w: 16, h: 16 }] },
 ];

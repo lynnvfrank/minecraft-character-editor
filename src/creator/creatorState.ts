@@ -92,7 +92,7 @@ export function createCreatorState(): CreatorState {
     layer3DSoloLockBeforeState: null,
     layer3DSoloLockCurrentLayer: null,
     showRulers: false,
-    showTemplate: false,
+    showTemplate: true,
     layersPanel3DCollapsed: false,
     undoStack: [],
     redoStack: [],

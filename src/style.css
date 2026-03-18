@@ -734,6 +734,9 @@ body[data-creator-exiting="1"] .creator-lower-right-panels {
   font-size: 0.7rem;
   transition: background 0.15s ease;
 }
+.creator-layers-panel-toggle {
+  display: none;
+}
 .creator-layers-panel-toggle:hover {
   background: rgba(255, 255, 255, 0.12);
 }
@@ -768,36 +771,111 @@ body[data-creator-exiting="1"] .creator-lower-right-panels {
 .creator-layers-panel-row {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.45rem;
 }
 .creator-layers-panel-row-highlight {
   background: rgba(99, 179, 237, 0.2);
   border-radius: 4px;
 }
-.creator-layers-panel-row .creator-layers-panel-name {
-  min-width: 4.5em;
-}
 .creator-layers-panel-visibility,
 .creator-layers-panel-lock {
   display: flex;
   align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  transition: filter 0.14s ease, opacity 0.14s ease, transform 0.08s ease, box-shadow 0.14s ease, border-color 0.14s ease;
   cursor: pointer;
 }
 .creator-layers-panel-visibility input,
 .creator-layers-panel-lock input {
-  width: 14px;
-  height: 14px;
-  accent-color: rgba(99, 179, 237, 0.9);
-  cursor: pointer;
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.creator-layers-panel-visibility {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  min-height: 36px;
+  padding: 0.5rem 0.6rem;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.creator-layers-panel-lock {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+}
+.creator-layers-panel-row.creator-layer-locked .creator-layers-panel-lock {
+  border-color: rgba(63, 140, 255, 0.6);
+  background: rgba(63, 140, 255, 0.3);
+}
+.creator-layers-panel-row.creator-layer-unlocked .creator-layers-panel-lock {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+}
+.creator-layers-panel-row.creator-layer-unlocked .creator-layer-lock {
+  opacity: 0.78;
+}
+.creator-layers-panel-visibility:hover,
+.creator-layers-panel-lock:hover {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+.creator-layers-panel-visibility:active,
+.creator-layers-panel-lock:active {
+  transform: translateY(1px);
+}
+.creator-layers-panel-row.creator-layer-hidden .creator-layers-panel-visibility {
+  filter: grayscale(0.5) saturate(0.3) brightness(0.82);
+  opacity: 0.62;
+}
+.creator-layers-panel-row.creator-layer-hidden .creator-layer-eye {
+  position: relative;
+}
+.creator-layers-panel-row.creator-layer-hidden .creator-layer-eye::after {
+  content: '';
+  position: absolute;
+  top: 49%;
+  left: -3px;
+  width: calc(100% + 6px);
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 90, 90, 0.95);
+  transform: rotate(-16deg);
+}
+.creator-layers-panel-row.creator-layer-hidden .creator-layers-panel-name {
+  color: rgba(255, 255, 255, 0.75);
+}
+.creator-layers-panel-row.creator-layer-visible .creator-layers-panel-visibility {
+  border-color: rgba(63, 140, 255, 0.6);
+  background: rgba(63, 140, 255, 0.3);
+  filter: none;
+  opacity: 1;
 }
 .creator-layer-eye,
 .creator-layer-lock {
-  font-size: 0.9rem;
-  opacity: 0.85;
+  font-size: 0.92rem;
+  line-height: 1;
+  opacity: 0.95;
+  filter: grayscale(1) saturate(0);
+}
+.creator-layer-eye {
+  order: 2;
+  margin-left: auto;
+  margin-right: 0.2rem;
+}
+.creator-layers-panel-visibility .creator-layers-panel-name {
+  order: 1;
 }
 .creator-layers-panel-name {
-  flex: 1;
-  color: rgba(255, 255, 255, 0.9);
+  min-width: 4.5em;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 /* Color picker panel — floating lower-right, SV square + hue bar + indicator */
@@ -960,7 +1038,24 @@ body[data-creator-exiting="1"] .creator-lower-right-panels {
   justify-content: center;
 }
 .creator-hover-info-text {
-  white-space: nowrap;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.45rem;
+  line-height: 1.25;
+  justify-content: center;
+  text-align: center;
+}
+.creator-hover-info-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+.creator-hover-info-swatch {
+  width: 0.78rem;
+  height: 0.78rem;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 
 /* Tools panel — inside creator-left-panels (top) */

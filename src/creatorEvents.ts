@@ -24,6 +24,9 @@ export type CreatorTexturePositionDetail = {
   layer: string | null;
   skinX: number;
   skinY: number;
+  tool?: 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'navigate';
+  currentColor?: string | null;
+  hoverColor?: string | null;
 };
 
 /** Publish an event. Subscribers will be notified. */

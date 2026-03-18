@@ -38,6 +38,23 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   list.className = 'creator-layers-panel-list';
   list.setAttribute('role', 'group');
 
+  const updateLayerButtonUI = (panelEl: HTMLElement) => {
+    panelEl.querySelectorAll<HTMLElement>('.creator-layers-panel-row').forEach((rowEl) => {
+      const visibleInput = rowEl.querySelector<HTMLInputElement>('.creator-layer-3d-visible');
+      const lockInput = rowEl.querySelector<HTMLInputElement>('.creator-layer-3d-lock');
+      const eyeEl = rowEl.querySelector<HTMLElement>('.creator-layer-eye');
+      const lockEl = rowEl.querySelector<HTMLElement>('.creator-layer-lock');
+      const isVisible = !!visibleInput?.checked;
+      const isLocked = !!lockInput?.checked;
+      rowEl.classList.toggle('creator-layer-visible', isVisible);
+      rowEl.classList.toggle('creator-layer-hidden', !isVisible);
+      rowEl.classList.toggle('creator-layer-locked', isLocked);
+      rowEl.classList.toggle('creator-layer-unlocked', !isLocked);
+      if (eyeEl) eyeEl.textContent = isVisible ? '👁' : '🙈';
+      if (lockEl) lockEl.textContent = isLocked ? '🔒' : '🔓';
+    });
+  };
+
   for (let i = 0; i < groups.length; i++) {
     const group = groups[i];
     for (const layer of group) {
@@ -45,13 +62,11 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       row.className = 'creator-layers-panel-row';
       row.dataset.layer = layer;
 
-      const nameSpan = document.createElement('span');
-      nameSpan.className = 'creator-layers-panel-name';
-      nameSpan.textContent = layer.charAt(0).toUpperCase() + layer.slice(1);
+      const layerName = layer.charAt(0).toUpperCase() + layer.slice(1);
 
       const visibilityLabel = document.createElement('label');
       visibilityLabel.className = 'creator-layers-panel-visibility';
-      visibilityLabel.title = 'Visibility (eye): hide to paint underlying parts. Alt+click: solo this layer';
+      visibilityLabel.title = `${layerName} visibility (eye): hide to paint underlying parts. Alt+click: solo this layer`;
       const visibilityInput = document.createElement('input');
       visibilityInput.type = 'checkbox';
       visibilityInput.className = 'creator-layer-3d-visible';
@@ -60,12 +75,15 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       const eyeSpan = document.createElement('span');
       eyeSpan.className = 'creator-layer-eye';
       eyeSpan.setAttribute('aria-hidden', 'true');
-      eyeSpan.textContent = '👁';
-      visibilityLabel.append(visibilityInput, eyeSpan);
+      eyeSpan.textContent = visibilityInput.checked ? '👁' : '🙈';
+      const layerNameSpan = document.createElement('span');
+      layerNameSpan.className = 'creator-layers-panel-name';
+      layerNameSpan.textContent = layerName;
+      visibilityLabel.append(visibilityInput, eyeSpan, layerNameSpan);
 
       const lockLabel = document.createElement('label');
       lockLabel.className = 'creator-layers-panel-lock';
-      lockLabel.title = 'Lock: ignore brush/eraser/fill. Alt+click: solo this layer (unlock only this)';
+      lockLabel.title = `${layerName} lock: ignore brush/eraser/fill. Alt+click: solo this layer (unlock only this)`;
       const lockInput = document.createElement('input');
       lockInput.type = 'checkbox';
       lockInput.className = 'creator-layer-3d-lock';
@@ -74,10 +92,10 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       const lockSpan = document.createElement('span');
       lockSpan.className = 'creator-layer-lock';
       lockSpan.setAttribute('aria-hidden', 'true');
-      lockSpan.textContent = '🔒';
+      lockSpan.textContent = lockInput.checked ? '🔒' : '🔓';
       lockLabel.append(lockInput, lockSpan);
 
-      row.append(nameSpan, visibilityLabel, lockLabel);
+      row.append(visibilityLabel, lockLabel);
       list.appendChild(row);
     }
     if (i < groups.length - 1) {
@@ -100,6 +118,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
         ctx.onVisibilitySoloClick(layer);
         if (panel) {
           ctx.syncVisibilityCheckboxes(panel);
+          updateLayerButtonUI(panel);
           ctx.clearSoloIndicator(panel);
         }
         return;
@@ -107,6 +126,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     });
     input.addEventListener('change', () => {
       ctx.setLayerVisible(layer, input.checked);
+      if (panel) updateLayerButtonUI(panel);
     });
   });
   panel.querySelectorAll('.creator-layers-panel-lock').forEach((label) => {
@@ -119,6 +139,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
         ctx.onLockSoloClick(layer);
         if (panel) {
           ctx.syncLockCheckboxes(panel);
+          updateLayerButtonUI(panel);
           ctx.clearSoloIndicator(panel);
         }
         return;
@@ -129,6 +150,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     input.addEventListener('change', () => {
       const layer = input.dataset.layer;
       if (layer) ctx.setLayerLocked(layer, input.checked);
+      if (panel) updateLayerButtonUI(panel);
     });
   });
 
@@ -140,6 +162,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     (l, v) => ctx.setLayerVisible(l, v),
     (p) => {
       ctx.syncVisibilityCheckboxes(p);
+      updateLayerButtonUI(p);
       ctx.clearSoloIndicator(p);
     },
     (e) => !(e instanceof MouseEvent && e.altKey)
@@ -152,12 +175,14 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     (l, v) => ctx.setLayerLocked(l, v),
     (p) => {
       ctx.syncLockCheckboxes(p);
+      updateLayerButtonUI(p);
       ctx.clearSoloIndicator(p);
     },
     (e) => !(e instanceof MouseEvent && e.altKey)
   );
 
   const updateCollapsedUI = () => {
+    if (!panel) return;
     const collapsed = ctx.isLayersPanelCollapsed();
     panel.classList.toggle('creator-layers-panel-collapsed', collapsed);
     const minimizeIcon = panel.querySelector('.creator-layers-panel-icon-minimize');
@@ -176,6 +201,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     updateCollapsedUI();
   });
   updateCollapsedUI();
+  updateLayerButtonUI(panel);
 
   subscribe(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, (e: CustomEvent<CreatorTexturePositionDetail>) => {
     const layer = e.detail?.layer ?? null;
