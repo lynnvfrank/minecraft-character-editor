@@ -5,10 +5,11 @@ import {
   getCreatorSkinCanvas,
   loadSkinFromPath,
   getCreatorCanvasPopulated,
-  getEditMode3D,
+  getEditMode,
   getCreatorWorkSize,
   getLayer3DVisible,
   setActiveTool,
+  unregisterCreatorShortcuts,
 } from './creator';
 import { preprocessSkinTexture } from './skinPreprocess';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -364,10 +365,13 @@ function applyRoute(): void {
   if (route === 'creator') {
     lockCharacterToCreatorIdle();
     initCreator();
+    // Re-apply creator layout for current mode (especially when returning in 2D).
+    updateCreator3DViewPlacement();
     window.setTimeout(() => {
       snapCameraToCreatorView(getCreatorCameraPose());
     }, 0);
     window.setTimeout(() => {
+      updateCreator3DViewPlacement();
       window.dispatchEvent(new Event('resize'));
       const c = characters['runningboy'];
       if (c?.currentSkin) {
@@ -379,6 +383,7 @@ function applyRoute(): void {
       }
     }, 0);
   } else {
+    unregisterCreatorShortcuts();
     ensureViewerFullWidthLayout();
     resumeHomeMode();
   }
@@ -843,7 +848,9 @@ function updateCreator3DViewPlacement() {
   const wrapper = document.getElementById('creator-view-wrapper');
   const slot = document.getElementById('creator-3d-preview-slot');
   if (!app || !wrapper || !slot) return;
-  if (getEditMode3D()) {
+  const mode = getEditMode();
+  const show3DInMainArea = mode === '3d' || mode === 'wardrobe';
+  if (show3DInMainArea) {
     if (app.parentElement !== wrapper) {
       wrapper.appendChild(app);
       onWindowResize();

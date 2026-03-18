@@ -17,7 +17,7 @@ export const CREATOR_EVENTS = {
 
 export type CreatorCurrentColorDetail = { color: string };
 
-export type CreatorEditModeDetail = { is3D: boolean };
+export type CreatorEditModeDetail = { mode: 'wardrobe' | '2d' | '3d' };
 
 export type CreatorTexturePositionDetail = {
   part: string | null;

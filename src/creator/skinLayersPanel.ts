@@ -1,57 +1,56 @@
 import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
 import type { CreatorTexturePositionDetail } from '../creatorEvents';
-import { getCreatorPanelsContainer } from './container';
 import type { SkinLayersContext } from './api';
 
 export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
-  const container = getCreatorPanelsContainer();
-  if (!container) return;
+  const upperLeftPanels = document.getElementById('creator-upper-left-panels');
+  if (!upperLeftPanels) return;
 
-  let panel = document.getElementById('creator-layers-panel-3d');
+  let panel = document.getElementById('creator-layers-panel');
   if (panel) panel.remove();
 
   const groups = ctx.layerGroups;
   panel = document.createElement('div');
-  panel.id = 'creator-layers-panel-3d';
-  panel.className = 'creator-layers-panel-3d';
-  panel.setAttribute('aria-label', '3D layers');
+  panel.id = 'creator-layers-panel';
+  panel.className = 'creator-layers-panel';
+  panel.setAttribute('aria-label', 'Layers');
 
   const header = document.createElement('div');
-  header.className = 'creator-layers-panel-3d-header';
+  header.className = 'creator-layers-panel-header';
   const titleSpan = document.createElement('span');
-  titleSpan.className = 'creator-layers-panel-3d-title';
+  titleSpan.className = 'creator-layers-panel-title';
   titleSpan.textContent = 'Layers';
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
-  toggleBtn.className = 'creator-layers-panel-3d-toggle';
+  toggleBtn.className = 'creator-layers-panel-toggle';
   toggleBtn.title = 'Minimize panel';
   toggleBtn.setAttribute('aria-label', 'Minimize panel');
   const minimizeIcon = document.createElement('span');
-  minimizeIcon.className = 'creator-layers-panel-3d-icon creator-layers-panel-3d-icon-minimize';
+  minimizeIcon.className = 'creator-layers-panel-icon creator-layers-panel-icon-minimize';
   minimizeIcon.textContent = '▼';
   const expandIcon = document.createElement('span');
-  expandIcon.className = 'creator-layers-panel-3d-icon creator-layers-panel-3d-icon-expand';
+  expandIcon.className = 'creator-layers-panel-icon creator-layers-panel-icon-expand';
   expandIcon.textContent = '▲';
   toggleBtn.append(minimizeIcon, expandIcon);
   header.append(titleSpan, toggleBtn);
 
   const list = document.createElement('div');
-  list.className = 'creator-layers-panel-3d-list';
+  list.className = 'creator-layers-panel-list';
   list.setAttribute('role', 'group');
 
   for (let i = 0; i < groups.length; i++) {
     const group = groups[i];
     for (const layer of group) {
       const row = document.createElement('div');
-      row.className = 'creator-layers-panel-3d-row';
+      row.className = 'creator-layers-panel-row';
       row.dataset.layer = layer;
 
       const nameSpan = document.createElement('span');
-      nameSpan.className = 'creator-layers-panel-3d-name';
+      nameSpan.className = 'creator-layers-panel-name';
       nameSpan.textContent = layer.charAt(0).toUpperCase() + layer.slice(1);
 
       const visibilityLabel = document.createElement('label');
-      visibilityLabel.className = 'creator-layers-panel-3d-visibility';
+      visibilityLabel.className = 'creator-layers-panel-visibility';
       visibilityLabel.title = 'Visibility (eye): hide to paint underlying parts. Alt+click: solo this layer';
       const visibilityInput = document.createElement('input');
       visibilityInput.type = 'checkbox';
@@ -65,7 +64,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       visibilityLabel.append(visibilityInput, eyeSpan);
 
       const lockLabel = document.createElement('label');
-      lockLabel.className = 'creator-layers-panel-3d-lock';
+      lockLabel.className = 'creator-layers-panel-lock';
       lockLabel.title = 'Lock: ignore brush/eraser/fill. Alt+click: solo this layer (unlock only this)';
       const lockInput = document.createElement('input');
       lockInput.type = 'checkbox';
@@ -83,7 +82,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     }
     if (i < groups.length - 1) {
       const sep = document.createElement('div');
-      sep.className = 'creator-layers-panel-3d-separator';
+      sep.className = 'creator-layers-panel-separator';
       sep.setAttribute('aria-hidden', 'true');
       list.appendChild(sep);
     }
@@ -91,7 +90,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
 
   panel.append(header, list);
 
-  panel.querySelectorAll('.creator-layers-panel-3d-visibility').forEach((label) => {
+  panel.querySelectorAll('.creator-layers-panel-visibility').forEach((label) => {
     const input = label.querySelector<HTMLInputElement>('.creator-layer-3d-visible');
     const layer = input?.dataset.layer;
     if (!layer) return;
@@ -110,7 +109,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       ctx.setLayerVisible(layer, input.checked);
     });
   });
-  panel.querySelectorAll('.creator-layers-panel-3d-lock').forEach((label) => {
+  panel.querySelectorAll('.creator-layers-panel-lock').forEach((label) => {
     const input = label.querySelector<HTMLInputElement>('.creator-layer-3d-lock');
     const layer = input?.dataset.layer;
     if (!layer) return;
@@ -135,7 +134,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
 
   ctx.setupDragToToggle(
     panel,
-    '.creator-layers-panel-3d-visibility',
+    '.creator-layers-panel-visibility',
     '.creator-layer-3d-visible',
     (l) => ctx.layerVisibility[l],
     (l, v) => ctx.setLayerVisible(l, v),
@@ -147,7 +146,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   );
   ctx.setupDragToToggle(
     panel,
-    '.creator-layers-panel-3d-lock',
+    '.creator-layers-panel-lock',
     '.creator-layer-3d-lock',
     (l) => ctx.layerLocked[l],
     (l, v) => ctx.setLayerLocked(l, v),
@@ -160,9 +159,9 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
 
   const updateCollapsedUI = () => {
     const collapsed = ctx.isLayersPanelCollapsed();
-    panel.classList.toggle('creator-layers-panel-3d-collapsed', collapsed);
-    const minimizeIcon = panel.querySelector('.creator-layers-panel-3d-icon-minimize');
-    const expandIcon = panel.querySelector('.creator-layers-panel-3d-icon-expand');
+    panel.classList.toggle('creator-layers-panel-collapsed', collapsed);
+    const minimizeIcon = panel.querySelector('.creator-layers-panel-icon-minimize');
+    const expandIcon = panel.querySelector('.creator-layers-panel-icon-expand');
     if (minimizeIcon && expandIcon) {
       minimizeIcon.setAttribute('aria-hidden', String(collapsed));
       expandIcon.setAttribute('aria-hidden', String(!collapsed));
@@ -180,14 +179,19 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
 
   subscribe(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, (e: CustomEvent<CreatorTexturePositionDetail>) => {
     const layer = e.detail?.layer ?? null;
-    const layersPanel = document.getElementById('creator-layers-panel-3d');
+    const layersPanel = document.getElementById('creator-layers-panel');
     if (!layersPanel) return;
-    layersPanel.querySelectorAll<HTMLElement>('.creator-layers-panel-3d-row').forEach((row) => {
+    layersPanel.querySelectorAll<HTMLElement>('.creator-layers-panel-row').forEach((row) => {
       const rowLayer = row.dataset.layer;
       const shouldHighlight = layer != null && rowLayer === layer;
-      row.classList.toggle('creator-layers-panel-3d-row-highlight', !!shouldHighlight);
+      row.classList.toggle('creator-layers-panel-row-highlight', !!shouldHighlight);
     });
   });
 
-  container.appendChild(panel);
+  const loadSkinsPanel = document.getElementById('creator-load-skins-panel');
+  if (loadSkinsPanel) {
+    upperLeftPanels.insertBefore(panel, loadSkinsPanel);
+  } else {
+    upperLeftPanels.appendChild(panel);
+  }
 }

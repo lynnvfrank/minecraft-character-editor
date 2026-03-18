@@ -32,8 +32,8 @@ export interface CreatorState {
   activeSwatchPalette: 'history' | 'skin';
   /** Active drawing tool. */
   activeTool: DrawingTool;
-  /** Edit mode: true = paint on 3D model, false = paint on 2D blocky grid. */
-  editMode3D: boolean;
+  /** Edit mode: 'wardrobe' | '2d' | '3d'. */
+  editMode: 'wardrobe' | '2d' | '3d';
   /** Per-layer visibility (hidden = not rendered, brush ignored). */
   layer3DVisible: Record<string, boolean>;
   /** Per-layer lock (locked = brush ignored, part stays visible). */
@@ -82,7 +82,7 @@ export function createCreatorState(): CreatorState {
     skinSwatchColors: [],
     activeSwatchPalette: 'history',
     activeTool: 'navigate',
-    editMode3D: true,
+    editMode: '3d',
     layer3DVisible: Object.fromEntries(LAYER_KEYS.map((k) => [k, true])),
     layer3DLocked: Object.fromEntries(LAYER_KEYS.map((k) => [k, false])),
     layer3DSoloMode: false,

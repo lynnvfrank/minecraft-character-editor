@@ -220,7 +220,7 @@ The character creator uses a blocky 64×64 grid as the sole 2D editor. The Canva
 ### References
 
 - [src/creator.ts](../src/creator.ts) — `buildToolsPanel3D`, `buildBlockyGrid`, `buildRulers`, `renderToDisplay`.
-- [src/style.css](../src/style.css) — `.creator-tools-panel-3d`, `.creator-blocky-grid`, `.creator-ruler-*`.
+- [src/style.css](../src/style.css) — `.creator-tools-panel`, `.creator-blocky-grid`, `.creator-ruler-*`.
 
 ---
 

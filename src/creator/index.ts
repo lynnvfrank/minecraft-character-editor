@@ -2,7 +2,7 @@ export { buildColorToolbar } from './toolbar';
 export { buildColorPickerPanel, updateColorPickerFromHex } from './colorPicker';
 export { buildSwatchesPanel, updateSwatchSlots } from './swatches';
 export { buildSkinLayersPanel } from './skinLayersPanel';
-export { buildEditorToolsPanel } from './editorToolsPanel';
+export { buildEditorToolsPanel, unregisterEditorModeShortcuts } from './editorToolsPanel';
 export { buildTexturePositionPanel } from './texturePositionPanel';
 export type {
   ColorToolbarContext,

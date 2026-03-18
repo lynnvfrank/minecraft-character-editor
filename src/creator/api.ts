@@ -5,7 +5,8 @@
 
 export const EDIT_MODE_2D = '2d';
 export const EDIT_MODE_3D = '3d';
-export type EditMode = typeof EDIT_MODE_2D | typeof EDIT_MODE_3D;
+export const EDIT_MODE_WARDROBE = 'wardrobe';
+export type EditMode = typeof EDIT_MODE_2D | typeof EDIT_MODE_3D | typeof EDIT_MODE_WARDROBE;
 
 export type DrawingTool = 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'navigate';
 
@@ -72,10 +73,12 @@ export interface SkinLayersContext {
 
 export interface EditorToolsContext {
   getActiveTool: () => DrawingTool;
+  getEditMode: () => EditMode;
   isEditMode3D: () => boolean;
   isRulersShown: () => boolean;
   isTemplateShown: () => boolean;
   setActiveTool: (tool: DrawingTool) => void;
+  setEditMode: (mode: EditMode) => void;
   setEditMode3D: (is3D: boolean) => void;
   setRulersShown: (show: boolean) => void;
   setTemplateShown: (show: boolean) => void;

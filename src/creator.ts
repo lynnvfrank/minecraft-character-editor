@@ -7,9 +7,9 @@
 
 import { SKIN_LAYER_BOUNDS, SKIN_PART_BOUNDS, isInDeadZone, isLayerKey, LAYER_KEYS, partToLayer, type Bounds } from './skinLayout';
 import { WORK_SIZE, RESOLUTION_MULTIPLIER } from './skinCoordinates';
-import { publish, CREATOR_EVENTS } from './creatorEvents';
+import { subscribe, publish, CREATOR_EVENTS } from './creatorEvents';
 import type { SkinEntry } from './types/catalog';
-import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool } from './creator/api';
+import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode } from './creator/api';
 import { createCreatorState } from './creator/creatorState';
 import { normalizeHex, rgbToHex, hexToRgb } from './types/color';
 import {
@@ -18,6 +18,7 @@ import {
   buildSwatchesPanel,
   buildSkinLayersPanel,
   buildEditorToolsPanel,
+  unregisterEditorModeShortcuts,
   buildTexturePositionPanel,
 } from './creator/index';
 import * as skinIO from './creator/skinIO';
@@ -37,15 +38,173 @@ const LAYER_GROUPS: readonly (readonly string[])[] = [
 
 const state = createCreatorState();
 const BRUSH_SIZE = 1;
+const MODE_TRANSITION_MS = 450;
 
 let skinCanvas: HTMLCanvasElement | null = null;
 let blockyCtx: blockyEditor.BlockyEditorContext | null = null;
 
 /** True once a skin has been loaded into the creator (from gallery or on route enter). Used to preserve canvas when re-entering creator. */
 let creatorCanvasPopulated = false;
+let modePanelsBound = false;
+let modePanelsCurrentMode: EditMode | null = null;
+let modeTransitionToken = 0;
 
 export function getCreatorCanvasPopulated(): boolean {
   return creatorCanvasPopulated;
+}
+
+type PanelDirection = 'left' | 'right' | 'top';
+type ModePanelConfig = {
+  id: string;
+  modes: readonly EditMode[];
+  enterFrom: PanelDirection;
+  exitTo: PanelDirection;
+};
+
+const MODE_PANEL_HIDDEN_CLASS = 'creator-mode-panel-hidden';
+const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
+  { id: 'creator-load-skins-panel', modes: ['wardrobe'], enterFrom: 'left', exitTo: 'left' },
+  { id: 'creator-canvas-overlays-panel', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
+  { id: 'creator-layers-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
+  { id: 'creator-tools-panel', modes: ['2d', '3d'], enterFrom: 'top', exitTo: 'top' },
+  { id: 'creator-right-panels-group', modes: ['2d', '3d'], enterFrom: 'right', exitTo: 'right' },
+  { id: 'creator-3d-preview-slot', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
+];
+
+function getAnimClass(prefix: 'in' | 'out', dir: PanelDirection): string {
+  return `creator-mode-anim-${prefix}-${dir}`;
+}
+
+function clearModeAnimClasses(el: HTMLElement): void {
+  el.classList.remove(
+    'creator-mode-anim-in-left',
+    'creator-mode-anim-in-right',
+    'creator-mode-anim-in-top',
+    'creator-mode-anim-out-left',
+    'creator-mode-anim-out-right',
+    'creator-mode-anim-out-top'
+  );
+}
+
+function setModePanelHidden(el: HTMLElement, hidden: boolean): void {
+  el.classList.toggle(MODE_PANEL_HIDDEN_CLASS, hidden);
+}
+
+function animateModePanelIn(el: HTMLElement, dir: PanelDirection): void {
+  clearModeAnimClasses(el);
+  setModePanelHidden(el, false);
+  void el.offsetWidth;
+  el.classList.add(getAnimClass('in', dir));
+}
+
+function animateModePanelOut(el: HTMLElement, dir: PanelDirection): void {
+  clearModeAnimClasses(el);
+  setModePanelHidden(el, false);
+  void el.offsetWidth;
+  el.classList.add(getAnimClass('out', dir));
+}
+
+function mountPreviewSlotForMode(): void {
+  const previewSlot = document.getElementById('creator-3d-preview-slot');
+  const lowerLeftPanels = document.getElementById('creator-lower-left-panels');
+  const homePanel = document.getElementById('creator-home-panel');
+  if (!previewSlot) return;
+
+  // Keep the preview slot anchored in the lower-left stack so mode transitions
+  // do not temporarily stretch the lower-right tools group width.
+  if (lowerLeftPanels) {
+    if (homePanel && homePanel.parentElement === lowerLeftPanels) {
+      if (previewSlot.parentElement !== lowerLeftPanels || previewSlot.nextElementSibling !== homePanel) {
+        lowerLeftPanels.insertBefore(previewSlot, homePanel);
+      }
+    } else if (previewSlot.parentElement !== lowerLeftPanels) {
+      lowerLeftPanels.appendChild(previewSlot);
+    }
+  } else {
+    // Fallback placement if lower-left is unavailable.
+    const rightGroup = document.getElementById('creator-right-panels-group');
+    if (rightGroup && previewSlot.parentElement !== rightGroup) rightGroup.appendChild(previewSlot);
+  }
+}
+
+function applyModePanelsImmediate(mode: EditMode): void {
+  modeTransitionToken += 1;
+  mountPreviewSlotForMode();
+  let needsResizeAfterShow = false;
+  for (const cfg of MODE_PANEL_CONFIGS) {
+    const el = document.getElementById(cfg.id) as HTMLElement | null;
+    if (!el) continue;
+    clearModeAnimClasses(el);
+    const isVisibleInMode = cfg.modes.includes(mode);
+    setModePanelHidden(el, !isVisibleInMode);
+    if (isVisibleInMode && (cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group')) {
+      needsResizeAfterShow = true;
+    }
+  }
+  if (needsResizeAfterShow) {
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+  modePanelsCurrentMode = mode;
+}
+
+function transitionModePanels(targetMode: EditMode): void {
+  mountPreviewSlotForMode();
+  if (modePanelsCurrentMode == null) {
+    applyModePanelsImmediate(targetMode);
+    return;
+  }
+  if (modePanelsCurrentMode === targetMode) {
+    applyModePanelsImmediate(targetMode);
+    return;
+  }
+
+  const fromMode = modePanelsCurrentMode;
+  const token = ++modeTransitionToken;
+  const hideNow: Array<{ el: HTMLElement; cfg: ModePanelConfig }> = [];
+  const showLater: Array<{ el: HTMLElement; cfg: ModePanelConfig }> = [];
+
+  for (const cfg of MODE_PANEL_CONFIGS) {
+    const el = document.getElementById(cfg.id) as HTMLElement | null;
+    if (!el) continue;
+    const inFrom = cfg.modes.includes(fromMode);
+    const inTarget = cfg.modes.includes(targetMode);
+    if (inFrom && !inTarget) hideNow.push({ el, cfg });
+    else if (!inFrom && inTarget) showLater.push({ el, cfg });
+    else if (inFrom && inTarget) {
+      clearModeAnimClasses(el);
+      setModePanelHidden(el, false);
+    } else {
+      clearModeAnimClasses(el);
+      setModePanelHidden(el, true);
+    }
+  }
+
+  hideNow.forEach(({ el, cfg }) => animateModePanelOut(el, cfg.exitTo));
+
+  const enterDelayMs = hideNow.length > 0 ? MODE_TRANSITION_MS : 0;
+  window.setTimeout(() => {
+    if (token !== modeTransitionToken) return;
+    hideNow.forEach(({ el }) => {
+      clearModeAnimClasses(el);
+      setModePanelHidden(el, true);
+    });
+    showLater.forEach(({ el, cfg }) => {
+      animateModePanelIn(el, cfg.enterFrom);
+    });
+    if (showLater.some(({ cfg }) => cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group')) {
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    }
+    modePanelsCurrentMode = targetMode;
+  }, enterDelayMs);
+}
+
+function bindModePanelTransitions(): void {
+  if (modePanelsBound) return;
+  modePanelsBound = true;
+  subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, (e: CustomEvent<{ mode?: EditMode }>) => {
+    const nextMode = (e.detail?.mode ?? state.editMode) as EditMode;
+    transitionModePanels(nextMode);
+  });
 }
 
 function addToSwatch(hex: string): void {
@@ -319,10 +478,12 @@ function buildCreatorPanels(): void {
   };
   const editorToolsCtx = {
     getActiveTool: () => state.activeTool,
-    isEditMode3D: () => state.editMode3D,
+    getEditMode: () => state.editMode,
+    isEditMode3D: () => state.editMode === EDIT_MODE_3D,
     isRulersShown: () => state.showRulers,
     isTemplateShown: () => state.showTemplate,
     setActiveTool,
+    setEditMode,
     setEditMode3D,
     setRulersShown: (show: boolean) => { state.showRulers = show; },
     setTemplateShown: (show: boolean) => { state.showTemplate = show; },
@@ -339,6 +500,7 @@ function buildCreatorPanels(): void {
   buildSkinLayersPanel(skinLayersCtx);
   buildEditorToolsPanel(editorToolsCtx);
   buildTexturePositionPanel();
+  applyModePanelsImmediate(state.editMode);
 }
 
 function setupCanvasAreaResize(): void {
@@ -366,7 +528,7 @@ export function initCreator(): void {
   if (!creatorCanvasPopulated) {
     ctx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
   }
-  document.body.dataset.editMode = state.editMode3D ? EDIT_MODE_3D : EDIT_MODE_2D;
+  document.body.dataset.editMode = state.editMode;
   const wrapper = document.getElementById('creator-view-wrapper');
   if (wrapper && !document.getElementById('creator-lower-right-panels')) {
     const container = document.createElement('div');
@@ -387,6 +549,7 @@ export function initCreator(): void {
       container.appendChild(group);
     }
   }
+  mountPreviewSlotForMode();
   blockyCtx = {
     state,
     getSkinCanvas,
@@ -416,6 +579,7 @@ export function initCreator(): void {
   blockyEditor.setupBlockyGridEvents(blockyCtx);
   blockyEditor.renderToDisplay(blockyCtx);
   setupCanvasAreaResize();
+  bindModePanelTransitions();
 
   (async () => {
     try {
@@ -466,7 +630,7 @@ export function initCreator(): void {
       switch (e.key) {
         case 'Tab':
           e.preventDefault();
-          setEditMode3D(!getEditMode3D());
+          setEditMode(getEditMode() === EDIT_MODE_3D ? EDIT_MODE_2D : EDIT_MODE_3D);
           return;
         case 'h':
         case 'H':
@@ -498,16 +662,31 @@ export function getCreatorSkinCanvas(): HTMLCanvasElement {
   return getSkinCanvas();
 }
 
-/** Whether Edit 3D mode is active (paint on 3D model). */
-export function getEditMode3D(): boolean {
-  return state.editMode3D;
+/** Current edit mode: 'wardrobe' | '2d' | '3d'. */
+export function getEditMode(): EditMode {
+  return state.editMode;
 }
 
-/** Set Edit 3D mode and dispatch change event. */
+/** Whether Edit 3D mode is active (paint on 3D model). */
+export function getEditMode3D(): boolean {
+  return state.editMode === EDIT_MODE_3D;
+}
+
+/** Set edit mode and dispatch EDIT_MODE_CHANGE with { mode }. */
+export function setEditMode(mode: EditMode): void {
+  state.editMode = mode;
+  document.body.dataset.editMode = mode;
+  publish(CREATOR_EVENTS.EDIT_MODE_CHANGE, { mode: state.editMode });
+}
+
+/** Set Edit 3D mode (true = 3d, false = 2d) and dispatch change event. */
 export function setEditMode3D(is3D: boolean): void {
-  state.editMode3D = is3D;
-  document.body.dataset.editMode = state.editMode3D ? EDIT_MODE_3D : EDIT_MODE_2D;
-  publish(CREATOR_EVENTS.EDIT_MODE_CHANGE, { is3D: state.editMode3D });
+  setEditMode(is3D ? EDIT_MODE_3D : EDIT_MODE_2D);
+}
+
+/** Remove creator mode-button number shortcuts (called when leaving creator route). */
+export function unregisterCreatorShortcuts(): void {
+  unregisterEditorModeShortcuts();
 }
 
 /** 3D layers panel: visibility state (layer hidden = not rendered, brush ignored). */
@@ -564,7 +743,7 @@ function syncLockCheckboxes(panel: HTMLElement): void {
 function getLayerUnderPoint(clientX: number, clientY: number): string | null {
   const el = document.elementFromPoint(clientX, clientY);
   if (!el) return null;
-  const row = el.closest('.creator-layers-panel-3d-row');
+  const row = el.closest('.creator-layers-panel-row');
   return row instanceof HTMLElement ? row.dataset.layer ?? null : null;
 }
 
@@ -625,7 +804,7 @@ function setupDragToToggle(
 
 /** Sync UI after solo visibility/lock changes. Solo label text is not shown. */
 function updateSoloIndicator(panel: HTMLElement): void {
-  const indicator = panel.querySelector('.creator-layers-panel-3d-solo-indicator');
+  const indicator = panel.querySelector('.creator-layers-panel-solo-indicator');
   indicator?.remove();
 }
 
