@@ -21,8 +21,6 @@
     "animations:clean": "node scripts/clear-animations-manifest.js",
     "assets:generate": "node scripts/generate-skins-manifest.js && node scripts/generate-animations-manifest.js && node scripts/generate-wardrobe-parts.js && node scripts/generate-skin-previews.js",
     "assets:clean": "npm run wardrobe:clean && npm run animations:clean",
-    "set-skin": "node scripts/set-skin.js",
-    "set-animation": "node scripts/set-animation.js",
     "electron": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron .",
     "electron:dev": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron .",
     "pack": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron-builder --dir",
