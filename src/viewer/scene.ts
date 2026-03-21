@@ -61,6 +61,44 @@ export function addLights(scene: THREE.Scene): void {
   dirLight.shadow.camera.top = 8;
   dirLight.shadow.camera.bottom = -8;
   scene.add(dirLight);
+
+  // Fill light from below: illuminates undersurfaces (bottom of head, legs, soles).
+  const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+  fillLight.position.set(0, -4, 2);
+  scene.add(fillLight);
+}
+
+/** Default on/off for the camera-following light. Set to false to disable at startup. */
+export const CREATOR_CAMERA_LIGHT_ENABLED = true;
+
+let creatorCameraLight: THREE.PointLight | null = null;
+let creatorCameraLightEnabled = CREATOR_CAMERA_LIGHT_ENABLED;
+
+/**
+ * Sets up the camera-following light for creator 3D paint mode.
+ * The light moves with the camera so whatever surface the user is painting is lit.
+ * Call once after scene init with the main camera.
+ */
+export function setupCreatorCameraLight(camera: THREE.PerspectiveCamera): void {
+  if (creatorCameraLight) return;
+  const light = new THREE.PointLight(0xffffff, 0.6, 8);
+  light.position.set(0, 0, 2); // In camera space: 2 units in front of camera
+  camera.add(light);
+  creatorCameraLight = light;
+  light.visible = creatorCameraLightEnabled;
+}
+
+/**
+ * Toggle the camera-following light on/off (e.g. for creator 3D undersurface painting).
+ * Set to true to light surfaces from the camera's viewpoint; false to use scene lights only.
+ */
+export function setCreatorCameraLightEnabled(enabled: boolean): void {
+  creatorCameraLightEnabled = enabled;
+  if (creatorCameraLight) creatorCameraLight.visible = enabled;
+}
+
+export function isCreatorCameraLightEnabled(): boolean {
+  return creatorCameraLightEnabled;
 }
 
 export function addGround(scene: THREE.Scene): void {

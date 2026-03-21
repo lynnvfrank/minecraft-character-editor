@@ -3,7 +3,7 @@
  * Used when ?movementcontrols=1 in URL.
  */
 import * as THREE from 'three';
-import { getTrapezoidBounds, WALK_CYCLE_DISTANCE, type TurnStrategy } from './animation';
+import { getTrapezoidBounds, WALK_CYCLE_DISTANCE, type TurnStrategy } from '../animation';
 
 type AnimationManager = {
   turnTo: (targetFacingRad: number) => Promise<void>;

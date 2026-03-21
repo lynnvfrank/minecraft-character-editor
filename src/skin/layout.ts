@@ -54,6 +54,14 @@ export const SKIN_LAYER_BOUNDS: Record<LayerKey, Bounds[]> = {
  * Display name for each rect in a layer (same order as SKIN_LAYER_BOUNDS[layer]).
  * Used to derive SKIN_PART_BOUNDS and for hover/labels.
  */
+/** Layers that have left/right parts (bounds[0]=Right, bounds[1]=Left). */
+export const LAYERS_WITH_PARTS = ['arms', 'sleeves', 'legs', 'pants'] as const;
+export type LayerWithParts = (typeof LAYERS_WITH_PARTS)[number];
+
+export function isLayerWithParts(layer: string): layer is LayerWithParts {
+  return (LAYERS_WITH_PARTS as readonly string[]).includes(layer);
+}
+
 export const LAYER_TO_PART_DISPLAY_NAMES: Record<LayerKey, string[]> = {
   head: ['Head'],
   hat: ['Hat'],
@@ -111,6 +119,16 @@ export const LAYER_TO_UV_PARTS: Partial<Record<LayerKey, UVPartKey[]>> = {
   legs: ['legR', 'legL'],
   pants: ['pantsR', 'pantsL'],
 };
+
+/** UV part key → layer key. For mesh visibility during per-part capture. */
+export const UV_PART_TO_LAYER: Record<UVPartKey, LayerKey> = (() => {
+  const out = {} as Record<UVPartKey, LayerKey>;
+  for (const layer of LAYER_KEYS) {
+    const parts = LAYER_TO_UV_PARTS[layer];
+    if (parts) for (const p of parts) out[p] = layer;
+  }
+  return out;
+})();
 
 /** Map part display name to layer key. Returns null if unknown. */
 export function partToLayer(part: string): LayerKey | null {

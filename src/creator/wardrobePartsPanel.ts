@@ -1,6 +1,6 @@
-import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
+import { subscribe, CREATOR_EVENTS } from './events';
 import { createEl } from './dom';
-import type { CreatorEditModeDetail } from '../creatorEvents';
+import type { CreatorEditModeDetail } from './events';
 import { LAYER_KEYS, LAYER_DISPLAY_LABELS, type LayerKey } from '../skin';
 
 export type WardrobeLayerKey = 'fullOutfit' | LayerKey;

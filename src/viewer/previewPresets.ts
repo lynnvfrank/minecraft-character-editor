@@ -7,9 +7,9 @@ import jacketPreviewConfig from '../config/preview/parts/jacket/preview.config.j
 import legsPreviewConfig from '../config/preview/parts/legs/preview.config.json';
 import pantsPreviewConfig from '../config/preview/parts/pants/preview.config.json';
 import sleevesPreviewConfig from '../config/preview/parts/sleeves/preview.config.json';
-import type { PreviewPreset, PreviewPresetKey } from '../types/previewConfig';
+import type { PreviewPreset, PreviewPresetKey } from '../domain';
 
-export type { PreviewPreset, PreviewPresetKey, PreviewVector, PreviewViewport } from '../types/previewConfig';
+export type { PreviewPreset, PreviewPresetKey, PreviewVector, PreviewViewport } from '../domain';
 
 export const PREVIEW_PRESET_KEYS = [
   'fullOutfit',

@@ -136,10 +136,10 @@ minecraft-3d-viewer/
 
 ## Documentation Map
 
-- `docs/specs/CHARACTER-CREATION-SCREEN-SPEC.md` - full creator UX and behavior spec
-- `docs/specs/CREATOR-VIEWER-STATE-MANAGEMENT.md` - state boundaries between creator/viewer
-- `docs/specs/MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md` - skin art process, constraints, and QA
-- `docs/specs/SPEC-electron.md` - Electron migration and architecture intent
+- `docs/plans/CHARACTER-CREATION-SCREEN-SPEC.md` - full creator UX and behavior spec
+- `docs/plans/CREATOR-VIEWER-STATE-MANAGEMENT.md` - state boundaries between creator/viewer
+- `docs/plans/MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md` - skin art process, constraints, and QA
+- `docs/plans/SPEC-electron.md` - Electron migration and architecture intent
 - `docs/minecraft-skin-layout-specification.md` - canonical skin layout and UV reference
 - `docs/LOGGING-ARCHITECTURE.md` and `docs/LOGGING-IMPLEMENTATION.md` - logging design + implementation
 - `docs/TROUBLESHOOTING.md` - debugging workflows and known issues

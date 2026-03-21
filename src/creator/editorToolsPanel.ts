@@ -1,29 +1,30 @@
-import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
+import { subscribe, CREATOR_EVENTS } from './events';
 import { createEl } from './dom';
 import type { EditorToolsContext } from './api';
 import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE, isDrawingTool, isToggleType } from './api';
-import { iconNavigate, iconBrush, iconEraser, iconFill, iconEyedropper } from './toolIcons';
+import { createIcon } from './icons';
 
-let modeShortcutKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+let toolShortcutKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
-export function unregisterEditorModeShortcuts(): void {
-  if (!modeShortcutKeyHandler) return;
-  document.removeEventListener('keydown', modeShortcutKeyHandler);
-  modeShortcutKeyHandler = null;
+export function unregisterEditorToolShortcuts(): void {
+  if (!toolShortcutKeyHandler) return;
+  document.removeEventListener('keydown', toolShortcutKeyHandler);
+  toolShortcutKeyHandler = null;
 }
 
 export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
-  const topRow = document.getElementById('creator-left-top-row');
+  const bottomCenterPanels = document.getElementById('creator-bottom-center-panels');
   const upperLeftPanels = document.getElementById('creator-upper-left-panels');
-  if (!topRow || !upperLeftPanels) return;
+  if (!bottomCenterPanels || !upperLeftPanels) return;
 
   const oldModePanel = document.getElementById('creator-mode-panel');
   if (oldModePanel) oldModePanel.remove();
 
+  const modeIconOpts = { width: 18, height: 18 };
   const modePanel = createEl('div', { id: 'creator-mode-panel', className: 'creator-mode-panel', role: 'group', 'aria-label': 'Creator mode' },
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_WARDROBE, title: 'Wardrobe' }, 'Wardrobe'),
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_3D, title: 'Edit on 3D model' }, '3D'),
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_2D, title: 'Edit on 2D canvas' }, '2D')
+    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_WARDROBE, title: 'Wardrobe', 'aria-label': 'Wardrobe' }, createIcon('modeCreatorWardrobe', modeIconOpts)),
+    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_3D, title: 'Edit on 3D model' }, createIcon('modeCreator3D', modeIconOpts), ' 3D'),
+    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_2D, title: 'Edit on 2D canvas' }, createIcon('modeCreator2D', modeIconOpts), ' 2D')
   );
   upperLeftPanels.insertBefore(modePanel, upperLeftPanels.firstChild);
 
@@ -36,22 +37,27 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   );
   upperLeftPanels.appendChild(overlaysPanel);
 
-  const oldPanel = document.getElementById('creator-tools-panel');
-  if (oldPanel) oldPanel.remove();
+  const oldToolsPanel = document.getElementById('creator-tools-panel');
+  if (oldToolsPanel) oldToolsPanel.remove();
+  const oldUndoRedoPanel = document.getElementById('creator-undo-redo-panel');
+  if (oldUndoRedoPanel) oldUndoRedoPanel.remove();
 
+  const iconOpts = { width: 30, height: 30 };
   const panel = createEl('div', { id: 'creator-tools-panel', className: 'creator-tools-panel', 'aria-label': 'Editor tools' },
     createEl('div', { className: 'creator-tools-panel-row creator-tools-panel-tools-row', role: 'group', 'aria-label': 'Drawing tools' },
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'navigate', title: 'Navigate: orbit/zoom, no paint (H)', 'aria-label': 'Navigate' }, iconNavigate()),
+      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'navigate', title: 'Navigate: orbit/zoom, no paint (H, 1)', 'aria-label': 'Navigate' }, createIcon('modeCreatorToolsNavigate', iconOpts)),
       createEl('div', { className: 'creator-tools-panel-divider', 'aria-hidden': 'true' }),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'brush', title: 'Brush (B)', 'aria-label': 'Brush' }, iconBrush()),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eraser', title: 'Eraser (E)', 'aria-label': 'Eraser' }, iconEraser()),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'fill', title: 'Fill (G)', 'aria-label': 'Fill' }, iconFill()),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eyedropper', title: 'Eyedropper: sample color from 2D or 3D', 'aria-label': 'Eyedropper' }, iconEyedropper())
-    ),
-    createEl('div', { className: 'creator-tools-panel-divider', 'aria-hidden': 'true' }),
+      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'brush', title: 'Brush (B, 2)', 'aria-label': 'Brush' }, createIcon('modeCreatorToolsBrush', iconOpts)),
+      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eraser', title: 'Eraser (E, 3)', 'aria-label': 'Eraser' }, createIcon('modeCreatorToolsErasor', iconOpts)),
+      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'fill', title: 'Fill (G, 4)', 'aria-label': 'Fill' }, createIcon('modeCreatorToolsFill', iconOpts)),
+      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eyedropper', title: 'Eyedropper: sample color from 2D or 3D (5)', 'aria-label': 'Eyedropper' }, createIcon('modeCreatorToolsDropper', iconOpts))
+    )
+  );
+
+  const undoRedoPanel = createEl('div', { id: 'creator-undo-redo-panel', className: 'creator-undo-redo-panel creator-tools-panel', role: 'group', 'aria-label': 'Undo Redo' },
     createEl('div', { className: 'creator-tools-panel-row creator-tools-panel-undo-redo', role: 'group', 'aria-label': 'Undo Redo' },
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-undo-btn', id: 'creator-tools-undo-btn', title: 'Undo (Ctrl+Z)', 'aria-label': 'Undo' }, '↩'),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-redo-btn', id: 'creator-tools-redo-btn', title: 'Redo (Ctrl+Shift+Z)', 'aria-label': 'Redo' }, '↪')
+      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon creator-tools-panel-undo-btn', id: 'creator-tools-undo-btn', title: 'Undo (Ctrl+Z)', 'aria-label': 'Undo' }, createIcon('modeCreatorToolsUndo', iconOpts)),
+      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon creator-tools-panel-redo-btn', id: 'creator-tools-redo-btn', title: 'Redo (Ctrl+Shift+Z)', 'aria-label': 'Redo' }, createIcon('modeCreatorToolsRedo', iconOpts))
     )
   );
 
@@ -80,9 +86,10 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
       updateEditModeButtons();
     });
   });
-  unregisterEditorModeShortcuts();
-  modeShortcutKeyHandler = (e: KeyboardEvent) => {
+  unregisterEditorToolShortcuts();
+  toolShortcutKeyHandler = (e: KeyboardEvent) => {
     if (document.body.dataset.route !== 'creator') return;
+    if (ctx.getEditMode() === 'wardrobe') return;
     const target = e.target as HTMLElement | null;
     const inInput = !!target && (
       target.tagName === 'INPUT' ||
@@ -92,17 +99,17 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
     if (inInput || e.ctrlKey || e.metaKey || e.altKey) return;
     const keyNum = Number.parseInt(e.key, 10);
     if (!Number.isInteger(keyNum) || keyNum < 1) return;
-    const currentModePanel = document.getElementById('creator-mode-panel');
-    if (!currentModePanel) return;
-    const modeButtons = Array.from(
-      currentModePanel.querySelectorAll<HTMLButtonElement>('.creator-tools-panel-mode-btn')
+    const toolsPanel = document.getElementById('creator-tools-panel');
+    if (!toolsPanel) return;
+    const toolButtons = Array.from(
+      toolsPanel.querySelectorAll<HTMLButtonElement>('.creator-tools-panel-btn[data-tool]')
     );
-    const btn = modeButtons[keyNum - 1];
+    const btn = toolButtons[keyNum - 1];
     if (!btn) return;
     e.preventDefault();
     btn.click();
   };
-  document.addEventListener('keydown', modeShortcutKeyHandler);
+  document.addEventListener('keydown', toolShortcutKeyHandler);
 
   panel.querySelectorAll<HTMLButtonElement>('.creator-tools-panel-btn[data-tool]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -120,12 +127,12 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
       ctx.renderCanvas();
     });
   });
-  const undoBtn = panel.querySelector<HTMLButtonElement>('#creator-tools-undo-btn');
+  const undoBtn = undoRedoPanel.querySelector<HTMLButtonElement>('#creator-tools-undo-btn');
   undoBtn?.addEventListener('click', () => {
     ctx.performUndo();
     ctx.updateUndoRedoButtons();
   });
-  const redoBtn = panel.querySelector<HTMLButtonElement>('#creator-tools-redo-btn');
+  const redoBtn = undoRedoPanel.querySelector<HTMLButtonElement>('#creator-tools-redo-btn');
   redoBtn?.addEventListener('click', () => {
     ctx.performRedo();
     ctx.updateUndoRedoButtons();
@@ -145,5 +152,6 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   updateViewToggleButtons();
   ctx.updateUndoRedoButtons();
 
-  topRow.appendChild(panel);
+  bottomCenterPanels.appendChild(panel);
+  bottomCenterPanels.appendChild(undoRedoPanel);
 }

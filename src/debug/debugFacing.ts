@@ -5,7 +5,7 @@
  * Logs: source, prevYaw→newYaw, delta, direction facing, state machine state, walk/turn phase.
  * Uses the shared logger (see docs/LOGGING-ARCHITECTURE.md).
  */
-import { logger } from './logger';
+import { logger } from '../lib/logger';
 
 /** Log when facing changes by more than this (radians). ~0.05 = 3°, ~0.15 = 8.5° */
 const SNAP_THRESHOLD = 0.05;

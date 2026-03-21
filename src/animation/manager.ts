@@ -5,13 +5,13 @@
  * Character movement is constrained to a trapezoid derived from the camera view frustum.
  */
 import * as THREE from 'three';
-import { logger } from '../logger';
-import { logFacingChange } from '../debugFacing';
+import { logger } from '../lib';
+import { logFacingChange } from '../debug/debugFacing';
 import {
   getTrapezoidBounds,
   clampToTrapezoid,
   WALK_CYCLE_DISTANCE
-} from './trapezoidBounds';
+} from '../lib/trapezoidBounds';
 
 /** Minimal character state required for animation manager (main's CharacterState extends this) */
 export type CharacterStateLike = {

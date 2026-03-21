@@ -4,8 +4,8 @@
  */
 
 import { WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skin';
-import { hexToRgb } from '../types/color';
-import type { PixelChange } from './creatorState';
+import { hexToRgb } from '../lib/color';
+import type { PixelChange } from '../state/creatorState';
 
 export type CanPaintAt = (workingX: number, workingY: number) => boolean;
 export type GetCurrentColor = () => string;

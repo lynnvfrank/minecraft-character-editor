@@ -1,5 +1,5 @@
-import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
-import type { CreatorTexturePositionDetail } from '../creatorEvents';
+import { subscribe, CREATOR_EVENTS } from './events';
+import type { CreatorTexturePositionDetail } from './events';
 import { getCreatorPanelsContainer } from './container';
 
 export function buildTexturePositionPanel(): void {

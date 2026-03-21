@@ -93,15 +93,12 @@ The app is intended to work on macOS, Windows, and Linux, but packaging is most 
 - `src/viewer/` - scene setup, controls, skin application
 - `src/skinPreprocess.ts` - texture preprocessing
 - `server/api.js` - API endpoints (`/api/skin`, `/api/animation`, `/api/events`, `/api/log`)
-- `docs/specs/CHARACTER-CREATION-SCREEN-SPEC.md` - creator requirements
-- `docs/specs/CREATOR-VIEWER-STATE-MANAGEMENT.md` - cross-mode state boundaries
-- `docs/specs/MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md` - skin authoring constraints/process
 - `docs/TROUBLESHOOTING.md` - debug flags and known issues
 
 ## Suggested Agent Workflow
 
 1. Read `README.md`.
-2. Read the most relevant spec in `docs/specs/`.
+2. Read the most relevant spec in `docs/plans/`.
 3. Confirm script behavior in `package.json`.
 4. Run the smallest command that validates your change (`dev`, `build`, or targeted script).
 5. If debugging runtime behavior, use `npm run dev:log` and URL log params from `docs/TROUBLESHOOTING.md`.

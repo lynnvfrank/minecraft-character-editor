@@ -4,7 +4,7 @@
  * Panels receive context objects that read from this state.
  */
 
-import type { DrawingTool } from './api';
+import type { DrawingTool } from '../creator/api';
 import { LAYER_KEYS } from '../skin';
 
 export type PixelChange = { x: number; y: number; r: number; g: number; b: number; a: number };
@@ -36,6 +36,8 @@ export interface CreatorState {
   editMode: 'wardrobe' | '2d' | '3d';
   /** Per-layer visibility (hidden = not rendered, brush ignored). */
   layer3DVisible: Record<string, boolean>;
+  /** Per-layer, per-side visibility overrides (L/R). When undefined, part follows layer visibility. */
+  layer3DPartVisible: Partial<Record<string, { L?: boolean; R?: boolean }>>;
   /** Per-layer lock (locked = brush ignored, part stays visible). */
   layer3DLocked: Record<string, boolean>;
 
@@ -70,9 +72,12 @@ export interface CreatorState {
   selectedLayers: Set<string>;
   /** When false, allow drawing anywhere (ignore layer mask). */
   restrictToLayers: boolean;
+
+  /** True after user explicitly picks a color (swatch, eyedropper, picker). When false, skin load sets currentColor to first skin color. */
+  userHasSelectedColor: boolean;
 }
 
-const DEFAULT_COLOR = '#8b7355';
+const DEFAULT_COLOR = '#FFFFFF';
 
 /** Create initial creator state. */
 export function createCreatorState(): CreatorState {
@@ -84,6 +89,7 @@ export function createCreatorState(): CreatorState {
     activeTool: 'navigate',
     editMode: 'wardrobe',
     layer3DVisible: Object.fromEntries(LAYER_KEYS.map((k) => [k, true])),
+    layer3DPartVisible: {},
     layer3DLocked: Object.fromEntries(LAYER_KEYS.map((k) => [k, false])),
     layer3DSoloMode: false,
     layer3DSoloBeforeState: null,
@@ -102,5 +108,6 @@ export function createCreatorState(): CreatorState {
     lastSkinY: -1,
     selectedLayers: new Set(LAYER_KEYS),
     restrictToLayers: true,
+    userHasSelectedColor: false,
   };
 }

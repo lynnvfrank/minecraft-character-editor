@@ -1,5 +1,5 @@
-import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
-import { isValidHex } from '../types/color';
+import { subscribe, CREATOR_EVENTS } from './events';
+import { isValidHex } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { SwatchesContext, SwatchPaletteId } from './api';
 
@@ -17,7 +17,7 @@ function createSwatchSlots(container: Element, ctx: SwatchesContext, max: number
     btn.className = 'creator-swatch-item creator-swatch-drop-target creator-swatch-draggable';
     btn.dataset.index = String(i);
     btn.addEventListener('click', () => {
-      if (btn.dataset.color) ctx.applyColor(btn.dataset.color);
+      if (btn.dataset.color) ctx.applyColor(btn.dataset.color, false);
     });
     btn.addEventListener('dragstart', (e: Event) => {
       if (e instanceof DragEvent && e.dataTransfer && btn.dataset.color) {
@@ -182,5 +182,5 @@ export function buildSwatchesPanel(ctx: SwatchesContext): void {
   container.appendChild(panel);
   updateTabsActive();
   updateSwatchSlots(slots, ctx);
-  ctx.applyColor(ctx.getCurrentColor());
+  ctx.applyColor(ctx.getCurrentColor(), true, false); // sync to swatch, do not mark as user-selected
 }

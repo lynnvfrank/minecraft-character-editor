@@ -1,9 +1,11 @@
 /**
- * Save/Download panel: appears below Creator mode buttons, before wardrobe-parts-panel, in all Creator modes.
- * Save: appends current skin to outfits panel. Download: exports 64×64 PNG.
+ * Save/Download panel: appears in bottom-left panel group, above Home button, in all Creator modes.
+ * Keep: appends current skin to outfits panel. Save: exports 64×64 PNG.
+ * Animates in from the left when creator is shown.
  */
 
 import { createEl } from './dom';
+import { createIcon } from './icons';
 
 export type SaveDownloadPanelContext = {
   onSave: () => void;
@@ -11,7 +13,7 @@ export type SaveDownloadPanelContext = {
 };
 
 export function buildSaveDownloadPanel(ctx: SaveDownloadPanelContext): void {
-  const host = document.getElementById('creator-upper-left-panels');
+  const host = document.getElementById('creator-lower-left-panels');
   if (!host) return;
 
   const existing = document.getElementById('creator-save-download-panel');
@@ -23,7 +25,7 @@ export function buildSaveDownloadPanel(ctx: SaveDownloadPanelContext): void {
       id: 'creator-save-download-panel',
       className: 'creator-save-download-panel',
       role: 'group',
-      'aria-label': 'Save and download',
+      'aria-label': 'Keep and save',
     },
     createEl(
       'button',
@@ -31,10 +33,11 @@ export function buildSaveDownloadPanel(ctx: SaveDownloadPanelContext): void {
         type: 'button',
         className: 'creator-btn creator-save-download-btn',
         id: 'creator-save-btn',
-        title: 'Save current skin to Outfits',
-        'aria-label': 'Save to outfits',
+        title: 'Keep current skin in Outfits',
+        'aria-label': 'Keep to outfits',
       },
-      'Save'
+      createIcon('modeCreatorKeep', { width: 18, height: 18 }),
+      ' Keep'
     ),
     createEl(
       'button',
@@ -42,17 +45,17 @@ export function buildSaveDownloadPanel(ctx: SaveDownloadPanelContext): void {
         type: 'button',
         className: 'creator-btn creator-save-download-btn',
         id: 'creator-download-skin-btn',
-        title: 'Download skin as PNG',
-        'aria-label': 'Download skin',
+        title: 'Save skin as PNG',
+        'aria-label': 'Save skin',
       },
-      'Download'
+      createIcon('modeCreatorSave', { width: 18, height: 18 }),
+      ' Save'
     )
   );
 
   panel.querySelector('#creator-save-btn')?.addEventListener('click', ctx.onSave);
   panel.querySelector('#creator-download-skin-btn')?.addEventListener('click', ctx.onDownload);
 
-  const wardrobePanel = document.getElementById('creator-wardrobe-parts-panel');
-  const modePanel = document.getElementById('creator-mode-panel');
-  host.insertBefore(panel, wardrobePanel ?? modePanel?.nextSibling ?? host.firstChild);
+  const homePanel = document.getElementById('creator-home-panel');
+  host.insertBefore(panel, homePanel ?? host.firstChild);
 }

@@ -17,9 +17,10 @@ alwaysApply: true
 | File | Purpose |
 |------|---------|
 | `src/main.ts` | Entry point: orchestration, model load, skin/anim logic, API events |
-| `src/viewer/` | Scene setup, skin application, orbit/pointer controls (`scene.ts`, `skinApplication.ts`, `controls.ts`) |
+| `src/viewer/` | Scene setup, skin application, orbit/pointer controls |
 | `src/creator.ts` | Character creator (2D/3D skin editor) |
 | `src/skin/` | Skin layout, coordinates, preprocessing, mesh→part mapping (single source of truth) |
+| `docs/concepts/TAXONOMY.md` | Source structure: domain, lib, config, state, services, controllers, ui |
 | `docs/minecraft-skin-layout-specification.md` | Skin layout, region bounds, UVs |
 | `server/api.js` | API handlers: `/api/skin`, `/api/animation`, `/api/events` |
 

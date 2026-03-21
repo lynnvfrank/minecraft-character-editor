@@ -5,6 +5,21 @@
     "preview": "/wardrobe/skins/previews/RunningboyRig-preview.png"
   },
   {
+    "path": "/wardrobe/skins/cherry-02.png",
+    "label": "cherry 02",
+    "preview": "/wardrobe/skins/previews/cherry-02-preview.png"
+  },
+  {
+    "path": "/wardrobe/skins/cherry-03.png",
+    "label": "cherry 03",
+    "preview": "/wardrobe/skins/previews/cherry-03-preview.png"
+  },
+  {
+    "path": "/wardrobe/skins/cherry-04.png",
+    "label": "cherry 04",
+    "preview": "/wardrobe/skins/previews/cherry-04-preview.png"
+  },
+  {
     "path": "/wardrobe/skins/cherry.png",
     "label": "cherry",
     "preview": "/wardrobe/skins/previews/cherry-preview.png"

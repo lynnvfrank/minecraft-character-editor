@@ -12,7 +12,8 @@ import {
   getBrushCursorStyleFor3D,
   getLayer3DVisible,
   getLayer3DLocked,
-  getLayerAtCoords,
+  getLayerAndPartAtCoords,
+  getPartVisible,
   paintStartFrom3D,
   paintMoveFrom3D,
   paintEndFrom3D,
@@ -22,7 +23,7 @@ import {
   updateHoverInfo,
   getPartDisplayNameAtCoords
 } from '../creator';
-import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
+import { subscribe, publish, CREATOR_EVENTS } from '../creator/events';
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -61,16 +62,20 @@ function sampleColorFromRaycast(
   raycaster.setFromCamera(mouse, camera);
   const meshes = getCharacterMeshes(getCharacterModel);
   const intersects = raycaster.intersectObjects(meshes, false);
-  const layerVisible = getLayer3DVisible();
   const layerLocked = getLayer3DLocked();
   for (const hit of intersects) {
     const uv = (hit as THREE.Intersection<THREE.Object3D> & { uv?: THREE.Vector2 }).uv;
     if (!uv) continue;
     const { x, y } = uvToWorkingCoords(uv.x, uv.y);
-    const layer = getLayerAtCoords(x, y);
-    if (!layer) continue;
-    if (layerVisible[layer] === false) continue;
-    if (layerLocked[layer] === true) continue;
+    const info = getLayerAndPartAtCoords(x, y);
+    if (!info) continue;
+    const layerVisible = getLayer3DVisible();
+    const visible =
+      info.side !== undefined
+        ? getPartVisible(info.layer, info.side)
+        : layerVisible[info.layer] !== false;
+    if (!visible) continue;
+    if (layerLocked[info.layer] === true) continue;
     const sample = sampleColorAtWithAlpha(x, y);
     if (sample && sample.alpha >= EYEDROPPER_ALPHA_THRESHOLD) return sample.hex;
   }
@@ -90,17 +95,53 @@ function raycastToPaintableUV(
   raycaster.setFromCamera(mouse, camera);
   const meshes = getCharacterMeshes(getCharacterModel);
   const intersects = raycaster.intersectObjects(meshes, false);
-  const layerVisible = getLayer3DVisible();
   const layerLocked = getLayer3DLocked();
   for (const hit of intersects) {
     const uv = (hit as THREE.Intersection<THREE.Object3D> & { uv?: THREE.Vector2 }).uv;
     if (!uv) continue;
     const { x, y } = uvToWorkingCoords(uv.x, uv.y);
-    const layer = getLayerAtCoords(x, y);
-    if (!layer) continue;
-    if (layerVisible[layer] === false) continue;
-    if (layerLocked[layer] === true) continue;
+    const info = getLayerAndPartAtCoords(x, y);
+    if (!info) continue;
+    const layerVisible = getLayer3DVisible();
+    const visible =
+      info.side !== undefined
+        ? getPartVisible(info.layer, info.side)
+        : layerVisible[info.layer] !== false;
+    if (!visible) continue;
+    if (layerLocked[info.layer] === true) continue;
     return { u: uv.x, v: uv.y };
+  }
+  return null;
+}
+
+/** Returns layer info for first visible hit (including locked). Used for lock feedback when paint is blocked. */
+function raycastToVisibleLayer(
+  deps: Creator3DPaintDeps,
+  clientX: number,
+  clientY: number
+): { layer: string; isLocked: boolean } | null {
+  const { camera, renderer, getCharacterModel } = deps;
+  const canvas = renderer.domElement;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = getCharacterMeshes(getCharacterModel);
+  const intersects = raycaster.intersectObjects(meshes, false);
+  const layerLocked = getLayer3DLocked();
+  const layerVisible = getLayer3DVisible();
+  for (const hit of intersects) {
+    const uv = (hit as THREE.Intersection<THREE.Object3D> & { uv?: THREE.Vector2 }).uv;
+    if (!uv) continue;
+    const { x, y } = uvToWorkingCoords(uv.x, uv.y);
+    const info = getLayerAndPartAtCoords(x, y);
+    if (!info) continue;
+    const visible =
+      info.side !== undefined
+        ? getPartVisible(info.layer, info.side)
+        : layerVisible[info.layer] !== false;
+    if (!visible) continue;
+    return { layer: info.layer, isLocked: layerLocked[info.layer] === true };
   }
   return null;
 }
@@ -132,7 +173,7 @@ export function updateCreator3DCanvasCursor(
     return;
   }
   const tool = getActiveTool();
-  if (tool === 'brush' || tool === 'eraser') {
+  if (tool === 'brush' || tool === 'eraser' || tool === 'fill') {
     canvas.style.cursor = getBrushCursorStyleFor3D(getBrushSize());
   } else if (tool === 'eyedropper') {
     canvas.style.cursor = 'crosshair';
@@ -196,6 +237,10 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     }
     const uv = raycastToPaintableUV(deps, e.clientX, e.clientY);
     if (!uv) {
+      const visibleHit = raycastToVisibleLayer(deps, e.clientX, e.clientY);
+      if (visibleHit?.isLocked) {
+        publish(CREATOR_EVENTS.LOCK_FEEDBACK, { layer: visibleHit.layer });
+      }
       releasePaintControl();
       return;
     }

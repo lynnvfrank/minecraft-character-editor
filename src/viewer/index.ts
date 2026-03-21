@@ -10,12 +10,17 @@ export {
   logModelUVInfo,
   logMeshNames,
   createDebugTexture,
+  setupCreatorCameraLight,
+  setCreatorCameraLightEnabled,
+  isCreatorCameraLightEnabled,
+  CREATOR_CAMERA_LIGHT_ENABLED,
   type SceneContext
 } from './scene';
 
 export {
   applySkinToModel,
   applyCreatorLayerVisibility,
+  applyCreatorLayerVisibilityForCapture,
   configureTexture,
   OVERLAY_SCALE,
   MINECRAFT_SKIN_UVS,

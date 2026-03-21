@@ -26,12 +26,12 @@ export function isToggleType(s: string | undefined): s is ToggleType {
 
 export interface ColorToolbarContext {
   getCurrentColor: () => string;
-  applyColor: (hex: string, addToSwatch?: boolean) => void;
+  applyColor: (hex: string, addToSwatch?: boolean, markAsUserSelected?: boolean) => void;
 }
 
 export interface ColorPickerContext {
   getCurrentColor: () => string;
-  applyColor: (hex: string, addToSwatch?: boolean) => void;
+  applyColor: (hex: string, addToSwatch?: boolean, markAsUserSelected?: boolean) => void;
 }
 
 export type SwatchPaletteId = 'history' | 'skin';
@@ -43,16 +43,21 @@ export interface SwatchesContext {
   getMaxSwatchCount: () => number;
   getActivePalette: () => SwatchPaletteId;
   setActivePalette: (paletteId: SwatchPaletteId) => void;
-  applyColor: (hex: string, addToSwatch?: boolean) => void;
+  applyColor: (hex: string, addToSwatch?: boolean, markAsUserSelected?: boolean) => void;
   setSwatchColor: (index: number, hex: string) => void;
 }
 
+export type PartSide = 'L' | 'R';
+
 export interface SkinLayersContext {
   layerVisibility: Record<string, boolean>;
+  layerPartVisible: Partial<Record<string, { L?: boolean; R?: boolean }>>;
   layerLocked: Record<string, boolean>;
   isLayersPanelCollapsed: () => boolean;
   setLayersPanelCollapsed: (collapsed: boolean) => void;
   setLayerVisible: (layer: string, visible: boolean) => void;
+  setLayerPartVisible: (layer: string, side: PartSide, visible: boolean) => void;
+  getPartVisible: (layer: string, side: PartSide) => boolean;
   setLayerLocked: (layer: string, locked: boolean) => void;
   onVisibilitySoloClick: (layer: string) => void;
   onLockSoloClick: (layer: string) => void;

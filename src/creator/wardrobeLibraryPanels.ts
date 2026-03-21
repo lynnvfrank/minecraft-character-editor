@@ -1,4 +1,4 @@
-import type { SkinEntry } from '../types/catalog';
+import type { SkinEntry } from '../domain';
 import { createEl } from './dom';
 import type { WardrobeLayerKey, WardrobePartKey } from './wardrobePartsPanel';
 
@@ -112,10 +112,15 @@ export function buildWardrobeLibraryPanels(): void {
 type RenderWardrobeLibraryPanelOptions = {
   selectorId: string;
   items: WardrobeLibraryItem[];
-  activePath: string | null;
-  onSelect: (path: string | null) => void;
+  /** Active selection: null (No/Original for base), originalSentinel (Original), or library path */
+  activeValue: string | null;
+  onSelect: (value: string | null) => void;
   includeNone?: boolean;
   noneLabel?: string;
+  includeOriginal?: boolean;
+  originalLabel?: string;
+  originalPreview?: string | null;
+  originalSentinel?: string;
 };
 
 export function renderWardrobeLibraryPanel(options: RenderWardrobeLibraryPanelOptions): void {
@@ -125,13 +130,32 @@ export function renderWardrobeLibraryPanel(options: RenderWardrobeLibraryPanelOp
   container.innerHTML = '';
   bindWardrobeLibraryNavigation(container);
 
-  const entries: Array<WardrobeLibraryItem & { isNone?: boolean }> = options.includeNone
-    ? [{ id: '__none__', path: '', label: options.noneLabel ?? 'None', isNone: true }, ...options.items]
-    : [...options.items];
+  const originalSentinel = options.originalSentinel ?? '__original__';
+  const entries: Array<WardrobeLibraryItem & { isNone?: boolean; isOriginal?: boolean }> = [];
+
+  if (options.includeNone) {
+    entries.push({ id: '__none__', path: '', label: options.noneLabel ?? 'None', isNone: true });
+  }
+  if (options.includeOriginal) {
+    entries.push({
+      id: '__original__',
+      path: originalSentinel,
+      label: options.originalLabel ?? 'Original',
+      isOriginal: true,
+    });
+  }
+  entries.push(...options.items);
 
   entries.forEach((item) => {
     const isNone = item.isNone === true;
-    const isActive = isNone ? options.activePath == null : item.path === options.activePath;
+    const isOriginal = item.isOriginal === true;
+    const isBasePanel = !options.includeNone;
+    const isActive = isNone
+      ? options.activeValue === null
+      : isOriginal
+        ? options.activeValue === originalSentinel || (isBasePanel && options.activeValue === null)
+        : item.path === options.activeValue;
+
     const btn = createEl(
       'button',
       {
@@ -140,17 +164,30 @@ export function renderWardrobeLibraryPanel(options: RenderWardrobeLibraryPanelOp
           'skin-preview',
           'creator-wardrobe-library-item',
           isNone ? 'creator-wardrobe-library-item-none' : '',
+          isOriginal ? 'creator-wardrobe-library-item-original' : '',
           isActive ? 'active' : '',
         ].filter(Boolean).join(' '),
         'data-path': item.path,
         'data-none': isNone ? '1' : '0',
+        'data-original': isOriginal ? '1' : '0',
         title: item.label,
-        'aria-label': isNone ? item.label : `Select ${item.label}`,
+        'aria-label': isNone || isOriginal ? item.label : `Select ${item.label}`,
       },
     );
 
     if (isNone) {
       btn.appendChild(createEl('span', { className: 'creator-wardrobe-library-item-none-label' }, item.label));
+    } else if (isOriginal) {
+      if (options.originalPreview) {
+        const img = createEl('img', {
+          src: options.originalPreview,
+          alt: item.label,
+          loading: 'eager',
+        });
+        btn.appendChild(img);
+      } else {
+        btn.appendChild(createEl('span', { className: 'creator-wardrobe-library-item-original-label' }, item.label));
+      }
     } else {
       const img = createEl('img', {
         src: item.preview ?? item.path,
@@ -160,7 +197,11 @@ export function renderWardrobeLibraryPanel(options: RenderWardrobeLibraryPanelOp
       btn.appendChild(img);
     }
 
-    btn.addEventListener('click', () => options.onSelect(isNone ? null : item.path));
+    btn.addEventListener('click', () => {
+      if (isNone) options.onSelect(null);
+      else if (isOriginal) options.onSelect(originalSentinel);
+      else options.onSelect(item.path);
+    });
     container.appendChild(btn);
   });
 }

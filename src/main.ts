@@ -9,6 +9,7 @@ import {
   setEditMode,
   getCreatorWorkSize,
   getLayer3DVisible,
+  getLayer3DPartVisible,
   setActiveTool,
   normalizeLayerStateForNonEditMode,
   unregisterCreatorShortcuts,
@@ -18,21 +19,20 @@ import {
   ensurePreviewCameraPanel,
   removePreviewCameraPanel,
   updatePreviewCameraInfo,
-} from './previewCameraPanel';
+  createFakeChatUI,
+  initElectronStatus,
+} from './ui';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
-import { createSocketManager } from './socketManager';
+import { createSocketManager, createCharacterAI } from './services';
 import { createAnimationManager, type SequenceStep, type CharacterStateLike, type TurnStrategy } from './animation';
-import { createCharacterAI } from './characterAI';
-import { createFakeChatUI } from './fakeChatUI';
-import { setupTestControls } from './setupTestControls';
-import { initElectronStatus } from './electronStatus';
-import { logger } from './logger';
-import { setFacingLogContextProvider } from './debugFacing';
-import { subscribe, CREATOR_EVENTS } from './creatorEvents';
-import { SKIN_LAYER_BOUNDS, LAYER_KEYS, TEXTURE_LAYER_KEYS, type LayerKey } from './skin';
-import { EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
-import type { SkinEntry, AnimationEntry } from './types/catalog';
+import { setupTestControls, setFacingLogContextProvider } from './debug';
+import { logger } from './lib';
+import { subscribe, CREATOR_EVENTS } from './creator/events';
+import { createIcon } from './creator/icons';
+import { SKIN_LAYER_BOUNDS, LAYER_KEYS, TEXTURE_LAYER_KEYS, isLayerWithParts, type LayerKey } from './skin';
+import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
+import type { SkinEntry, AnimationEntry } from './domain';
 import {
   startModeActor,
   getModeActor,
@@ -43,8 +43,8 @@ import {
   getRouteInfoFromMachine as getRouteInfo,
   getRouteFromMachine as getRoute,
   parseHashToRouteInfo
-} from './modes/appModeMachine';
-import { registerCapture3DThumbnail } from './viewer/capture3DThumbnail';
+} from './controllers/modes/appModeMachine';
+import { registerCapture3DThumbnail, registerCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
 import {
   initScene as initViewerScene,
   applyShadowToModel,
@@ -53,7 +53,9 @@ import {
   createDebugTexture,
   applySkinToModel,
   applyCreatorLayerVisibility,
+  applyCreatorLayerVisibilityForCapture,
   setupCreator3DPaint,
+  setupCreatorCameraLight,
   updateOrbitControlsForEditMode,
   recreateOrbitControls,
   getPreviewPreset,
@@ -130,6 +132,12 @@ const CREATOR_CAMERA_OFFSET_FROM_CHARACTER = CREATOR_CAMERA_POSITION
 const CREATOR_TARGET_OFFSET_FROM_CHARACTER = CREATOR_CAMERA_TARGET
   .clone()
   .sub(CREATOR_REFERENCE_CHARACTER_POSITION);
+
+/** Min clip duration (sec) to choose forward vs backward. Below this, always play forward. Configurable via ?creatorIdleMinDuration=0.3 */
+const CREATOR_IDLE_TRANSITION_MIN_DURATION_SEC = Number.parseFloat(
+  params.get('creatorIdleMinDuration') || '0.3'
+);
+
 let creatorTransitionInFlight = false;
 type AppRoute = 'creator' | 'viewer' | 'preview';
 type RouteInfo = { route: AppRoute; creatorMode: EditMode | null };
@@ -265,11 +273,13 @@ function updateRouteButtonsState() {
   const homeBtn = document.getElementById('enter-viewer-btn') as HTMLButtonElement | null;
   if (designBtn) {
     designBtn.disabled = creatorTransitionInFlight;
-    designBtn.textContent = creatorTransitionInFlight ? 'Designing...' : 'Design';
+    const textEl = designBtn.querySelector('.creator-home-btn-text');
+    if (textEl) textEl.textContent = creatorTransitionInFlight ? 'Designing...' : 'Design';
   }
   if (homeBtn) {
     homeBtn.disabled = creatorTransitionInFlight;
-    homeBtn.textContent = 'Home';
+    const textEl = homeBtn.querySelector('.creator-home-btn-text');
+    if (textEl) textEl.textContent = 'Home';
   }
 }
 
@@ -300,11 +310,88 @@ function lockCharacterFrozenForPainting() {
   char.currentAction = char.idleAction;
 }
 
+let creatorIdleCompletingTransition = false;
+
+/** Let idle play to completion, then freeze. Chooses forward or backward based on position in clip. Used when transitioning Wardrobe→3D/2D. */
+function letIdleCompleteThenFreeze() {
+  animationManager?.stop();
+  animationManager?.stopIdleWanderer?.();
+  const char = characters['runningboy'];
+  if (!char?.idleAction) return;
+
+  const action = char.idleAction;
+  const clipDuration = action.getClip()?.duration ?? 0;
+  const timeInCycle =
+    clipDuration > 0.001
+      ? ((action.time % clipDuration) + clipDuration) % clipDuration
+      : 0;
+
+  const minDuration = CREATOR_IDLE_TRANSITION_MIN_DURATION_SEC;
+  const playForward =
+    clipDuration < minDuration || timeInCycle >= clipDuration / 2;
+  const direction = playForward ? 'forward' : 'backward';
+  const reason =
+    clipDuration < minDuration
+      ? 'short-clip'
+      : timeInCycle >= clipDuration / 2
+        ? 'midpoint-or-later'
+        : 'before-midpoint';
+
+  logger.info('animation', 'Creator idle transition', {
+    direction,
+    reason,
+    clipDurationSec: Number(clipDuration.toFixed(3)),
+    timeInCycleSec: Number(timeInCycle.toFixed(3)),
+    minDurationSec: minDuration,
+    crossfadeDuration: 0.15
+  });
+
+  creatorIdleCompletingTransition = true;
+
+  logger.info('animation', 'Creator idle crossfade start', {
+    fromAction: (char.currentAction as unknown as { _clip?: { name?: string } })?._clip?.name ?? 'none',
+    toAction: (action as unknown as { _clip?: { name?: string } })._clip?.name ?? 'unknown',
+    fromTime: char.currentAction ? Number(char.currentAction.time.toFixed(3)) : null,
+    toTime: Number(action.time.toFixed(3)),
+    duration: 0.15
+  });
+  fadeToAction(char, action, 0.15);
+  logger.info('animation', 'Creator idle crossfade done', {
+    actionTime: Number(action.time.toFixed(3)),
+    effectiveTimeScale: playForward ? 1 : -1
+  });
+
+  action.setLoop(THREE.LoopOnce, 0);
+  action.clampWhenFinished = true;
+  action.paused = false;
+  action.setEffectiveTimeScale(playForward ? 1 : -1);
+
+  const onFinished = () => {
+    char.mixer.removeEventListener('finished', onFinished);
+    logger.info('animation', 'Creator idle transition finished', {
+      finalTime: Number(action.time.toFixed(3)),
+      direction
+    });
+    action.paused = true;
+    action.setEffectiveTimeScale(0);
+    window.setTimeout(() => {
+      creatorIdleCompletingTransition = false;
+    }, 0);
+  };
+  char.mixer.addEventListener('finished', onFinished);
+}
+
 /** Apply creator pose: idle animation in Wardrobe, frozen in 3D/2D for easier painting. */
-function applyCreatorCharacterPose() {
+function applyCreatorCharacterPose(detail?: { mode?: string; previousMode?: string }) {
   const mode = getEditMode();
+  const previousMode = detail?.previousMode;
+  const fromWardrobeToEdit =
+    previousMode === EDIT_MODE_WARDROBE && (mode === EDIT_MODE_3D || mode === EDIT_MODE_2D);
+
   if (mode === EDIT_MODE_WARDROBE) {
     lockCharacterToCreatorIdle();
+  } else if (fromWardrobeToEdit) {
+    letIdleCompleteThenFreeze();
   } else {
     lockCharacterFrozenForPainting();
   }
@@ -431,6 +518,13 @@ async function transitionViewerToCreator() {
 function setupCreatorTransitionButton() {
   const btn = document.getElementById('enter-creator-btn') as HTMLButtonElement | null;
   if (!btn) return;
+  const icon = createIcon('modeCreator', { width: 22, height: 22 });
+  const span = document.createElement('span');
+  span.className = 'creator-home-btn-text';
+  span.textContent = 'Design';
+  btn.textContent = '';
+  btn.appendChild(icon);
+  btn.appendChild(span);
   btn.addEventListener('click', () => {
     void transitionViewerToCreator();
   });
@@ -478,6 +572,13 @@ async function transitionCreatorToViewer() {
 function setupViewerTransitionButton() {
   const btn = document.getElementById('enter-viewer-btn') as HTMLButtonElement | null;
   if (!btn) return;
+  const icon = createIcon('modeHome', { width: 22, height: 22 });
+  const span = document.createElement('span');
+  span.className = 'creator-home-btn-text';
+  span.textContent = 'Home';
+  btn.textContent = '';
+  btn.appendChild(icon);
+  btn.appendChild(span);
   btn.addEventListener('click', () => {
     void transitionCreatorToViewer();
   });
@@ -629,20 +730,41 @@ function fadeToAction(
   next: THREE.AnimationAction,
   duration: number = 0.5
 ): void {
-  if (char.currentAction === next) return;
+  const fromAction = char.currentAction;
+  const fromClipName = (fromAction as unknown as { _clip?: { name?: string } })?._clip?.name ?? 'none';
+  const toClipName = (next as unknown as { _clip?: { name?: string } })._clip?.name ?? 'unknown';
 
-  const clipName = (next as unknown as { _clip?: { name?: string } })._clip?.name ?? 'unknown';
-  logger.debug('animation', 'Fade to action', { action: clipName, duration });
+  if (fromAction === next) {
+    logger.debug('animation', 'Fade to action (no-op, already active)', {
+      action: toClipName,
+      actionTime: Number(next.time.toFixed(3))
+    });
+    return;
+  }
+
+  logger.debug('animation', 'Fade to action (crossfade)', {
+    from: fromClipName,
+    to: toClipName,
+    duration,
+    fromTime: fromAction ? Number(fromAction.time.toFixed(3)) : null,
+    toTimeBeforeReset: Number(next.time.toFixed(3))
+  });
 
   next.reset();
   next.enabled = true;
   next.setEffectiveTimeScale(1);
   next.setEffectiveWeight(1);
 
-  if (char.currentAction) {
-    char.currentAction.crossFadeTo(next, duration, false);
+  if (fromAction) {
+    fromAction.crossFadeTo(next, duration, false);
+    logger.debug('animation', 'Crossfade initiated', {
+      from: fromClipName,
+      to: toClipName,
+      duration
+    });
   } else {
     next.fadeIn(duration);
+    logger.debug('animation', 'FadeIn initiated', { to: toClipName, duration });
   }
 
   next.play();
@@ -718,6 +840,7 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
               const char = characters[config.id];
               if (!char) return;
               if (getRoute() === 'creator') {
+                if (creatorIdleCompletingTransition) return;
                 applyCreatorCharacterPose();
                 return;
               }
@@ -1067,6 +1190,7 @@ function getImageSourceSize(source: HTMLCanvasElement | HTMLImageElement): numbe
 function buildLayerMaskedCanvas(
   source: HTMLCanvasElement | HTMLImageElement,
   layerVisible: Record<string, boolean>,
+  layerPartVisible: Record<string, { L?: boolean; R?: boolean }>,
   workSize: number
 ): HTMLCanvasElement | null {
   const sourceSize = getImageSourceSize(source);
@@ -1088,18 +1212,26 @@ function buildLayerMaskedCanvas(
   const data = imageData.data;
 
   for (const layerKey of TEXTURE_LAYER_KEYS) {
-    if (layerVisible[layerKey] !== false) continue;
     const bounds = SKIN_LAYER_BOUNDS[layerKey];
     if (!bounds) continue;
-    for (const b of bounds) {
+    const layerHidden = layerVisible[layerKey] === false;
+    const parts = layerPartVisible[layerKey];
+    for (let i = 0; i < bounds.length; i++) {
+      const b = bounds[i]!;
+      const side: 'L' | 'R' = i === 0 ? 'R' : 'L';
+      const partHidden = isLayerWithParts(layerKey)
+        ? (side === 'R' ? parts?.R === false : parts?.L === false)
+        : false;
+      const shouldMask = layerHidden || partHidden;
+      if (!shouldMask) continue;
       const x0 = Math.floor(b.x * scale);
       const y0 = Math.floor(b.y * scale);
       const x1 = Math.min(Math.ceil((b.x + b.w) * scale), workSize);
       const y1 = Math.min(Math.ceil((b.y + b.h) * scale), workSize);
       for (let py = y0; py < y1; py++) {
         for (let px = x0; px < x1; px++) {
-          const i = (py * workSize + px) * 4;
-          data[i + 3] = 0;
+          const idx = (py * workSize + px) * 4;
+          data[idx + 3] = 0;
         }
       }
     }
@@ -1111,10 +1243,11 @@ function buildLayerMaskedCanvas(
 /** Build visibility texture: copy skin, zero alpha for hidden layer regions. Apply to all meshes. */
 function buildVisibilityTexture(
   skinCanvas: HTMLCanvasElement,
-  layerVisible: Record<string, boolean>
+  layerVisible: Record<string, boolean>,
+  layerPartVisible: Record<string, { L?: boolean; R?: boolean }>
 ): THREE.Texture {
   const workSize = getCreatorWorkSize();
-  const maskedCanvas = buildLayerMaskedCanvas(skinCanvas, layerVisible, workSize);
+  const maskedCanvas = buildLayerMaskedCanvas(skinCanvas, layerVisible, layerPartVisible, workSize);
   if (!maskedCanvas) return creatorPreviewTexture!;
 
   if (!creatorOverlayTexture) {
@@ -1318,7 +1451,7 @@ async function syncPreviewRouteState(): Promise<void> {
   if (token !== previewRouteSyncToken) return;
 
   const composedCanvas = composePreviewSkinCanvas(baseImage, skinImage, previewInfo.part);
-  const maskedCanvas = buildLayerMaskedCanvas(composedCanvas, layerVisible, 64) ?? composedCanvas;
+  const maskedCanvas = buildLayerMaskedCanvas(composedCanvas, layerVisible, {}, 64) ?? composedCanvas;
   if (token !== previewRouteSyncToken) return;
 
   applyPreviewTextureFromCanvas(char, maskedCanvas, previewInfo.skinPath);
@@ -1365,9 +1498,10 @@ function updateCreatorPreviewTexture() {
     creatorPreviewTexture.flipY = true;
   }
   const layerVisible = getLayer3DVisible();
+  const layerPartVisible = getLayer3DPartVisible();
   // Always build texture from fresh canvas copy so eraser/paint updates show immediately
   // (direct creatorPreviewTexture can show stale pixels on base layers due to GPU/Three.js caching)
-  const textureToUse = buildVisibilityTexture(canvas, layerVisible);
+  const textureToUse = buildVisibilityTexture(canvas, layerVisible, layerPartVisible);
 
   applySkinToModel(char.model, textureToUse, 'clamped-flip' as TexturePreset, 'transparent' as AlphaMode);
   applyCreatorLayerVisibility(char.model, layerVisible);
@@ -1377,8 +1511,8 @@ function setupCreatorPreviewDirtySubscription() {
   const markDirty = () => { creatorPreviewDirty = true; };
   subscribe(CREATOR_EVENTS.CANVAS_CHANGE, markDirty);
   subscribe(CREATOR_EVENTS.LAYER3D_CHANGE, markDirty);
-  subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, () => {
-    if (getRoute() === 'creator') applyCreatorCharacterPose();
+  subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, (e: CustomEvent<{ mode?: string; previousMode?: string }>) => {
+    if (getRoute() === 'creator') applyCreatorCharacterPose(e.detail);
   });
   subscribe(CREATOR_EVENTS.SKIN_LOAD_CHANGE, (e: CustomEvent) => {
     markDirty();
@@ -1432,33 +1566,38 @@ function linearToSrgb(c: number): number {
 
 /**
  * Capture a thumbnail of the 3D character with the current creator skin.
- * Animates camera to preview position (like Home→Creator), captures, then restores.
+ * Uses a separate camera so the main 3D view is never modified.
  * Uses fullOutfit preset to match preview-generated thumbnails.
  */
 export async function captureCreator3DThumbnail(size: number = 128): Promise<string | null> {
   const char = characters['runningboy'];
-  if (!char || !renderer || !scene || !camera) return null;
+  if (!char || !renderer || !scene || !container) return null;
 
   creatorPreviewDirty = true;
   await nextAnimationFrame();
   await nextAnimationFrame();
 
   const preset = getPreviewPreset('fullOutfit');
-  const capturePose: CameraPose = {
-    position: new THREE.Vector3(preset.cameraPosition.x, preset.cameraPosition.y, preset.cameraPosition.z),
-    target: new THREE.Vector3(preset.cameraTarget.x, preset.cameraTarget.y, preset.cameraTarget.z),
-  };
+  const capturePos = new THREE.Vector3(
+    preset.cameraPosition.x,
+    preset.cameraPosition.y,
+    preset.cameraPosition.z
+  );
+  const captureTarget = new THREE.Vector3(
+    preset.cameraTarget.x,
+    preset.cameraTarget.y,
+    preset.cameraTarget.z
+  );
 
-  const savedPos = camera.position.clone();
-  const savedTarget = (controls as { target: THREE.Vector3 }).target.clone();
-  const savedFov = camera.fov;
-  const savedAspect = camera.aspect;
-
-  await animateCameraToCreatorView(capturePose);
-
-  camera.fov = preset.fov ?? 35;
-  camera.aspect = 1;
-  camera.updateProjectionMatrix();
+  const captureCamera = new THREE.PerspectiveCamera(
+    preset.fov ?? 35,
+    1,
+    0.1,
+    100
+  );
+  captureCamera.position.copy(capturePos);
+  captureCamera.lookAt(captureTarget);
+  captureCamera.updateProjectionMatrix();
 
   const renderTarget = new THREE.WebGLRenderTarget(size, size, {
     minFilter: THREE.LinearFilter,
@@ -1469,20 +1608,19 @@ export async function captureCreator3DThumbnail(size: number = 128): Promise<str
   renderer.setViewport(0, 0, size, size);
   renderer.setScissor(0, 0, size, size);
   renderer.setScissorTest(true);
-  renderer.render(scene, camera);
+  renderer.render(scene, captureCamera);
   renderer.setScissorTest(false);
   renderer.setRenderTarget(null);
+
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  renderer.setViewport(0, 0, w, h);
+  renderer.setScissor(0, 0, w, h);
+  renderer.setScissorTest(false);
 
   const pixels = new Uint8Array(size * size * 4);
   renderer.readRenderTargetPixels(renderTarget, 0, 0, size, size, pixels);
   renderTarget.dispose();
-
-  await animateCameraToCreatorView({ position: savedPos, target: savedTarget });
-
-  camera.fov = savedFov;
-  camera.aspect = savedAspect;
-  camera.updateProjectionMatrix();
-  onWindowResize();
 
   const outCanvas = document.createElement('canvas');
   outCanvas.width = size;
@@ -1508,6 +1646,113 @@ export async function captureCreator3DThumbnail(size: number = 128): Promise<str
     }
   }
   ctx.putImageData(imgData, 0, 0);
+  return outCanvas.toDataURL('image/png');
+}
+
+/**
+ * Capture a per-part thumbnail of the 3D character using the part's preview preset.
+ * Uses part-specific camera and layer visibility so only relevant layers are shown.
+ */
+export async function captureCreator3DPartThumbnail(
+  part: PreviewPresetKey,
+  size: number = 128
+): Promise<string | null> {
+  const char = characters['runningboy'];
+  if (!char || !renderer || !scene || !container) return null;
+
+  const preset = getPreviewPreset(part);
+  const layerVisible = buildLayerVisibleState(preset.visibleLayers);
+  const canvas = getCreatorSkinCanvas();
+  const workSize = getCreatorWorkSize();
+  const maskedCanvas = buildLayerMaskedCanvas(canvas, layerVisible, {}, workSize);
+  if (!maskedCanvas) return null;
+
+  creatorPreviewDirty = true;
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+
+  const captureTexture = new THREE.CanvasTexture(maskedCanvas);
+  captureTexture.colorSpace = THREE.SRGBColorSpace;
+  captureTexture.magFilter = THREE.NearestFilter;
+  captureTexture.minFilter = THREE.NearestFilter;
+  captureTexture.generateMipmaps = false;
+  captureTexture.wrapS = captureTexture.wrapT = THREE.ClampToEdgeWrapping;
+  captureTexture.flipY = true;
+
+  applySkinToModel(char.model, captureTexture, char.texturePreset, char.alphaMode, char.currentSkin);
+  applyCreatorLayerVisibilityForCapture(char.model, layerVisible, '/models/RunningboyRig.fbx');
+
+  const capturePos = new THREE.Vector3(
+    preset.cameraPosition.x,
+    preset.cameraPosition.y,
+    preset.cameraPosition.z
+  );
+  const captureTarget = new THREE.Vector3(
+    preset.cameraTarget.x,
+    preset.cameraTarget.y,
+    preset.cameraTarget.z
+  );
+  const captureCamera = new THREE.PerspectiveCamera(
+    preset.fov ?? 35,
+    1,
+    0.1,
+    100
+  );
+  captureCamera.position.copy(capturePos);
+  captureCamera.lookAt(captureTarget);
+  captureCamera.updateProjectionMatrix();
+
+  const renderTarget = new THREE.WebGLRenderTarget(size, size, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+  });
+  renderer.setRenderTarget(renderTarget);
+  renderer.setViewport(0, 0, size, size);
+  renderer.setScissor(0, 0, size, size);
+  renderer.setScissorTest(true);
+  renderer.render(scene, captureCamera);
+  renderer.setScissorTest(false);
+  renderer.setRenderTarget(null);
+
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  renderer.setViewport(0, 0, w, h);
+  renderer.setScissor(0, 0, w, h);
+  renderer.setScissorTest(false);
+
+  const pixels = new Uint8Array(size * size * 4);
+  renderer.readRenderTargetPixels(renderTarget, 0, 0, size, size, pixels);
+  renderTarget.dispose();
+  captureTexture.dispose();
+
+  applyCreatorLayerVisibility(char.model, {});
+
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = size;
+  outCanvas.height = size;
+  const ctx = outCanvas.getContext('2d');
+  if (!ctx) return null;
+
+  const imgData = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    const srcRow = (size - 1 - y) * size * 4;
+    const dstRow = y * size * 4;
+    for (let x = 0; x < size; x++) {
+      const src = srcRow + x * 4;
+      const dst = dstRow + x * 4;
+      const r = pixels[src]! / 255;
+      const g = pixels[src + 1]! / 255;
+      const b = pixels[src + 2]! / 255;
+      const a = pixels[src + 3]! / 255;
+      imgData.data[dst] = Math.round(linearToSrgb(r) * 255);
+      imgData.data[dst + 1] = Math.round(linearToSrgb(g) * 255);
+      imgData.data[dst + 2] = Math.round(linearToSrgb(b) * 255);
+      imgData.data[dst + 3] = Math.round(a * 255);
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  creatorPreviewDirty = true;
   return outCanvas.toDataURL('image/png');
 }
 
@@ -1612,6 +1857,7 @@ async function main() {
   camera = sceneContext.camera;
   renderer = sceneContext.renderer;
   controls = sceneContext.controls;
+  setupCreatorCameraLight(camera);
   setupCreatorTransitionButton();
   setupViewerTransitionButton();
 
@@ -1710,6 +1956,7 @@ async function main() {
   }
 
   registerCapture3DThumbnail(captureCreator3DThumbnail);
+  registerCapture3DPartThumbnail(captureCreator3DPartThumbnail);
 
   setupCreator3DPaint({
     getControls: () => controls,

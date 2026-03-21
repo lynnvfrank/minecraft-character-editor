@@ -4,7 +4,7 @@
  */
 
 import { createMachine, createActor, fromCallback } from 'xstate';
-import type { EditMode } from '../creator/api';
+import type { EditMode } from '../../creator/api';
 
 export type AppRoute = 'viewer' | 'creator' | 'preview';
 

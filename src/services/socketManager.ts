@@ -6,7 +6,7 @@
  * otherwise it skips the connection attempt and avoids WebSocket console errors.
  */
 import { io, Socket } from 'socket.io-client';
-import { logger } from './logger';
+import { logger } from '../lib/logger';
 
 type SocketEventHandler = (data: { type: string; name: string }) => void;
 

@@ -3,11 +3,11 @@
  * Built because canvas pixelation was unreliable; divs give crisp 1:1 pixels.
  */
 
-import { SKIN_SIZE, SKIN_LAYER_BOUNDS, SKIN_DEAD_ZONES, LAYER_KEYS, WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skin';
-import { rgbToHex } from '../types/color';
+import { SKIN_SIZE, SKIN_LAYER_BOUNDS, SKIN_DEAD_ZONES, LAYER_KEYS, isLayerWithParts, WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skin';
+import { rgbToHex } from '../lib/color';
 import * as brush from './brush';
-import type { CreatorState } from './creatorState';
-import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
+import type { CreatorState } from '../state/creatorState';
+import { subscribe, publish, CREATOR_EVENTS } from './events';
 
 const ZOOM = 4;
 const DISPLAY_SIZE = WORK_SIZE * ZOOM;
@@ -179,6 +179,14 @@ function canPaintAt(ctx: BlockyEditorContext, workingX: number, workingY: number
   return layer != null && !ctx.state.layer3DLocked[layer];
 }
 
+function triggerLockFeedbackIfNeeded(ctx: BlockyEditorContext, workingX: number, workingY: number): void {
+  if (!isInSelectedLayer(ctx, workingX, workingY)) return;
+  const layer = getLayerAtCoords(ctx, workingX, workingY);
+  if (layer != null && ctx.state.layer3DLocked[layer]) {
+    publish(CREATOR_EVENTS.LOCK_FEEDBACK, { layer });
+  }
+}
+
 /** Build the 64×64 div grid. */
 export function buildBlockyGrid(): void {
   const grid = document.getElementById('creator-blocky-grid');
@@ -285,11 +293,17 @@ export function renderRulersAndGrid(ctx: BlockyEditorContext): void {
 
         for (const layerKey of LAYER_KEYS) {
           const bounds = SKIN_LAYER_BOUNDS[layerKey];
-          const isVisible = ctx.state.layer3DVisible[layerKey] !== false;
-          const style = isVisible
-            ? (TEMPLATE_LAYER_STYLES[layerKey] ?? DEFAULT_TEMPLATE_STYLE)
-            : HIDDEN_TEMPLATE_STYLE;
-          for (const b of bounds) {
+          const layerVisible = ctx.state.layer3DVisible[layerKey] !== false;
+          const parts = ctx.state.layer3DPartVisible[layerKey];
+          for (let i = 0; i < bounds.length; i++) {
+            const b = bounds[i]!;
+            const partVisible = isLayerWithParts(layerKey)
+              ? (i === 0 ? (parts?.R !== false) : (parts?.L !== false))
+              : true;
+            const isVisible = layerVisible && partVisible;
+            const style = isVisible
+              ? (TEMPLATE_LAYER_STYLES[layerKey] ?? DEFAULT_TEMPLATE_STYLE)
+              : HIDDEN_TEMPLATE_STYLE;
             const x = b.x * templateScale;
             const y = b.y * templateScale;
             const w = b.w * templateScale;
@@ -314,11 +328,16 @@ export function renderRulersAndGrid(ctx: BlockyEditorContext): void {
         // Draw labels after dead-zone punch-out so text remains readable.
         for (const layerKey of LAYER_KEYS) {
           const bounds = SKIN_LAYER_BOUNDS[layerKey];
-          const isVisible = ctx.state.layer3DVisible[layerKey] !== false;
-          const style = isVisible
-            ? (TEMPLATE_LAYER_STYLES[layerKey] ?? DEFAULT_TEMPLATE_STYLE)
-            : HIDDEN_TEMPLATE_STYLE;
+          const layerVisible = ctx.state.layer3DVisible[layerKey] !== false;
+          const parts = ctx.state.layer3DPartVisible[layerKey];
           for (let i = 0; i < bounds.length; i++) {
+            const partVisible = isLayerWithParts(layerKey)
+              ? (i === 0 ? (parts?.R !== false) : (parts?.L !== false))
+              : true;
+            const isVisible = layerVisible && partVisible;
+            const style = isVisible
+              ? (TEMPLATE_LAYER_STYLES[layerKey] ?? DEFAULT_TEMPLATE_STYLE)
+              : HIDDEN_TEMPLATE_STYLE;
             const b = bounds[i];
             const labelText = getTemplateLabelText(layerKey, b);
             const x = b.x * templateScale;
@@ -406,15 +425,31 @@ export function renderToDisplay(ctx: BlockyEditorContext): void {
   renderRulersAndGrid(ctx);
 }
 
-/** Fit the canvas wrap to the area. */
+const TOOLBAR_CLEARANCE_PX = 24;
+
+/** Fit the canvas wrap to the area. In Creator.2D, reserves space above the bottom toolbar so the canvas does not overlap it. Maintains aspect ratio. */
 export function fitCanvasAreaScale(): void {
   const area = document.getElementById('creator-canvas-area');
   const wrap = document.getElementById('creator-canvas-wrap');
   if (!area || !wrap) return;
   const areaRect = area.getBoundingClientRect();
+  if (areaRect.width <= 0 || areaRect.height <= 0) return;
+
+  let effectiveHeight = areaRect.height;
+  if (document.body.dataset.editMode === '2d') {
+    const bottomPanels = document.getElementById('creator-bottom-center-panels');
+    if (bottomPanels) {
+      const panelsRect = bottomPanels.getBoundingClientRect();
+      const maxBottom = panelsRect.top - TOOLBAR_CLEARANCE_PX;
+      if (maxBottom > areaRect.top && maxBottom < areaRect.top + areaRect.height) {
+        effectiveHeight = Math.max(0, maxBottom - areaRect.top);
+      }
+    }
+  }
+
   const hasRulers = wrap.hasAttribute('data-rulers');
   const size = hasRulers ? 532 : 512;
-  const scale = Math.min(areaRect.width / size, areaRect.height / size);
+  const scale = Math.min(areaRect.width / size, effectiveHeight / size);
   (wrap as HTMLElement).style.transform = `scale(${scale})`;
 }
 
@@ -449,6 +484,8 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
 
   const canPaintAtBound = (wx: number, wy: number) => canPaintAt(ctx, wx, wy);
   const getCurrentColor = () => ctx.state.currentColor;
+  let lastLockFeedbackMs = 0;
+  const LOCK_FEEDBACK_THROTTLE_MS = 400;
 
   function handleBlockyPointer(e: MouseEvent): void {
     const gridRect = gridEl.getBoundingClientRect();
@@ -493,6 +530,13 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
 
     if (e.type === 'mousedown' && e.button === 0) {
       if (ctx.state.activeTool === 'fill') {
+        if (!canPaintAtBound(wx, wy)) {
+          const now = Date.now();
+          if (now - lastLockFeedbackMs >= LOCK_FEEDBACK_THROTTLE_MS) {
+            lastLockFeedbackMs = now;
+            triggerLockFeedbackIfNeeded(ctx, wx, wy);
+          }
+        }
         const changed = brush.floodFill(drawCtx, wx, wy, canPaintAtBound, getCurrentColor);
         if (changed.length > 0) {
           ctx.pushUndoFill(changed, ctx.state.currentColor);
@@ -500,6 +544,13 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
         }
         renderBlockyGrid(ctx);
       } else {
+        if (!canPaintAtBound(wx, wy)) {
+          const now = Date.now();
+          if (now - lastLockFeedbackMs >= LOCK_FEEDBACK_THROTTLE_MS) {
+            lastLockFeedbackMs = now;
+            triggerLockFeedbackIfNeeded(ctx, wx, wy);
+          }
+        }
         ctx.state.isDrawing = true;
         ctx.state.lastSkinX = wx;
         ctx.state.lastSkinY = wy;
@@ -525,6 +576,13 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
         renderBlockyGrid(ctx);
       }
     } else if (e.type === 'mousemove' && ctx.state.isDrawing && ctx.state.activeTool !== 'fill' && ctx.state.currentStroke) {
+      if (!canPaintAtBound(wx, wy)) {
+        const now = Date.now();
+        if (now - lastLockFeedbackMs >= LOCK_FEEDBACK_THROTTLE_MS) {
+          lastLockFeedbackMs = now;
+          triggerLockFeedbackIfNeeded(ctx, wx, wy);
+        }
+      }
       const isEraser = ctx.state.currentStroke.isEraser;
       brush.drawLine(
         drawCtx,

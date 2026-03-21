@@ -13,11 +13,15 @@ export const CREATOR_EVENTS = {
   TOOLS_CHANGE: 'creator-tools-3d-change',
   LAYER3D_CHANGE: 'creator-layer3d-change',
   CANVAS_CHANGE: 'creator-canvas-change',
+  LOCK_FEEDBACK: 'creator-lock-feedback',
 } as const;
 
 export type CreatorCurrentColorDetail = { color: string };
 
-export type CreatorEditModeDetail = { mode: 'wardrobe' | '2d' | '3d' };
+export type CreatorEditModeDetail = {
+  mode: 'wardrobe' | '2d' | '3d';
+  previousMode?: 'wardrobe' | '2d' | '3d';
+};
 
 export type CreatorTexturePositionDetail = {
   part: string | null;
@@ -28,6 +32,8 @@ export type CreatorTexturePositionDetail = {
   currentColor?: string | null;
   hoverColor?: string | null;
 };
+
+export type CreatorLockFeedbackDetail = { layer: string };
 
 /** Publish an event. Subscribers will be notified. */
 export function publish(

@@ -10,8 +10,8 @@
  * - Interacting: play happy emote near user, then idle or wander
  */
 import * as THREE from 'three';
-import type { SequenceStep } from './animation';
-import { logFacingChange } from './debugFacing';
+import type { SequenceStep } from '../animation';
+import { logFacingChange } from '../debug/debugFacing';
 
 /** Minimal character state (matches main's CharacterState / CharacterStateLike) */
 export type CharacterStateLike = {

@@ -1,5 +1,5 @@
-import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
-import { hexToHsva, hsvaToHex, adjustHexBrightness, isValidHex } from '../types/color';
+import { subscribe, CREATOR_EVENTS } from './events';
+import { hexToHsva, hsvaToHex, adjustHexBrightness, isValidHex } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { ColorPickerContext } from './api';
 

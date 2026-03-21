@@ -14,4 +14,4 @@ export {
   clampToTrapezoid,
   WALK_CYCLE_DISTANCE,
   type TrapezoidBounds,
-} from './trapezoidBounds';
+} from '../lib/trapezoidBounds';

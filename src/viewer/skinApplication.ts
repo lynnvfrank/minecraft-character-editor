@@ -4,8 +4,8 @@
  */
 
 import * as THREE from 'three';
-import { getMinecraftPartFromMeshName } from '../skin';
-import { logger } from '../logger';
+import { getMinecraftPartFromMeshName, UV_PART_TO_LAYER } from '../skin';
+import { logger } from '../lib';
 
 export type TexturePreset = 'clamped' | 'clamped-flip' | 'repeat' | 'repeat-flip';
 export type AlphaMode = 'none' | 'alphaTest' | 'transparent' | 'cutout';
@@ -156,6 +156,24 @@ export function applyCreatorLayerVisibility(
     if ((obj as THREE.Mesh).isMesh) {
       (obj as THREE.Mesh).visible = true;
     }
+  });
+}
+
+/**
+ * Set mesh visibility per layer for per-part capture. Hides meshes for layers not in layerVisible.
+ * Use only during capture; caller must restore visibility after.
+ */
+export function applyCreatorLayerVisibilityForCapture(
+  model: THREE.Group,
+  layerVisible: Record<string, boolean>,
+  modelPath?: string
+): void {
+  model.traverse((obj) => {
+    if (!(obj as THREE.Mesh).isMesh) return;
+    const mesh = obj as THREE.Mesh;
+    const part = getMinecraftPartFromMeshName(mesh.name || '', modelPath);
+    const layer = part ? UV_PART_TO_LAYER[part] : null;
+    mesh.visible = layer != null ? (layerVisible[layer] !== false) : true;
   });
 }
 

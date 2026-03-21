@@ -5,19 +5,19 @@
  * Resolution: work at WORK_SIZE (e.g. 128×128), export downscaled to 64×64.
  */
 
-import { SKIN_LAYER_BOUNDS, SKIN_PART_BOUNDS, isInDeadZone, isLayerKey, LAYER_KEYS, partToLayer, WORK_SIZE, RESOLUTION_MULTIPLIER, type Bounds } from './skin';
-import { subscribe, publish, CREATOR_EVENTS } from './creatorEvents';
-import type { SkinEntry } from './types/catalog';
-import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode } from './creator/api';
-import { createCreatorState } from './creator/creatorState';
-import { normalizeHex, rgbToHex, hexToRgb } from './types/color';
+import { SKIN_LAYER_BOUNDS, SKIN_PART_BOUNDS, isInDeadZone, isLayerKey, isLayerWithParts, LAYER_KEYS, partToLayer, WORK_SIZE, RESOLUTION_MULTIPLIER, type Bounds } from './skin';
+import { subscribe, publish, CREATOR_EVENTS } from './creator/events';
+import type { SkinEntry } from './domain';
+import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode, type PartSide } from './creator/api';
+import { createCreatorState } from './state';
+import { normalizeHex, rgbToHex, hexToRgb } from './lib/color';
 import {
   buildColorToolbar,
   buildColorPickerPanel,
   buildSwatchesPanel,
   buildSkinLayersPanel,
   buildEditorToolsPanel,
-  unregisterEditorModeShortcuts,
+  unregisterEditorToolShortcuts,
   buildWardrobePartsPanel,
   buildWardrobeLibraryPanels,
   renderWardrobeLibraryPanel,
@@ -27,7 +27,7 @@ import {
   buildTexturePositionPanel,
 } from './creator/index';
 import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
-import { getCapture3DThumbnail } from './viewer/capture3DThumbnail';
+import { getCapture3DThumbnail, getCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
@@ -55,7 +55,11 @@ let creatorCanvasPopulated = false;
 let modePanelsBound = false;
 let modePanelsCurrentMode: EditMode | null = null;
 let modeTransitionToken = 0;
-let savedLayerStateBeforeNonEditMode: { visible: Record<string, boolean>; locked: Record<string, boolean> } | null = null;
+let savedLayerStateBeforeNonEditMode: {
+  visible: Record<string, boolean>;
+  partVisible: Record<string, { L?: boolean; R?: boolean }>;
+  locked: Record<string, boolean>;
+} | null = null;
 
 export function getCreatorCanvasPopulated(): boolean {
   return creatorCanvasPopulated;
@@ -78,11 +82,16 @@ function saveLayerStateAndNormalizeForNonEditMode(): void {
   if (!savedLayerStateBeforeNonEditMode) {
     savedLayerStateBeforeNonEditMode = {
       visible: { ...state.layer3DVisible },
+      partVisible: Object.fromEntries(
+        Object.entries(state.layer3DPartVisible).map(([k, v]) => [k, { ...v }])
+      ),
       locked: { ...state.layer3DLocked },
     };
   }
   clearLayerSoloModes();
   setLayer3DVisibleAll(Object.fromEntries(LAYER_KEYS.map((k) => [k, true])));
+  state.layer3DPartVisible = {};
+  publish(CREATOR_EVENTS.LAYER3D_CHANGE);
   setLayer3DLockedAll(Object.fromEntries(LAYER_KEYS.map((k) => [k, false])));
 }
 
@@ -90,11 +99,14 @@ function restoreLayerStateForEditMode(): void {
   if (!savedLayerStateBeforeNonEditMode) return;
   clearLayerSoloModes();
   setLayer3DVisibleAll(savedLayerStateBeforeNonEditMode.visible);
+  state.layer3DPartVisible = Object.fromEntries(
+    Object.entries(savedLayerStateBeforeNonEditMode.partVisible).map(([k, v]) => [k, { ...v }])
+  );
   setLayer3DLockedAll(savedLayerStateBeforeNonEditMode.locked);
   savedLayerStateBeforeNonEditMode = null;
 }
 
-type PanelDirection = 'left' | 'right' | 'top';
+type PanelDirection = 'left' | 'right' | 'top' | 'bottom';
 type ModePanelConfig = {
   id: string;
   modes: readonly EditMode[];
@@ -106,15 +118,22 @@ const MODE_PANEL_HIDDEN_CLASS = 'creator-mode-panel-hidden';
 const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
   { id: 'creator-save-download-panel', modes: ['wardrobe', '2d', '3d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-wardrobe-parts-panel', modes: ['wardrobe'], enterFrom: 'left', exitTo: 'left' },
+  { id: 'creator-upper-right-panels-root', modes: ['wardrobe'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-canvas-overlays-panel', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-layers-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
-  { id: 'creator-tools-panel', modes: ['2d', '3d'], enterFrom: 'top', exitTo: 'top' },
+  { id: 'creator-tools-panel', modes: ['2d', '3d'], enterFrom: 'bottom', exitTo: 'bottom' },
+  { id: 'creator-undo-redo-panel', modes: ['2d', '3d'], enterFrom: 'bottom', exitTo: 'bottom' },
   { id: 'creator-right-panels-group', modes: ['2d', '3d'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-3d-preview-slot', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
 ];
 
 import type { WardrobeLayerKey, WardrobePartKey } from './creator/wardrobePartsPanel';
 import { WARDROBE_PART_KEYS } from './creator/wardrobePartsPanel';
+
+/** Sentinel for "use base skin" on overlay parts. Base parts use null. */
+export const WARDROBE_ORIGINAL = '__original__' as const;
+const WARDROBE_OVERLAY_KEYS = ['hat', 'jacket', 'sleeves', 'pants'] as const satisfies readonly WardrobePartKey[];
+
 let wardrobeSelectedLayer: WardrobeLayerKey = 'fullOutfit';
 let wardrobeCompositeToken = 0;
 let creatorCurrentSkinPath: string | null = null;
@@ -126,13 +145,13 @@ const wardrobeImageCache = new Map<string, Promise<HTMLImageElement>>();
 type WardrobeSelectionState = Record<WardrobePartKey, string | null>;
 type WardrobeLibraryState = Record<WardrobePartKey, SkinEntry[]>;
 const wardrobeSelections: WardrobeSelectionState = {
-  hat: null,
+  hat: WARDROBE_ORIGINAL,
   head: null,
-  jacket: null,
+  jacket: WARDROBE_ORIGINAL,
   body: null,
   arms: null,
-  sleeves: null,
-  pants: null,
+  sleeves: WARDROBE_ORIGINAL,
+  pants: WARDROBE_ORIGINAL,
   legs: null,
 };
 const wardrobeLibraries: WardrobeLibraryState = {
@@ -146,33 +165,37 @@ const wardrobeLibraries: WardrobeLibraryState = {
   legs: [],
 };
 
+const wardrobeOriginalPreviews: Record<WardrobePartKey, string | null> = {
+  hat: null,
+  head: null,
+  jacket: null,
+  body: null,
+  arms: null,
+  sleeves: null,
+  pants: null,
+  legs: null,
+};
+let wardrobeOriginalPreviewSignature = '';
+let wardrobeOriginalCaptureToken = 0;
+
 /** Skins from /wardrobe/skins/index.json (manifest). */
 let manifestOutfitSkins: SkinEntry[] = [];
 /** Skins saved via the Save button (path = data URL). */
 const savedOutfitSkins: SkinEntry[] = [];
 
-function clearAnim(el: HTMLElement): void {
-  el.classList.remove(
-    'creator-mode-anim-in-left',
-    'creator-mode-anim-in-right',
-    'creator-mode-anim-in-top',
-    'creator-mode-anim-out-left',
-    'creator-mode-anim-out-right',
-    'creator-mode-anim-out-top'
-  );
-}
-
-function setHidden(el: HTMLElement, hidden: boolean): void {
-  el.classList.toggle(MODE_PANEL_HIDDEN_CLASS, hidden);
+function clearWardrobePanelAnim(el: HTMLElement): void {
+  clearModeAnimClasses(el);
 }
 
 function hideAllWardrobeLibraryPanels(): void {
   const panels = document.querySelectorAll<HTMLElement>('.creator-wardrobe-library-panel');
   panels.forEach((panel) => {
-    clearAnim(panel);
-    setHidden(panel, true);
+    clearWardrobePanelAnim(panel);
+    setModePanelHidden(panel, true);
   });
 }
+
+let wardrobePanelTransitionToken = 0;
 
 function showWardrobeLibraryPanel(layer: WardrobeLayerKey | null): void {
   const targetPanelId = layer ? getWardrobePanelIdForLayer(layer) : null;
@@ -187,19 +210,31 @@ function showWardrobeLibraryPanel(layer: WardrobeLayerKey | null): void {
   }
 
   if (!currentPanel || currentPanel === targetPanel) {
-    clearAnim(targetPanel);
-    setHidden(targetPanel, false);
+    clearWardrobePanelAnim(targetPanel);
+    setModePanelHidden(targetPanel, false);
     return;
   }
 
-  clearAnim(currentPanel);
-  setHidden(currentPanel, true);
-  clearAnim(targetPanel);
-  setHidden(targetPanel, false);
+  const token = ++wardrobePanelTransitionToken;
+  animateModePanelOut(currentPanel, 'right');
+
+  window.setTimeout(() => {
+    if (token !== wardrobePanelTransitionToken) return;
+    clearModeAnimClasses(currentPanel);
+    setModePanelHidden(currentPanel, true);
+    animateModePanelIn(targetPanel, 'right');
+  }, MODE_TRANSITION_MS);
 }
 
 function setWardrobeSelectedLayer(layer: WardrobeLayerKey): void {
   wardrobeSelectedLayer = layer;
+  const isBasePart =
+    layer === 'head' || layer === 'body' || layer === 'arms' || layer === 'legs';
+  if (isBasePart && wardrobeSelections[layer] !== null) {
+    wardrobeSelections[layer] = null;
+    syncWardrobeLibraryActiveStates();
+    void resolveWardrobeComposite();
+  }
   showWardrobeLibraryPanel(state.editMode === 'wardrobe' ? layer : null);
 }
 
@@ -212,9 +247,11 @@ function clearModeAnimClasses(el: HTMLElement): void {
     'creator-mode-anim-in-left',
     'creator-mode-anim-in-right',
     'creator-mode-anim-in-top',
+    'creator-mode-anim-in-bottom',
     'creator-mode-anim-out-left',
     'creator-mode-anim-out-right',
-    'creator-mode-anim-out-top'
+    'creator-mode-anim-out-top',
+    'creator-mode-anim-out-bottom'
   );
 }
 
@@ -239,18 +276,13 @@ function animateModePanelOut(el: HTMLElement, dir: PanelDirection): void {
 function mountPreviewSlotForMode(): void {
   const previewSlot = document.getElementById('creator-3d-preview-slot');
   const lowerLeftPanels = document.getElementById('creator-lower-left-panels');
-  const homePanel = document.getElementById('creator-home-panel');
   if (!previewSlot) return;
 
-  // Keep the preview slot anchored in the lower-left stack so mode transitions
-  // do not temporarily stretch the lower-right tools group width.
+  // Keep the preview slot at the top of the lower-left stack (above Keep/Save, Home)
+  // so in Creator.2D the 3D view appears above the Keep and Save panel.
   if (lowerLeftPanels) {
-    if (homePanel && homePanel.parentElement === lowerLeftPanels) {
-      if (previewSlot.parentElement !== lowerLeftPanels || previewSlot.nextElementSibling !== homePanel) {
-        lowerLeftPanels.insertBefore(previewSlot, homePanel);
-      }
-    } else if (previewSlot.parentElement !== lowerLeftPanels) {
-      lowerLeftPanels.appendChild(previewSlot);
+    if (previewSlot.parentElement !== lowerLeftPanels || previewSlot !== lowerLeftPanels.firstElementChild) {
+      lowerLeftPanels.insertBefore(previewSlot, lowerLeftPanels.firstChild);
     }
   } else {
     // Fallback placement if lower-left is unavailable.
@@ -269,7 +301,7 @@ function applyModePanelsImmediate(mode: EditMode): void {
     clearModeAnimClasses(el);
     const isVisibleInMode = cfg.modes.includes(mode);
     setModePanelHidden(el, !isVisibleInMode);
-    if (isVisibleInMode && (cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group')) {
+    if (isVisibleInMode && (cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group' || cfg.id === 'creator-upper-right-panels-root')) {
       needsResizeAfterShow = true;
     }
   }
@@ -323,7 +355,7 @@ function transitionModePanels(targetMode: EditMode): void {
     showLater.forEach(({ el, cfg }) => {
       animateModePanelIn(el, cfg.enterFrom);
     });
-    if (showLater.some(({ cfg }) => cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group')) {
+    if (showLater.some(({ cfg }) => cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group' || cfg.id === 'creator-upper-right-panels-root')) {
       requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     }
     modePanelsCurrentMode = targetMode;
@@ -365,6 +397,27 @@ export function getLayerAtCoords(workingX: number, workingY: number): string | n
   return null;
 }
 
+/** Return layer and part side (L/R) at coords. side is undefined for single-part layers. */
+export function getLayerAndPartAtCoords(
+  workingX: number,
+  workingY: number
+): { layer: string; side?: PartSide } | null {
+  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
+  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
+  for (const layer of LAYER_KEYS) {
+    const bounds = SKIN_LAYER_BOUNDS[layer];
+    if (!bounds) continue;
+    for (let i = 0; i < bounds.length; i++) {
+      const b = bounds[i]!;
+      if (pointInBounds(normX, normY, b)) {
+        const side: PartSide | undefined = isLayerWithParts(layer) ? (i === 0 ? 'R' : 'L') : undefined;
+        return { layer, side };
+      }
+    }
+  }
+  return null;
+}
+
 /** Return the specific part display name (Right leg, Left pants, etc.) at coords, or null. */
 export function getPartDisplayNameAtCoords(workingX: number, workingY: number): string | null {
   const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
@@ -378,17 +431,23 @@ export function getPartDisplayNameAtCoords(workingX: number, workingY: number): 
   return null;
 }
 
-/** 3D mode: can we paint on this layer? (visible and not locked) */
-function canPaintOn3DLayer(layer: string | null): boolean {
-  if (!layer) return false;
+/** 3D mode: can we paint on this layer/part? (visible and not locked) */
+function canPaintOn3DLayer(info: { layer: string; side?: PartSide } | null): boolean {
+  if (!info) return false;
+  const { layer, side } = info;
   if (!state.layer3DVisible[layer]) return false;
   if (state.layer3DLocked[layer]) return false;
+  if (side !== undefined) {
+    const partVisible = state.layer3DPartVisible[layer];
+    const sideVisible = side === 'R' ? (partVisible?.R !== false) : (partVisible?.L !== false);
+    if (!sideVisible) return false;
+  }
   return true;
 }
 
 /** 3D mode: is the pixel at (workingX, workingY) in a paintable layer? */
 function isInPaintable3DLayer(workingX: number, workingY: number): boolean {
-  return canPaintOn3DLayer(getLayerAtCoords(workingX, workingY));
+  return canPaintOn3DLayer(getLayerAndPartAtCoords(workingX, workingY));
 }
 
 
@@ -424,6 +483,10 @@ function applyProgrammaticCanvasImage(data: ImageData): void {
   ctx.putImageData(data, 0, 0);
   creatorCanvasPopulated = true;
   state.skinSwatchColors = extractColorsFromSkin(canvas);
+  if (!state.userHasSelectedColor && state.skinSwatchColors.length > 0) {
+    state.currentColor = state.skinSwatchColors[0]!;
+    publish(CREATOR_EVENTS.CURRENT_COLOR_CHANGE, { color: state.currentColor });
+  }
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
   updateAllUndoRedoButtons();
   publish(CREATOR_EVENTS.CANVAS_CHANGE);
@@ -431,9 +494,11 @@ function applyProgrammaticCanvasImage(data: ImageData): void {
 
 function resetWardrobeSelections(): void {
   wardrobeCompositeToken += 1;
-  WARDROBE_PART_KEYS.forEach((part) => {
-    wardrobeSelections[part] = null;
-  });
+  for (const part of WARDROBE_PART_KEYS) {
+    wardrobeSelections[part] = WARDROBE_OVERLAY_KEYS.includes(part as (typeof WARDROBE_OVERLAY_KEYS)[number])
+      ? WARDROBE_ORIGINAL
+      : null;
+  }
 }
 
 function captureWardrobeBaseFromCurrentCanvas(path: string | null = creatorCurrentSkinPath): void {
@@ -442,10 +507,17 @@ function captureWardrobeBaseFromCurrentCanvas(path: string | null = creatorCurre
   if (!snapshot) return;
   wardrobeBaseSkinData = snapshot;
   wardrobeBaseSkinPath = path;
+  wardrobeOriginalPreviewSignature = '';
+  if (state.editMode === 'wardrobe') {
+    ensureWardrobeOriginalPreviewsScheduled();
+  }
 }
 
-function hasActiveWardrobeSelections(): boolean {
-  return WARDROBE_PART_KEYS.some((part) => wardrobeSelections[part] != null);
+/** True if any part has a library path selected (not null, not Original). */
+function hasWardrobeLibrarySelection(): boolean {
+  return WARDROBE_PART_KEYS.some(
+    (part) => wardrobeSelections[part] != null && wardrobeSelections[part] !== WARDROBE_ORIGINAL
+  );
 }
 
 function loadWardrobeImage(path: string): Promise<HTMLImageElement> {
@@ -459,6 +531,20 @@ function loadWardrobeImage(path: string): Promise<HTMLImageElement> {
   });
   wardrobeImageCache.set(path, pending);
   return pending;
+}
+
+function clearPartBoundsToTransparent(destCtx: CanvasRenderingContext2D, part: WardrobePartKey): void {
+  const bounds = SKIN_LAYER_BOUNDS[part] ?? [];
+  const scale = RESOLUTION_MULTIPLIER;
+  bounds.forEach((rect) => {
+    const x = rect.x * scale;
+    const y = rect.y * scale;
+    const w = rect.w * scale;
+    const h = rect.h * scale;
+    const imgData = destCtx.getImageData(x, y, w, h);
+    imgData.data.fill(0, 0, imgData.data.length);
+    destCtx.putImageData(imgData, x, y);
+  });
 }
 
 async function resolveWardrobeComposite(): Promise<void> {
@@ -478,11 +564,22 @@ async function resolveWardrobeComposite(): Promise<void> {
   srcCtx.imageSmoothingEnabled = false;
 
   for (const part of WARDROBE_PART_KEYS) {
-    const selectedPath = wardrobeSelections[part];
-    if (!selectedPath) continue;
+    const selected = wardrobeSelections[part];
+    const isOverlay = (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(part);
+
+    if (selected === null) {
+      if (isOverlay) {
+        clearPartBoundsToTransparent(destCtx, part);
+      }
+      continue;
+    }
+    if (selected === WARDROBE_ORIGINAL) {
+      continue;
+    }
+
     let img: HTMLImageElement;
     try {
-      img = await loadWardrobeImage(selectedPath);
+      img = await loadWardrobeImage(selected);
     } catch {
       continue;
     }
@@ -519,19 +616,79 @@ async function selectWardrobeOutfit(path: string): Promise<void> {
   resetWardrobeSelections();
   await loadSkinFromPath(path);
   captureWardrobeBaseFromCurrentCanvas(path);
-  syncWardrobeLibraryActiveStates();
+  void resolveWardrobeComposite();
+  renderWardrobeLibraries();
+}
+
+function getWardrobeOriginalPreviewSignature(): string {
+  return (wardrobeBaseSkinPath ?? 'default') + '_' + (wardrobeBaseSkinData ? '1' : '0');
+}
+
+const WARDROBE_ORIGINAL_CAPTURE_MAX_RETRIES = 20;
+
+async function captureWardrobeOriginalPreviews(retryCount = 0): Promise<void> {
+  if (!wardrobeBaseSkinData) return;
+  const token = ++wardrobeOriginalCaptureToken;
+  await resolveWardrobeComposite();
+  if (token !== wardrobeOriginalCaptureToken) return;
+
+  const capturePart = getCapture3DPartThumbnail();
+  if (!capturePart) {
+    if (retryCount < WARDROBE_ORIGINAL_CAPTURE_MAX_RETRIES) {
+      window.setTimeout(() => void captureWardrobeOriginalPreviews(retryCount + 1), 150);
+    }
+    return;
+  }
+
+  const partKeys: WardrobePartKey[] = ['hat', 'head', 'jacket', 'body', 'arms', 'sleeves', 'pants', 'legs'];
+  let successCount = 0;
+  for (const part of partKeys) {
+    if (token !== wardrobeOriginalCaptureToken) return;
+    try {
+      const dataUrl = await capturePart(part, 128);
+      if (token !== wardrobeOriginalCaptureToken) return;
+      if (dataUrl) {
+        wardrobeOriginalPreviews[part] = dataUrl;
+        successCount++;
+      }
+    } catch {
+      // ignore per-part failures
+    }
+  }
+  if (token !== wardrobeOriginalCaptureToken) return;
+
+  if (successCount > 0) {
+    wardrobeOriginalPreviewSignature = getWardrobeOriginalPreviewSignature();
+    renderWardrobeLibraries();
+  } else if (retryCount < WARDROBE_ORIGINAL_CAPTURE_MAX_RETRIES) {
+    window.setTimeout(() => void captureWardrobeOriginalPreviews(retryCount + 1), 150);
+  }
+}
+
+function ensureWardrobeOriginalPreviewsScheduled(): void {
+  if (!wardrobeBaseSkinData) return;
+  const currentSig = getWardrobeOriginalPreviewSignature();
+  if (wardrobeOriginalPreviewSignature === currentSig) return;
+  void captureWardrobeOriginalPreviews();
 }
 
 function renderWardrobeLibraries(): void {
+  ensureWardrobeOriginalPreviewsScheduled();
+
   WARDROBE_PART_PANEL_CONFIGS.forEach((config) => {
+    const isOverlay = (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(config.key);
     renderWardrobeLibraryPanel({
       selectorId: config.selectorId,
       items: wardrobeLibraries[config.key],
-      activePath: wardrobeSelections[config.key],
-      includeNone: true,
+      activeValue: wardrobeSelections[config.key],
+      includeNone: isOverlay,
       noneLabel: config.noneLabel,
-      onSelect: (path) => {
-        void applyWardrobePartSelection(config.key, path);
+      includeOriginal: true,
+      originalLabel: 'Original',
+      originalPreview: wardrobeOriginalPreviews[config.key],
+      originalSentinel: WARDROBE_ORIGINAL,
+      onSelect: (value) => {
+        void applyWardrobePartSelection(config.key, value);
       },
     });
   });
@@ -550,11 +707,16 @@ function syncWardrobeLibraryActiveStates(): void {
   WARDROBE_PART_PANEL_CONFIGS.forEach((config) => {
     const selector = document.getElementById(config.selectorId);
     if (!selector) return;
+    const activeValue = wardrobeSelections[config.key];
+    const isBasePanel = !(WARDROBE_OVERLAY_KEYS as readonly string[]).includes(config.key);
     selector.querySelectorAll<HTMLElement>('.creator-wardrobe-library-item').forEach((el) => {
       const isNone = el.dataset.none === '1';
+      const isOriginal = el.dataset.original === '1';
       const isActive = isNone
-        ? wardrobeSelections[config.key] == null
-        : el.dataset.path === wardrobeSelections[config.key];
+        ? activeValue === null
+        : isOriginal
+          ? activeValue === WARDROBE_ORIGINAL || (isBasePanel && activeValue === null)
+          : el.dataset.path === activeValue;
       el.classList.toggle('active', isActive);
     });
   });
@@ -633,9 +795,10 @@ function performRedo(): void {
 }
 
 /** Apply a color to currentColor and publish. If addToSwatchList is true, prepends to swatch list. Subscribers handle UI updates. */
-function applyColorToUI(hex: string, addToSwatchList = true): void {
+function applyColorToUI(hex: string, addToSwatchList = true, markAsUserSelected = true): void {
   const normalized = normalizeHex(hex);
   if (!normalized) return;
+  if (markAsUserSelected) state.userHasSelectedColor = true;
   state.currentColor = normalized;
   if (addToSwatchList) addToSwatch(normalized);
   publish(CREATOR_EVENTS.CURRENT_COLOR_CHANGE, { color: normalized });
@@ -715,6 +878,10 @@ export async function loadSkinFromPath(path: string): Promise<void> {
   state.undoStack.push({ type: 'load', beforeData, afterData });
   if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
   state.skinSwatchColors = extractColorsFromSkin(canvas);
+  if (!state.userHasSelectedColor && state.skinSwatchColors.length > 0) {
+    state.currentColor = state.skinSwatchColors[0]!;
+    publish(CREATOR_EVENTS.CURRENT_COLOR_CHANGE, { color: state.currentColor });
+  }
   publish(CREATOR_EVENTS.SKIN_LOAD_CHANGE, { path });
   publish(CREATOR_EVENTS.CANVAS_CHANGE);
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
@@ -727,7 +894,7 @@ export async function loadSkinFromPath(path: string): Promise<void> {
       el.classList.toggle('active', el.dataset.path === (wardrobeBaseSkinPath ?? path));
     });
   }
-  if (state.editMode === 'wardrobe' && !hasActiveWardrobeSelections()) {
+  if (state.editMode === 'wardrobe' && !hasWardrobeLibrarySelection()) {
     captureWardrobeBaseFromCurrentCanvas(path);
     syncWardrobeLibraryActiveStates();
   }
@@ -850,7 +1017,7 @@ async function saveCurrentSkinToOutfits(): Promise<void> {
     label: `Saved ${n}`,
     preview: preview ?? dataUrl,
   });
-  renderOutfitsPanel();
+  requestAnimationFrame(() => renderOutfitsPanel());
 }
 
 function downloadCurrentSkin(): void {
@@ -933,10 +1100,13 @@ function buildCreatorPanels(): void {
   };
   const skinLayersCtx = {
     layerVisibility: state.layer3DVisible,
+    layerPartVisible: state.layer3DPartVisible,
     layerLocked: state.layer3DLocked,
     isLayersPanelCollapsed: () => state.layersPanel3DCollapsed,
     setLayersPanelCollapsed: (collapsed: boolean) => { state.layersPanel3DCollapsed = collapsed; },
     setLayerVisible: setLayer3DVisible,
+    setLayerPartVisible,
+    getPartVisible,
     setLayerLocked: setLayer3DLocked,
     onVisibilitySoloClick: handleVisibilityAltClick,
     onLockSoloClick: handleLockAltClick,
@@ -994,6 +1164,11 @@ function setupCanvasAreaResize(): void {
   updateCanvasCursor();
   new ResizeObserver(update).observe(area);
   requestAnimationFrame(update);
+  subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, (e: CustomEvent<{ mode?: EditMode }>) => {
+    if ((e.detail?.mode ?? state.editMode) === EDIT_MODE_2D) {
+      requestAnimationFrame(() => requestAnimationFrame(update));
+    }
+  });
 }
 
 /**
@@ -1169,9 +1344,10 @@ export function getEditMode3D(): boolean {
   return state.editMode === EDIT_MODE_3D;
 }
 
-/** Set edit mode and dispatch EDIT_MODE_CHANGE with { mode }. */
+/** Set edit mode and dispatch EDIT_MODE_CHANGE with { mode, previousMode }. */
 export function setEditMode(mode: EditMode, options: { syncUrl?: boolean } = {}): void {
-  const wasEditMode = isCreatorEditMode(state.editMode);
+  const previousMode = state.editMode;
+  const wasEditMode = isCreatorEditMode(previousMode);
   const willBeEditMode = isCreatorEditMode(mode);
   if (wasEditMode && !willBeEditMode) {
     saveLayerStateAndNormalizeForNonEditMode();
@@ -1180,13 +1356,14 @@ export function setEditMode(mode: EditMode, options: { syncUrl?: boolean } = {})
   }
   state.editMode = mode;
   document.body.dataset.editMode = mode;
-  publish(CREATOR_EVENTS.EDIT_MODE_CHANGE, { mode: state.editMode });
+  publish(CREATOR_EVENTS.EDIT_MODE_CHANGE, { mode: state.editMode, previousMode });
 
   if (mode === 'wardrobe') {
     resetWardrobeSelections();
     captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
+    void resolveWardrobeComposite();
     renderWardrobeLibraries();
-    setWardrobeSelectedLayer('fullOutfit');
+    showWardrobeLibraryPanel(wardrobeSelectedLayer);
   } else {
     showWardrobeLibraryPanel(null);
   }
@@ -1208,13 +1385,26 @@ export function setEditMode3D(is3D: boolean): void {
 
 /** Remove creator mode-button number shortcuts (called when leaving creator route). */
 export function unregisterCreatorShortcuts(): void {
-  unregisterEditorModeShortcuts();
+  unregisterEditorToolShortcuts();
   unregisterWardrobeShortcuts();
 }
 
 /** 3D layers panel: visibility state (layer hidden = not rendered, brush ignored). */
 export function getLayer3DVisible(): Record<string, boolean> {
   return { ...state.layer3DVisible };
+}
+
+/** 3D layers panel: per-part visibility overrides (L/R). */
+export function getLayer3DPartVisible(): Record<string, { L?: boolean; R?: boolean }> {
+  return JSON.parse(JSON.stringify(state.layer3DPartVisible));
+}
+
+/** Is the given part visible? (layer must be visible; part override defaults to true when undefined.) */
+export function getPartVisible(layer: string, side: PartSide): boolean {
+  if (state.layer3DVisible[layer] !== true) return false;
+  const parts = state.layer3DPartVisible[layer];
+  const val = side === 'R' ? parts?.R : parts?.L;
+  return val !== false;
 }
 
 /** 3D layers panel: lock state (locked = brush ignored, part stays visible). */
@@ -1230,6 +1420,17 @@ export function setLayer3DVisible(layer: string, visible: boolean): void {
     if (previous !== visible) {
       publish(CREATOR_EVENTS.LAYER3D_CHANGE, { layer, property: 'visibility', visible });
     }
+  }
+}
+
+/** Set visibility for a layer part (L/R) and dispatch change event. */
+export function setLayerPartVisible(layer: string, side: PartSide, visible: boolean): void {
+  if (!isLayerKey(layer) || !isLayerWithParts(layer)) return;
+  if (!state.layer3DPartVisible[layer]) state.layer3DPartVisible[layer] = {};
+  const prev = state.layer3DPartVisible[layer]![side];
+  state.layer3DPartVisible[layer]![side] = visible;
+  if (prev !== visible) {
+    publish(CREATOR_EVENTS.LAYER3D_CHANGE, { layer, property: 'partVisibility', side, visible });
   }
 }
 

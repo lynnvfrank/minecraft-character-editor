@@ -4,8 +4,8 @@
  */
 
 import { WORK_SIZE } from '../skin';
-import { hexToRgb } from '../types/color';
-import type { PixelChange, UndoCommand } from './creatorState';
+import { hexToRgb } from '../lib/color';
+import type { PixelChange, UndoCommand } from '../state/creatorState';
 import { putImageDataFromRGBA } from './skinIO';
 
 /** Apply pixel changes for undo/redo. */
