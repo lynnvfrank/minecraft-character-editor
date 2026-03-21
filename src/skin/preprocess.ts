@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'three';
-import { SKIN_LAYER_BOUNDS, type LayerKey } from './skinLayout';
+import { SKIN_LAYER_BOUNDS, type LayerKey } from './layout';
 
 export type SkinPreprocessConfig = {
   /** When false, returns the texture unchanged (preprocessing disabled) */

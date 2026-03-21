@@ -3,7 +3,7 @@
  * Receives canPaintAt and getCurrentColor via context to avoid coupling to state.
  */
 
-import { WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skinCoordinates';
+import { WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skin';
 import { hexToRgb } from '../types/color';
 import type { PixelChange } from './creatorState';
 

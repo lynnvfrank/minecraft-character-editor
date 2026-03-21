@@ -3,7 +3,7 @@
  * Works with the working canvas (WORK_SIZE × WORK_SIZE); export downscales to 64×64.
  */
 
-import { SKIN_SIZE, WORK_SIZE } from '../skinCoordinates';
+import { SKIN_SIZE, WORK_SIZE } from '../skin';
 
 /** Capture current canvas image data for undo. */
 export function captureCanvasImageData(canvas: HTMLCanvasElement): Uint8ClampedArray {
@@ -37,7 +37,8 @@ export async function loadSkinToCanvas(
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
       img.onerror = () => reject(new Error(`Failed to load skin: ${path}`));
-      img.src = path.startsWith('/') ? path : `/${path}`.replace(/\/+/g, '/');
+      // Data URLs (e.g. saved skins) must be used as-is; relative paths get leading slash
+      img.src = path.startsWith('data:') ? path : path.startsWith('/') ? path : `/${path}`.replace(/\/+/g, '/');
     });
   } catch {
     return null;

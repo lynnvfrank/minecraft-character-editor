@@ -13,7 +13,7 @@ import {
   normalizeLayerStateForNonEditMode,
   unregisterCreatorShortcuts,
 } from './creator';
-import { preprocessSkinTexture } from './skinPreprocess';
+import { preprocessSkinTexture } from './skin';
 import {
   ensurePreviewCameraPanel,
   removePreviewCameraPanel,
@@ -22,7 +22,7 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { createSocketManager } from './socketManager';
-import { createAnimationManager, type SequenceStep, type CharacterStateLike, type TurnStrategy } from './animationManager';
+import { createAnimationManager, type SequenceStep, type CharacterStateLike, type TurnStrategy } from './animation';
 import { createCharacterAI } from './characterAI';
 import { createFakeChatUI } from './fakeChatUI';
 import { setupTestControls } from './setupTestControls';
@@ -30,9 +30,21 @@ import { initElectronStatus } from './electronStatus';
 import { logger } from './logger';
 import { setFacingLogContextProvider } from './debugFacing';
 import { subscribe, CREATOR_EVENTS } from './creatorEvents';
-import { SKIN_LAYER_BOUNDS, LAYER_KEYS, TEXTURE_LAYER_KEYS, type LayerKey } from './skinLayout';
-import { EDIT_MODE_3D, EDIT_MODE_2D, EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
+import { SKIN_LAYER_BOUNDS, LAYER_KEYS, TEXTURE_LAYER_KEYS, type LayerKey } from './skin';
+import { EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
 import type { SkinEntry, AnimationEntry } from './types/catalog';
+import {
+  startModeActor,
+  getModeActor,
+  setApplyRouteCallback,
+  setCreatorExitCallback,
+  setCreatorShortcutsCleanup,
+  syncModeMachineFromHash,
+  getRouteInfoFromMachine as getRouteInfo,
+  getRouteFromMachine as getRoute,
+  parseHashToRouteInfo
+} from './modes/appModeMachine';
+import { registerCapture3DThumbnail } from './viewer/capture3DThumbnail';
 import {
   initScene as initViewerScene,
   applyShadowToModel,
@@ -146,27 +158,7 @@ type PreviewCaptureRuntimeApi = {
 };
 const PREVIEW_BASE_SKIN_CANDIDATES = ['/wardrobe/skins/skin-base.png', FALLBACK_SKINS[0]?.path].filter(Boolean) as string[];
 
-/** Hash-based routing: #/creator/<mode>, #/preview, #/ or #/home */
-function getRouteInfo(): RouteInfo {
-  const hash = (location.hash || '#/').toLowerCase().replace(/\/$/, '') || '#/';
-  if (hash === '#/preview') {
-    return { route: 'preview', creatorMode: null };
-  }
-  if (hash === '#/creator' || hash.startsWith('#/creator/')) {
-    const modeSegment = hash.slice('#/creator/'.length);
-    const creatorMode = modeSegment === EDIT_MODE_2D || modeSegment === EDIT_MODE_WARDROBE || modeSegment === EDIT_MODE_3D
-      ? modeSegment
-      : EDIT_MODE_3D;
-    return { route: 'creator', creatorMode };
-  }
-  return { route: 'viewer', creatorMode: null };
-}
-
-function getRoute(): AppRoute {
-  return getRouteInfo().route;
-}
-
-function getCreatorHash(mode: EditMode = EDIT_MODE_3D): string {
+function getCreatorHash(mode: EditMode = EDIT_MODE_WARDROBE): string {
   return `#/creator/${mode}`;
 }
 
@@ -288,7 +280,34 @@ function lockCharacterToCreatorIdle() {
   if (!char?.idleAction) return;
   char.idleAction.setLoop(THREE.LoopRepeat, Infinity);
   char.idleAction.clampWhenFinished = false;
+  char.idleAction.paused = false;
+  char.idleAction.setEffectiveTimeScale(1);
   fadeToAction(char, char.idleAction, 0.25);
+}
+
+/** Freeze character at first frame of idle for easier painting in 3D/2D modes. */
+function lockCharacterFrozenForPainting() {
+  animationManager?.stop();
+  animationManager?.stopIdleWanderer?.();
+  const char = characters['runningboy'];
+  if (!char?.idleAction) return;
+  char.idleAction.setLoop(THREE.LoopRepeat, Infinity);
+  char.idleAction.clampWhenFinished = false;
+  fadeToAction(char, char.idleAction, 0.15);
+  char.idleAction.time = 0;
+  char.idleAction.paused = true;
+  char.idleAction.setEffectiveTimeScale(0);
+  char.currentAction = char.idleAction;
+}
+
+/** Apply creator pose: idle animation in Wardrobe, frozen in 3D/2D for easier painting. */
+function applyCreatorCharacterPose() {
+  const mode = getEditMode();
+  if (mode === EDIT_MODE_WARDROBE) {
+    lockCharacterToCreatorIdle();
+  } else {
+    lockCharacterFrozenForPainting();
+  }
 }
 
 function getCurrentActionRemainingSec(char: CharacterState): number {
@@ -393,7 +412,7 @@ async function transitionViewerToCreator() {
     // Prevent long transition stalls from queued home behaviors.
     animationManager?.stop();
     animationManager?.stopIdleWanderer?.();
-    lockCharacterToCreatorIdle();
+    applyCreatorCharacterPose();
     const pose = getCreatorCameraPose();
     logTransition('camera-move-start', {
       elapsedMs: Math.round(performance.now() - transitionStart),
@@ -475,9 +494,9 @@ function ensureViewerFullWidthLayout() {
   onWindowResize();
 }
 
-function applyRoute(): void {
-  const routeInfo = getRouteInfo();
-  const route = routeInfo.route;
+function applyRoute(routeInfo?: RouteInfo): void {
+  const info = routeInfo ?? getRouteInfo();
+  const route = info.route;
   document.body.dataset.route = route;
   if (route === 'creator') {
     removePreviewPanelsContainer();
@@ -485,20 +504,20 @@ function applyRoute(): void {
     activePreviewCameraPreset = null;
     lastAppliedPreviewSignature = null;
     restoreDefaultCameraFov();
-    const desiredMode = routeInfo.creatorMode ?? EDIT_MODE_3D;
+    const desiredMode = info.creatorMode ?? EDIT_MODE_WARDROBE;
     if (lastAppliedRouteInfo?.route === 'creator') {
       if (getEditMode() !== desiredMode) {
         setEditMode(desiredMode, { syncUrl: false });
         updateCreator3DViewPlacement();
       }
       updateRouteButtonsState();
-      lastAppliedRouteInfo = routeInfo;
+      lastAppliedRouteInfo = info;
       return;
     }
     if (getEditMode() !== desiredMode) {
       setEditMode(desiredMode, { syncUrl: false });
     }
-    lockCharacterToCreatorIdle();
+    applyCreatorCharacterPose();
     initCreator();
     // Re-apply creator layout for current mode (especially when returning in 2D).
     updateCreator3DViewPlacement();
@@ -518,7 +537,6 @@ function applyRoute(): void {
       }
     }, 0);
   } else if (route === 'preview') {
-    unregisterCreatorShortcuts();
     ensureViewerFullWidthLayout();
     lockCharacterToCreatorIdle();
     window.setTimeout(() => {
@@ -526,7 +544,6 @@ function applyRoute(): void {
       window.dispatchEvent(new Event('resize'));
     }, 0);
   } else {
-    unregisterCreatorShortcuts();
     ensureViewerFullWidthLayout();
     removePreviewPanelsContainer();
     setPreviewRouteOverride(null);
@@ -536,7 +553,7 @@ function applyRoute(): void {
     resumeHomeMode();
   }
   updateRouteButtonsState();
-  lastAppliedRouteInfo = routeInfo;
+  lastAppliedRouteInfo = info;
 }
 
 const container = document.getElementById('three-canvas-container');
@@ -562,8 +579,28 @@ let characterAI: ReturnType<typeof createCharacterAI> | null = null;
 // Defer initial routing until after module evaluation finishes.
 // `applyRoute()` may touch preview-related vars/functions that are declared later in this file,
 // and deferring avoids temporal-dead-zone runtime errors during initial load.
-window.setTimeout(() => applyRoute(), 0);
-window.addEventListener('hashchange', applyRoute);
+setApplyRouteCallback(applyRoute);
+setCreatorExitCallback(() => {
+  normalizeLayerStateForNonEditMode();
+  setActiveTool('navigate');
+});
+setCreatorShortcutsCleanup(unregisterCreatorShortcuts);
+startModeActor();
+const modeActor = getModeActor();
+if (modeActor) {
+  modeActor.subscribe((snapshot) => {
+    logger.debug('stateMachine', 'Mode changed', { value: snapshot.value, context: snapshot.context });
+  });
+}
+window.setTimeout(() => {
+  const routeInfo = parseHashToRouteInfo();
+  if (!syncModeMachineFromHash(routeInfo)) {
+    applyRoute(routeInfo);
+  }
+}, 0);
+window.addEventListener('hashchange', () => {
+  syncModeMachineFromHash(parseHashToRouteInfo());
+});
 
 /** Debug: pause animation loop (used when ?movementcontrols=1). */
 let paused = false;
@@ -681,7 +718,7 @@ function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
               const char = characters[config.id];
               if (!char) return;
               if (getRoute() === 'creator') {
-                lockCharacterToCreatorIdle();
+                applyCreatorCharacterPose();
                 return;
               }
               if (!char.idleAction || char.currentAction === char.idleAction) return;
@@ -1300,11 +1337,11 @@ function updateCreator3DViewPlacement() {
   if (show3DInMainArea) {
     if (app.parentElement !== wrapper) {
       wrapper.appendChild(app);
-      onWindowResize();
       controls.dispose();
       controls = recreateOrbitControls(camera, renderer);
       updateOrbitControlsForEditMode(controls, getRoute);
     }
+    onWindowResize();
   } else {
     if (app.parentElement !== slot) {
       slot.appendChild(app);
@@ -1340,6 +1377,9 @@ function setupCreatorPreviewDirtySubscription() {
   const markDirty = () => { creatorPreviewDirty = true; };
   subscribe(CREATOR_EVENTS.CANVAS_CHANGE, markDirty);
   subscribe(CREATOR_EVENTS.LAYER3D_CHANGE, markDirty);
+  subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, () => {
+    if (getRoute() === 'creator') applyCreatorCharacterPose();
+  });
   subscribe(CREATOR_EVENTS.SKIN_LOAD_CHANGE, (e: CustomEvent) => {
     markDirty();
     const path = e.detail?.path;
@@ -1382,6 +1422,93 @@ function animate() {
   if (getRoute() === 'viewer' && !creatorTransitionInFlight) characterAI?.update(delta);
   controls.update();
   renderer.render(scene, camera);
+}
+
+/** Linear to sRGB conversion for display. Render targets output linear values. */
+function linearToSrgb(c: number): number {
+  if (c <= 0.0031308) return c * 12.92;
+  return 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+}
+
+/**
+ * Capture a thumbnail of the 3D character with the current creator skin.
+ * Animates camera to preview position (like Home→Creator), captures, then restores.
+ * Uses fullOutfit preset to match preview-generated thumbnails.
+ */
+export async function captureCreator3DThumbnail(size: number = 128): Promise<string | null> {
+  const char = characters['runningboy'];
+  if (!char || !renderer || !scene || !camera) return null;
+
+  creatorPreviewDirty = true;
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+
+  const preset = getPreviewPreset('fullOutfit');
+  const capturePose: CameraPose = {
+    position: new THREE.Vector3(preset.cameraPosition.x, preset.cameraPosition.y, preset.cameraPosition.z),
+    target: new THREE.Vector3(preset.cameraTarget.x, preset.cameraTarget.y, preset.cameraTarget.z),
+  };
+
+  const savedPos = camera.position.clone();
+  const savedTarget = (controls as { target: THREE.Vector3 }).target.clone();
+  const savedFov = camera.fov;
+  const savedAspect = camera.aspect;
+
+  await animateCameraToCreatorView(capturePose);
+
+  camera.fov = preset.fov ?? 35;
+  camera.aspect = 1;
+  camera.updateProjectionMatrix();
+
+  const renderTarget = new THREE.WebGLRenderTarget(size, size, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+  });
+
+  renderer.setRenderTarget(renderTarget);
+  renderer.setViewport(0, 0, size, size);
+  renderer.setScissor(0, 0, size, size);
+  renderer.setScissorTest(true);
+  renderer.render(scene, camera);
+  renderer.setScissorTest(false);
+  renderer.setRenderTarget(null);
+
+  const pixels = new Uint8Array(size * size * 4);
+  renderer.readRenderTargetPixels(renderTarget, 0, 0, size, size, pixels);
+  renderTarget.dispose();
+
+  await animateCameraToCreatorView({ position: savedPos, target: savedTarget });
+
+  camera.fov = savedFov;
+  camera.aspect = savedAspect;
+  camera.updateProjectionMatrix();
+  onWindowResize();
+
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = size;
+  outCanvas.height = size;
+  const ctx = outCanvas.getContext('2d');
+  if (!ctx) return null;
+
+  const imgData = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    const srcRow = (size - 1 - y) * size * 4;
+    const dstRow = y * size * 4;
+    for (let x = 0; x < size; x++) {
+      const src = srcRow + x * 4;
+      const dst = dstRow + x * 4;
+      const r = pixels[src]! / 255;
+      const g = pixels[src + 1]! / 255;
+      const b = pixels[src + 2]! / 255;
+      const a = pixels[src + 3]! / 255;
+      imgData.data[dst] = Math.round(linearToSrgb(r) * 255);
+      imgData.data[dst + 1] = Math.round(linearToSrgb(g) * 255);
+      imgData.data[dst + 2] = Math.round(linearToSrgb(b) * 255);
+      imgData.data[dst + 3] = Math.round(a * 255);
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return outCanvas.toDataURL('image/png');
 }
 
 /** Pause/resume animation loop (movement controls mode debug tools). */
@@ -1471,6 +1598,15 @@ function logStepFrame(delta: number) {
 async function main() {
   logger.info('general', 'App started');
   if (!container) throw new Error('Missing #three-canvas-container element in DOM.');
+
+  // Set route attributes immediately so layout is correct before scene init.
+  // Prevents 0-size canvas when loading directly to #/creator/3d or #/creator/wardrobe.
+  const initialRoute = parseHashToRouteInfo();
+  document.body.dataset.route = initialRoute.route;
+  if (initialRoute.route === 'creator') {
+    document.body.dataset.editMode = initialRoute.creatorMode ?? EDIT_MODE_WARDROBE;
+  }
+
   const sceneContext = initViewerScene(container, params);
   scene = sceneContext.scene;
   camera = sceneContext.camera;
@@ -1572,6 +1708,8 @@ async function main() {
   if (getRoute() === 'creator') {
     await loadSkinFromPath(initialSkin.path);
   }
+
+  registerCapture3DThumbnail(captureCreator3DThumbnail);
 
   setupCreator3DPaint({
     getControls: () => controls,

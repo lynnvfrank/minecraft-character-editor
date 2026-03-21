@@ -39,7 +39,6 @@ This document identifies data models and representations that cause code duplica
 | Location | Constant | Value |
 |----------|----------|-------|
 | `creator.ts` | `LAYER_KEYS` | `['hat', 'head', 'jacket', 'body', 'sleeves', 'arms', 'pants', 'legs']` |
-| `main.ts` | `CREATOR_LAYER_KEYS` | Same set |
 | `main.ts` | `TEXTURE_LAYER_KEYS` | `['head', 'hat', 'body', 'jacket', 'sleeves', 'arms', 'legs', 'pants']` — **different order** |
 
 **Part display names** (for hover: "Right leg", "Left sleeve") vs **layer keys** ("legs", "sleeves") are related via a hardcoded map in `creator.ts`:

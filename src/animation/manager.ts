@@ -5,8 +5,8 @@
  * Character movement is constrained to a trapezoid derived from the camera view frustum.
  */
 import * as THREE from 'three';
-import { logger } from './logger';
-import { logFacingChange } from './debugFacing';
+import { logger } from '../logger';
+import { logFacingChange } from '../debugFacing';
 import {
   getTrapezoidBounds,
   clampToTrapezoid,

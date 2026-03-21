@@ -5,23 +5,29 @@
  *
  * For each full outfit in public/wardrobe/skins/index.json:
  * - Load the source 64×64 skin PNG
- * - Extract/crop the relevant region(s) for each part
+ * - Extract/crop the relevant region(s) for each part using bounds from src/skin
  * - Write PNGs to public/wardrobe/parts/<part>/ and update that part's index.json
  *
  * This script is idempotent and can be run before dev/build.
+ * Bounds are imported from the shared source of truth (src/skin).
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+import { LAYER_KEYS, SKIN_LAYER_BOUNDS } from '../src/skin';
 
-let createCanvas;
-let loadImage;
+const require = createRequire(import.meta.url);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.join(__dirname, '..');
+const SKINS_MANIFEST = path.join(PROJECT_ROOT, 'public', 'wardrobe', 'skins', 'index.json');
+const WARDROBE_PARTS_ROOT = path.join(PROJECT_ROOT, 'public', 'wardrobe', 'parts');
+
+let createCanvas: (w: number, h: number) => { getContext: (c: string) => CanvasRenderingContext2D; toBuffer: (mime: string) => Buffer };
+let loadImage: (src: string) => Promise<unknown>;
 try {
-  // Lazy-load canvas; if missing, skip generation so dev/build still work.
-  // To enable wardrobe parts generation, install it: npm install --save-dev canvas
-  // (or add a compatible alternative and update this script).
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const canvas = require('canvas');
+  const canvas = require('canvas') as { createCanvas: typeof createCanvas; loadImage: typeof loadImage };
   createCanvas = canvas.createCanvas;
   loadImage = canvas.loadImage;
 } catch {
@@ -29,49 +35,22 @@ try {
   process.exit(0);
 }
 
-const PROJECT_ROOT = path.join(__dirname, '..');
-const SKINS_MANIFEST = path.join(PROJECT_ROOT, 'public', 'wardrobe', 'skins', 'index.json');
-const WARDROBE_PARTS_ROOT = path.join(PROJECT_ROOT, 'public', 'wardrobe', 'parts');
-
-const PART_BOUNDS = {
-  hat: [{ x: 32, y: 0, w: 32, h: 16 }],
-  head: [{ x: 0, y: 0, w: 32, h: 16 }],
-  body: [{ x: 16, y: 16, w: 24, h: 16 }],
-  jacket: [{ x: 16, y: 32, w: 24, h: 16 }],
-  arms: [
-    { x: 40, y: 16, w: 16, h: 16 },
-    { x: 32, y: 48, w: 16, h: 16 },
-  ],
-  sleeves: [
-    { x: 40, y: 32, w: 16, h: 16 },
-    { x: 48, y: 48, w: 16, h: 16 },
-  ],
-  pants: [
-    { x: 0, y: 32, w: 16, h: 16 }, // Right pants
-    { x: 0, y: 48, w: 16, h: 16 }, // Left pants
-  ],
-  legs: [
-    { x: 0, y: 16, w: 16, h: 16 }, // Right leg
-    { x: 16, y: 48, w: 16, h: 16 }, // Left leg
-  ],
-};
-
-function ensureDir(dir) {
+function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
 
-function loadJsonSafe(p, fallback) {
+function loadJsonSafe<T>(p: string, fallback: T): T {
   try {
     if (!fs.existsSync(p)) return fallback;
-    return JSON.parse(fs.readFileSync(p, 'utf-8'));
+    return JSON.parse(fs.readFileSync(p, 'utf-8')) as T;
   } catch {
     return fallback;
   }
 }
 
-function getWardrobePreviewInfo(part, id) {
+function getWardrobePreviewInfo(part: string, id: string): { publicPath: string; filePath: string } {
   const filename = `${id}-preview.png`;
   return {
     publicPath: `/wardrobe/parts/${part}/previews/${filename}`,
@@ -79,7 +58,7 @@ function getWardrobePreviewInfo(part, id) {
   };
 }
 
-async function main() {
+async function main(): Promise<void> {
   ensureDir(WARDROBE_PARTS_ROOT);
 
   if (!fs.existsSync(SKINS_MANIFEST)) {
@@ -87,7 +66,7 @@ async function main() {
     process.exit(1);
   }
 
-  const skins = loadJsonSafe(SKINS_MANIFEST, []);
+  const skins = loadJsonSafe<{ path: string; label?: string }[]>(SKINS_MANIFEST, []);
   if (!Array.isArray(skins) || skins.length === 0) {
     console.log('[wardrobe] No skins found in manifest; nothing to do.');
     return;
@@ -96,9 +75,9 @@ async function main() {
   const publicRoot = path.join(PROJECT_ROOT, 'public');
 
   /** part -> manifest entries */
-  const manifests = {};
+  const manifests: Record<string, { path: string; items: { id?: string; path?: string; label?: string; preview?: string }[] }> = {};
 
-  for (const part of Object.keys(PART_BOUNDS)) {
+  for (const part of LAYER_KEYS) {
     const partDir = path.join(WARDROBE_PARTS_ROOT, part);
     ensureDir(partDir);
     ensureDir(path.join(partDir, 'previews'));
@@ -117,7 +96,7 @@ async function main() {
       continue;
     }
 
-    let img;
+    let img: unknown;
     try {
       img = await loadImage(srcPath);
     } catch (e) {
@@ -127,7 +106,8 @@ async function main() {
 
     const baseName = path.basename(relPath, path.extname(relPath));
 
-    for (const [part, boundsList] of Object.entries(PART_BOUNDS)) {
+    for (const part of LAYER_KEYS) {
+      const boundsList = SKIN_LAYER_BOUNDS[part];
       const partDir = path.join(WARDROBE_PARTS_ROOT, part);
       const id = `${baseName}-${part}`;
       const outName = `${id}.png`;
@@ -142,7 +122,7 @@ async function main() {
       const nextEntry = {
         id,
         path: publicOutPath,
-        label: `${skin.label} (${part})`,
+        label: `${skin.label ?? baseName} (${part})`,
         ...(previewPath ? { preview: previewPath } : {}),
       };
       if (existingEntry) {
@@ -155,7 +135,6 @@ async function main() {
 
       // Skip if already generated.
       if (fs.existsSync(outPath)) {
-        // Ensure manifest has an entry.
         if (!existingEntry) {
           existingManifest.push(nextEntry);
         }
@@ -167,17 +146,7 @@ async function main() {
       ctx.clearRect(0, 0, 64, 64);
 
       for (const b of boundsList) {
-        ctx.drawImage(
-          img,
-          b.x,
-          b.y,
-          b.w,
-          b.h,
-          b.x,
-          b.y,
-          b.w,
-          b.h
-        );
+        ctx.drawImage(img as CanvasImageSource, b.x, b.y, b.w, b.h, b.x, b.y, b.w, b.h);
       }
 
       const outPng = canvas.toBuffer('image/png');
@@ -190,7 +159,8 @@ async function main() {
   }
 
   // Write manifests
-  for (const [part, { path: manifestPath, items }] of Object.entries(manifests)) {
+  for (const part of LAYER_KEYS) {
+    const { path: manifestPath, items } = manifests[part];
     items.sort((a, b) => String(a.label).localeCompare(String(b.label)));
     fs.writeFileSync(manifestPath, JSON.stringify(items, null, 2), 'utf-8');
     console.log(`[wardrobe] ${part} parts updated:`, items.length);
@@ -203,4 +173,3 @@ main().catch((err) => {
   console.error('[wardrobe] Unhandled error:', err);
   process.exit(1);
 });
-

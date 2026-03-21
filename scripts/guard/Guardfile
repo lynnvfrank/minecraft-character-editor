@@ -1,0 +1,30 @@
+# Guardfile - same tasks as file-watcher and turbowatch-watcher:
+# 1. Index docs/source to Qdrant
+# 2. Regenerate wardrobe assets on skin/config changes
+#
+# Run from project root: bundle exec guard -G scripts/guard/Guardfile
+
+require 'shellwords'
+
+# Task 1: Index src/*.ts, src/*.tsx, docs/*.md to Qdrant (exclude test/spec)
+guard :shell do
+  watch(%r{^src/(.+)\.(ts|tsx)$}) do |m|
+    next if m[0] =~ /(\.test|\.spec)\.(ts|tsx)$/
+    `bundle exec ruby scripts/guard/index_changed.rb #{Shellwords.escape(m[0])}`
+  end
+
+  watch(%r{^docs/(.+)\.md$}) do |m|
+    `bundle exec ruby scripts/guard/index_changed.rb #{Shellwords.escape(m[0])}`
+  end
+end
+
+# Task 2: Regenerate wardrobe assets when skins or preview configs change
+guard :shell do
+  watch(%r{^public/wardrobe/skins/(.+\.png|index\.json)$}) do |m|
+    `npm run assets:generate`
+  end
+
+  watch(%r{^src/config/preview/.+\.json$}) do |m|
+    `npm run assets:generate`
+  end
+end

@@ -5,6 +5,11 @@
     "preview": "/wardrobe/skins/previews/RunningboyRig-preview.png"
   },
   {
+    "path": "/wardrobe/skins/cherry.png",
+    "label": "cherry",
+    "preview": "/wardrobe/skins/previews/cherry-preview.png"
+  },
+  {
     "path": "/wardrobe/skins/skin-anime1.png",
     "label": "skin anime1",
     "preview": "/wardrobe/skins/previews/skin-anime1-preview.png"

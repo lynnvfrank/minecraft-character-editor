@@ -5,7 +5,7 @@
  */
 
 import type { DrawingTool } from './api';
-import { LAYER_KEYS } from '../skinLayout';
+import { LAYER_KEYS } from '../skin';
 
 export type PixelChange = { x: number; y: number; r: number; g: number; b: number; a: number };
 
@@ -80,9 +80,9 @@ export function createCreatorState(): CreatorState {
     currentColor: DEFAULT_COLOR,
     swatchColors: [DEFAULT_COLOR],
     skinSwatchColors: [],
-    activeSwatchPalette: 'history',
+    activeSwatchPalette: 'skin',
     activeTool: 'navigate',
-    editMode: '3d',
+    editMode: 'wardrobe',
     layer3DVisible: Object.fromEntries(LAYER_KEYS.map((k) => [k, true])),
     layer3DLocked: Object.fromEntries(LAYER_KEYS.map((k) => [k, false])),
     layer3DSoloMode: false,

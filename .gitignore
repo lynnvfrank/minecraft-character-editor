@@ -9,3 +9,7 @@ release
 # Generated wardrobe assets (keep source skins in wardrobe/skins)
 public/wardrobe/parts/
 public/wardrobe/skins/previews/
+
+# Guard Ruby gems
+scripts/guard/vendor/
+scripts/guard/.bundle/

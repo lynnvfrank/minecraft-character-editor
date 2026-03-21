@@ -1,0 +1,22 @@
+---
+description: Map user terms (home/world view/mode) to app routes and Creator submodes
+alwaysApply: true
+---
+
+# App modes — vocabulary
+
+**Full spec:** `docs/concepts/MODES.md`
+
+When the user says **home**, **home view**, **world view**, or **viewer**, they mean **`route: viewer`** (`#/`, `#/home`) — the main 3D scene with animations.
+
+**Creator** = **`route: creator`** (`#/creator/...`). Submodes (also “Creator.Wardrobe” etc.):
+
+| Say this | `editMode` / hash segment |
+|----------|---------------------------|
+| Creator.Wardrobe, wardrobe mode | `wardrobe` → `#/creator/wardrobe` |
+| Creator.3D, 3D edit | `3d` → `#/creator/3d` |
+| Creator.2D, 2D / pixel edit | `2d` → `#/creator/2d` |
+
+**Preview** = **`route: preview`** (`#/preview`) — separate from Home/Creator; see `MODES.md`.
+
+**Code:** `getRouteInfo` / `applyRoute` in `src/main.ts`; `setEditMode` in `src/creator.ts`; `document.body.dataset.route` and `dataset.editMode`.

@@ -5,8 +5,7 @@
  * Resolution: work at WORK_SIZE (e.g. 128×128), export downscaled to 64×64.
  */
 
-import { SKIN_LAYER_BOUNDS, SKIN_PART_BOUNDS, isInDeadZone, isLayerKey, LAYER_KEYS, partToLayer, type Bounds } from './skinLayout';
-import { WORK_SIZE, RESOLUTION_MULTIPLIER } from './skinCoordinates';
+import { SKIN_LAYER_BOUNDS, SKIN_PART_BOUNDS, isInDeadZone, isLayerKey, LAYER_KEYS, partToLayer, WORK_SIZE, RESOLUTION_MULTIPLIER, type Bounds } from './skin';
 import { subscribe, publish, CREATOR_EVENTS } from './creatorEvents';
 import type { SkinEntry } from './types/catalog';
 import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode } from './creator/api';
@@ -27,6 +26,8 @@ import {
   getWardrobePanelIdForLayer,
   buildTexturePositionPanel,
 } from './creator/index';
+import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
+import { getCapture3DThumbnail } from './viewer/capture3DThumbnail';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
@@ -103,6 +104,7 @@ type ModePanelConfig = {
 
 const MODE_PANEL_HIDDEN_CLASS = 'creator-mode-panel-hidden';
 const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
+  { id: 'creator-save-download-panel', modes: ['wardrobe', '2d', '3d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-wardrobe-parts-panel', modes: ['wardrobe'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-canvas-overlays-panel', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-layers-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
@@ -143,6 +145,11 @@ const wardrobeLibraries: WardrobeLibraryState = {
   pants: [],
   legs: [],
 };
+
+/** Skins from /wardrobe/skins/index.json (manifest). */
+let manifestOutfitSkins: SkinEntry[] = [];
+/** Skins saved via the Save button (path = data URL). */
+const savedOutfitSkins: SkinEntry[] = [];
 
 function clearAnim(el: HTMLElement): void {
   el.classList.remove(
@@ -726,11 +733,12 @@ export async function loadSkinFromPath(path: string): Promise<void> {
   }
 }
 
-function setupCreatorSkinGallery(skins: SkinEntry[]): void {
+function renderOutfitsPanel(): void {
   const container = document.getElementById('creator-skin-selector');
   if (!container) return;
+  const allSkins = [...manifestOutfitSkins, ...savedOutfitSkins];
   container.innerHTML = '';
-  skins.forEach((skin, index) => {
+  allSkins.forEach((skin, index) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'skin-preview creator-skin-preview creator-wardrobe-library-item';
@@ -751,6 +759,13 @@ function setupCreatorSkinGallery(skins: SkinEntry[]): void {
     });
     container.appendChild(btn);
   });
+  syncWardrobeLibraryActiveStates();
+  bindOutfitsKeyboardNav(container);
+}
+
+function bindOutfitsKeyboardNav(container: HTMLElement): void {
+  if (container.dataset.outfitsNavBound === '1') return;
+  container.dataset.outfitsNavBound = '1';
 
   // Keyboard navigation within skins grid (arrow keys).
   container.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -817,6 +832,34 @@ function setupCreatorSkinGallery(skins: SkinEntry[]): void {
       }
     }
   });
+}
+
+function setupCreatorSkinGallery(skins: SkinEntry[]): void {
+  manifestOutfitSkins = skins;
+  renderOutfitsPanel();
+}
+
+async function saveCurrentSkinToOutfits(): Promise<void> {
+  const dataUrl = exportTo64x64DataURL();
+  if (!dataUrl) return;
+  const n = savedOutfitSkins.length + 1;
+  const capture = getCapture3DThumbnail();
+  const preview = capture ? await capture(128) : null;
+  savedOutfitSkins.push({
+    path: dataUrl,
+    label: `Saved ${n}`,
+    preview: preview ?? dataUrl,
+  });
+  renderOutfitsPanel();
+}
+
+function downloadCurrentSkin(): void {
+  const dataUrl = exportTo64x64DataURL();
+  if (!dataUrl) return;
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = `skin-${Date.now()}.png`;
+  a.click();
 }
 
 /** Report texture position under pointer. Publishes event; subscribers update hover info and layers panel. */
@@ -931,6 +974,10 @@ function buildCreatorPanels(): void {
     getEditMode: () => state.editMode,
     getSelectedLayer: () => wardrobeSelectedLayer,
     setSelectedLayer: (layer) => setWardrobeSelectedLayer(layer),
+  });
+  buildSaveDownloadPanel({
+    onSave: saveCurrentSkinToOutfits,
+    onDownload: downloadCurrentSkin,
   });
   buildTexturePositionPanel();
   applyModePanelsImmediate(state.editMode);
@@ -1368,8 +1415,8 @@ export function getCreatorWorkSize(): number {
   return WORK_SIZE;
 }
 
-/** UV to working coords. Re-exported from skinCoordinates. */
-export { uvToWorkingCoords } from './skinCoordinates';
+/** UV to working coords. Re-exported from skin module. */
+export { uvToWorkingCoords } from './skin';
 
 /** Start paint/eraser stroke at working coords (or do fill if fill tool). Returns true if anything was done. */
 export function paintStartFrom3D(workingX: number, workingY: number): boolean {

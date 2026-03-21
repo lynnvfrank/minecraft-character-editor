@@ -1,29 +1,11 @@
 # Character Creation Screen Specification
 
-<<<<<<< HEAD
-A specification for building a character creation screen that lets users draw on a Minecraft-style character, choose partial layers (arms, legs, jacket, pants, hats, heads, etc.), randomize combinations, and save/download skins — with integration into the local webapp instead of relying on right-click-to-save.
-=======
 A specification for building a character creation screen that lets users draw on a Minecraft-style character, choose partial layers (arms, legs, jacket, pants, hats, heads, etc.), randomize combinations, and save/download skins — with integration into the local webapp instead of relying on right-click-to-save. This document reflects the current implementation: blocky 2D editor as sole 2D view, floating tools/layers panels over both 2D and 3D, simplified left sidebar, and related UI changes.
->>>>>>> CHARACTER-CREATION-SCREEN-SPEC
 
 ---
 
 ## Table of Contents
 
-<<<<<<< HEAD
-1. [Context and Goals](#context-and-goals)
-2. [Existing Skin Editor Assumptions](#existing-skin-editor-assumptions)
-3. [Character Creation Features](#character-creation-features)
-4. [Layer System](#layer-system)
-5. [Randomization](#randomization)
-6. [Save and Download Integration](#save-and-download-integration)
-7. [Technical Architecture](#technical-architecture)
-8. [Implementation Phases](#implementation-phases)
-9. [Integration with 3D Model Viewer](#integration-with-3d-model-viewer)
-10. [Toggleable Template Layer (Model-to-2D Translation)](#toggleable-template-layer-model-to-2d-translation)
-11. [Tools: Undo, Paint, Fill, Select, Delete, Color Picker](#tools-undo-paint-fill-select-delete-color-picker)
-12. [Existing Libraries and Tools](#existing-libraries-and-tools)
-=======
 1. [Implementation Status](#implementation-status)
 2. [Context and Goals](#context-and-goals)
 3. [Existing Skin Editor Assumptions](#existing-skin-editor-assumptions)
@@ -98,7 +80,6 @@ A specification for building a character creation screen that lets users draw on
 | Left sidebar size (220–380px) | ✅ |
 
 *Update this table and the status indicator in each section heading when implementation changes.*
->>>>>>> CHARACTER-CREATION-SCREEN-SPEC
 
 ---
 
@@ -145,12 +126,6 @@ If no skin editor exists, the spec below describes building one from scratch wit
 
 ### 1. Drawing / Painting
 
-<<<<<<< HEAD
-- **Canvas** — 64×64 pixel grid (or zoomed view for usability).
-- **Tools:** Brush, eraser, fill, color picker.
-- **Brush size:** 1–4 px typical.
-- **Layer awareness:** Drawing affects only the selected layer(s). See [Layer System](#layer-system).
-=======
 - **Canvas** — 64×64 pixel grid (or zoomed view for usability). Higher-resolution working canvas (e.g., 128×128) with downscale export for pixel-perfect 64×64 output.
 - **Display quality** — Use `image-rendering: pixelated` and `imageSmoothingEnabled = false` for blocky, non-blurry pixel art. Account for device pixel ratio where needed.
 - **Rulers** — Toggleable rulers in **separate strips** above and to the left of the canvas (not overlaying the image). Coordinate system: (0, 0) at upper-left, (64, 64) at lower-right.
@@ -159,7 +134,6 @@ If no skin editor exists, the spec below describes building one from scratch wit
 - **Brush** — Square block brush (not round). Sizes: 1, 2, 4, 8 pixels. A click fills the entire square. **Current implementation:** Brush size fixed at 1 cell (2×2 working pixels).
 - **Brush cursor** — Custom box-outline cursor that matches the brush size. Sizes correctly with canvas scale and `devicePixelRatio` so the cursor visually matches the drawn area.
 - **Layer awareness:** Drawing affects only the selected layer(s). Locked layers do not accept brush, eraser, or fill (2D and 3D). See [Layer System](#layer-system).
->>>>>>> CHARACTER-CREATION-SCREEN-SPEC
 
 ### 2. Layer Selection (Partial Layers)
 
@@ -601,15 +575,6 @@ See [Hover Info Panel (2D and 3D)](#hover-info-panel-2d-and-3d) for the floating
 
 ```
 /creator (route or page)
-<<<<<<< HEAD
-├── Canvas (64×64, zoomed for usability)
-├── Layer selector (checkboxes/tabs)
-├── Toolbar (brush, eraser, fill, color picker)
-├── Preset panel (per layer)
-├── Randomize button
-├── Preview (3D or 2D flattened view of character)
-├── Download button
-=======
 ├── Creator panel (left sidebar, min 220px, max 380px)
 │   ├── Edit (Undo, Redo)
 │   ├── Skin gallery (Load skin)
@@ -625,7 +590,6 @@ See [Hover Info Panel (2D and 3D)](#hover-info-panel-2d-and-3d) for the floating
 │   └── Rulers (2D only; when toggled)
 ├── Preset panel (per layer)
 ├── Randomize button
->>>>>>> CHARACTER-CREATION-SCREEN-SPEC
 └── Save to webapp button
 ```
 

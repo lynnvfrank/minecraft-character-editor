@@ -23,10 +23,11 @@ export function isLayerKey(s: string | undefined): s is LayerKey {
 export const TEXTURE_LAYER_KEYS = ['head', 'hat', 'body', 'jacket', 'sleeves', 'arms', 'legs', 'pants'] as const;
 
 /**
- * Pixel bounds for each layer. Face positions in the spec extend beyond the high-level
- * "Bounds" — e.g. BACK BODY at X:32, BACK JACKET at X:32, and the right strip X:56-64.
+ * Pixel bounds for each layer (single source of truth for 64×64 skin layout).
+ * Face positions in the spec extend beyond the high-level "Bounds" — e.g. BACK BODY at X:32,
+ * BACK JACKET at X:32, and the right strip X:56-64.
  */
-export const SKIN_LAYER_BOUNDS: Record<string, Bounds[]> = {
+export const SKIN_LAYER_BOUNDS: Record<LayerKey, Bounds[]> = {
   head: [{ x: 0, y: 0, w: 32, h: 16 }],
   hat: [{ x: 32, y: 0, w: 32, h: 16 }],
   body: [{ x: 16, y: 16, w: 24, h: 16 }],
@@ -49,8 +50,20 @@ export const SKIN_LAYER_BOUNDS: Record<string, Bounds[]> = {
   ],
 };
 
-/** Re-export for backward compatibility. Prefer importing from skinCoordinates. */
-export { SKIN_SIZE } from './skinCoordinates';
+/**
+ * Display name for each rect in a layer (same order as SKIN_LAYER_BOUNDS[layer]).
+ * Used to derive SKIN_PART_BOUNDS and for hover/labels.
+ */
+export const LAYER_TO_PART_DISPLAY_NAMES: Record<LayerKey, string[]> = {
+  head: ['Head'],
+  hat: ['Hat'],
+  body: ['Body'],
+  jacket: ['Jacket'],
+  arms: ['Right arm', 'Left arm'],
+  sleeves: ['Right sleeve', 'Left sleeve'],
+  legs: ['Right leg', 'Left leg'],
+  pants: ['Right pants', 'Left pants'],
+};
 
 /**
  * Dead zones / non-skin zones from reference diagrams (minecraft-skin-layout-specification.md).
@@ -72,22 +85,17 @@ export function isInDeadZone(normX: number, normY: number): boolean {
 }
 
 /**
- * Part display name (e.g. "Right sleeve") → layer key. Used for hover info and texture position events.
+ * Part display name (e.g. "Right sleeve") → layer key. Derived from LAYER_TO_PART_DISPLAY_NAMES.
  */
-export const PART_TO_LAYER: Record<string, LayerKey> = {
-  Head: 'head',
-  Hat: 'hat',
-  Body: 'body',
-  Jacket: 'jacket',
-  'Right leg': 'legs',
-  'Left leg': 'legs',
-  'Right pants': 'pants',
-  'Left pants': 'pants',
-  'Right arm': 'arms',
-  'Left arm': 'arms',
-  'Right sleeve': 'sleeves',
-  'Left sleeve': 'sleeves',
-};
+export const PART_TO_LAYER: Record<string, LayerKey> = (() => {
+  const out: Record<string, LayerKey> = {};
+  for (const layer of LAYER_KEYS) {
+    for (const name of LAYER_TO_PART_DISPLAY_NAMES[layer]) {
+      out[name] = layer;
+    }
+  }
+  return out;
+})();
 
 /** UV part keys used by MINECRAFT_SKIN_UVS in main.ts. */
 export type UVPartKey = 'head' | 'hat' | 'body' | 'jacket' | 'armR' | 'armL' | 'sleeveR' | 'sleeveL' | 'legR' | 'legL' | 'pantsR' | 'pantsL';
@@ -111,19 +119,38 @@ export function partToLayer(part: string): LayerKey | null {
 
 /**
  * Specific part bounds for hover display (right/left legs, pants, arms, sleeves).
- * Per minecraft-skin-layout-specification.md Quick Reference.
+ * Derived from SKIN_LAYER_BOUNDS + LAYER_TO_PART_DISPLAY_NAMES.
  */
-export const SKIN_PART_BOUNDS: { part: string; bounds: Bounds[] }[] = [
-  { part: 'Head', bounds: [{ x: 0, y: 0, w: 32, h: 16 }] },
-  { part: 'Hat', bounds: [{ x: 32, y: 0, w: 32, h: 16 }] },
-  { part: 'Body', bounds: [{ x: 16, y: 16, w: 24, h: 16 }] },
-  { part: 'Jacket', bounds: [{ x: 16, y: 32, w: 24, h: 16 }] },
-  { part: 'Right leg', bounds: [{ x: 0, y: 16, w: 16, h: 16 }] },
-  { part: 'Right pants', bounds: [{ x: 0, y: 32, w: 16, h: 16 }] },
-  { part: 'Left leg', bounds: [{ x: 16, y: 48, w: 16, h: 16 }] },
-  { part: 'Left pants', bounds: [{ x: 0, y: 48, w: 16, h: 16 }] },
-  { part: 'Right arm', bounds: [{ x: 40, y: 16, w: 16, h: 16 }] },
-  { part: 'Right sleeve', bounds: [{ x: 40, y: 32, w: 16, h: 16 }] },
-  { part: 'Left arm', bounds: [{ x: 32, y: 48, w: 16, h: 16 }] },
-  { part: 'Left sleeve', bounds: [{ x: 48, y: 48, w: 16, h: 16 }] },
-];
+export const SKIN_PART_BOUNDS: { part: string; bounds: Bounds[] }[] = (() => {
+  const out: { part: string; bounds: Bounds[] }[] = [];
+  for (const layer of LAYER_KEYS) {
+    const bounds = SKIN_LAYER_BOUNDS[layer];
+    const names = LAYER_TO_PART_DISPLAY_NAMES[layer];
+    for (let i = 0; i < bounds.length; i++) {
+      out.push({ part: names[i]!, bounds: [bounds[i]!] });
+    }
+  }
+  return out;
+})();
+
+/**
+ * Returns layer bounds keyed by layer (for scripts/wardrobe that need part name → rects).
+ * Use this when you need Record<string, Bounds[]> keyed by LayerKey.
+ */
+export function getLayerBoundsByKey(): Record<LayerKey, Bounds[]> {
+  return SKIN_LAYER_BOUNDS;
+}
+
+/**
+ * Human-readable label per layer for UI (wardrobe panel, etc.).
+ */
+export const LAYER_DISPLAY_LABELS: Record<LayerKey, string> = {
+  hat: 'Hat',
+  head: 'Head',
+  jacket: 'Jacket',
+  body: 'Body',
+  sleeves: 'Sleeves',
+  arms: 'Arms',
+  pants: 'Pants',
+  legs: 'Legs',
+};

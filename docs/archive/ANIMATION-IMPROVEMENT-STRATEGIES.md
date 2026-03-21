@@ -85,7 +85,7 @@ From the codebase and docs:
 **Options:**
 
 - **GSAP** — Robust, widely used. Good for camera, UI, and optionally character position/rotation.
-- **@tweenjs/tween.js** — Lighter. Note: ANIMATION-SEQUENCES-WALKING-RETROSPECTIVE reports issues with TWEEN for character movement (delta/timing). If used, ensure a single time source (e.g., pass `clock.getDelta()` from main loop).
+- **@tweenjs/tween.js** — Lighter. Note: SEQUENCES-WALKING-RETROSPECTIVE reports issues with TWEEN for character movement (delta/timing). If used, ensure a single time source (e.g., pass `clock.getDelta()` from main loop).
 - **Custom easing** — Replace `lerpVectors` linear blend with `t => t * t * (3 - 2 * t)` (smoothstep) or similar. No new dependency.
 
 **Recommendation:** Start with custom easing (e.g., smoothstep) in the lerp; only add GSAP if broader tween needs arise.

@@ -4,7 +4,7 @@
  */
 
 import * as THREE from 'three';
-import { getMinecraftPartFromMeshName } from '../meshPartMapping';
+import { getMinecraftPartFromMeshName } from '../skin';
 import { logger } from '../logger';
 
 export type TexturePreset = 'clamped' | 'clamped-flip' | 'repeat' | 'repeat-flip';

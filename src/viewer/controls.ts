@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { uvToWorkingCoords } from '../skinCoordinates';
+import { uvToWorkingCoords } from '../skin';
 import {
   getEditMode3D,
   getActiveTool,

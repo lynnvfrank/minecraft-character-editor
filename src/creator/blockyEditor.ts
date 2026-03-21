@@ -3,8 +3,7 @@
  * Built because canvas pixelation was unreliable; divs give crisp 1:1 pixels.
  */
 
-import { SKIN_SIZE, SKIN_LAYER_BOUNDS, SKIN_DEAD_ZONES } from '../skinLayout';
-import { WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skinCoordinates';
+import { SKIN_SIZE, SKIN_LAYER_BOUNDS, SKIN_DEAD_ZONES, LAYER_KEYS, WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skin';
 import { rgbToHex } from '../types/color';
 import * as brush from './brush';
 import type { CreatorState } from './creatorState';
@@ -148,9 +147,8 @@ function canPaintAt2D(ctx: BlockyEditorContext, workingX: number, workingY: numb
 function getLayerAtCoords(ctx: BlockyEditorContext, workingX: number, workingY: number): string | null {
   const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
   const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
-  for (const layer of Object.keys(SKIN_LAYER_BOUNDS)) {
+  for (const layer of LAYER_KEYS) {
     const bounds = SKIN_LAYER_BOUNDS[layer];
-    if (!bounds) continue;
     for (const b of bounds) {
       if (normX >= b.x && normX < b.x + b.w && normY >= b.y && normY < b.y + b.h) return layer;
     }
@@ -285,7 +283,8 @@ export function renderRulersAndGrid(ctx: BlockyEditorContext): void {
         overlayCtx.textAlign = 'left';
         overlayCtx.textBaseline = 'top';
 
-        for (const [layerKey, bounds] of Object.entries(SKIN_LAYER_BOUNDS)) {
+        for (const layerKey of LAYER_KEYS) {
+          const bounds = SKIN_LAYER_BOUNDS[layerKey];
           const isVisible = ctx.state.layer3DVisible[layerKey] !== false;
           const style = isVisible
             ? (TEMPLATE_LAYER_STYLES[layerKey] ?? DEFAULT_TEMPLATE_STYLE)
@@ -313,7 +312,8 @@ export function renderRulersAndGrid(ctx: BlockyEditorContext): void {
         overlayCtx.globalCompositeOperation = 'source-over';
 
         // Draw labels after dead-zone punch-out so text remains readable.
-        for (const [layerKey, bounds] of Object.entries(SKIN_LAYER_BOUNDS)) {
+        for (const layerKey of LAYER_KEYS) {
+          const bounds = SKIN_LAYER_BOUNDS[layerKey];
           const isVisible = ctx.state.layer3DVisible[layerKey] !== false;
           const style = isVisible
             ? (TEMPLATE_LAYER_STYLES[layerKey] ?? DEFAULT_TEMPLATE_STYLE)

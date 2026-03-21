@@ -1,0 +1,41 @@
+{
+  "watch": {
+    "base": ".",
+    "include": ["**/*"],
+    "exclude": [
+      "node_modules",
+      "node_modules/**",
+      "dist/**",
+      ".git/**",
+      "release/**",
+      "*.tgz",
+      "public/wardrobe/parts/**",
+      "public/wardrobe/skins/previews/**"
+    ],
+    "ignoreInitial": false
+  },
+  "operations": [
+    {
+      "name": "index-docs-src",
+      "match": ["src/**/*.ts", "src/**/*.tsx", "docs/**/*.md"],
+      "exclude": ["**/*.test.*", "**/*.spec.*"],
+      "handler": "indexToQdrant",
+      "options": {
+        "collection": "codebase"
+      }
+    },
+    {
+      "name": "regenerate-wardrobe-assets",
+      "match": [
+        "public/wardrobe/skins/*.png",
+        "public/wardrobe/skins/index.json",
+        "src/config/preview/**/*.json"
+      ],
+      "handler": "runNpmTask",
+      "options": {
+        "task": "assets:generate",
+        "debounceMs": 500
+      }
+    }
+  ]
+}

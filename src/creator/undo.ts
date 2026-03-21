@@ -3,7 +3,7 @@
  * Depends on skinIO for putImageDataFromRGBA; creator.ts wires state and render.
  */
 
-import { WORK_SIZE } from '../skinCoordinates';
+import { WORK_SIZE } from '../skin';
 import { hexToRgb } from '../types/color';
 import type { PixelChange, UndoCommand } from './creatorState';
 import { putImageDataFromRGBA } from './skinIO';

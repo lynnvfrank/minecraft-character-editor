@@ -1,35 +1,19 @@
 import { subscribe, CREATOR_EVENTS } from '../creatorEvents';
 import { createEl } from './dom';
 import type { CreatorEditModeDetail } from '../creatorEvents';
+import { LAYER_KEYS, LAYER_DISPLAY_LABELS, type LayerKey } from '../skin';
 
-export type WardrobeLayerKey =
-  | 'fullOutfit'
-  | 'hat'
-  | 'head'
-  | 'jacket'
-  | 'body'
-  | 'arms'
-  | 'sleeves'
-  | 'pants'
-  | 'legs';
+export type WardrobeLayerKey = 'fullOutfit' | LayerKey;
 
 export type WardrobePartKey = Exclude<WardrobeLayerKey, 'fullOutfit'>;
 
+/** Derived from skin module LAYER_KEYS + LAYER_DISPLAY_LABELS; fullOutfit is UI-only. */
 export const WARDROBE_LAYERS: readonly { key: WardrobeLayerKey; label: string }[] = [
   { key: 'fullOutfit', label: 'Full outfit' },
-  { key: 'hat', label: 'Hat' },
-  { key: 'head', label: 'Head' },
-  { key: 'jacket', label: 'Jacket' },
-  { key: 'body', label: 'Body' },
-  { key: 'sleeves', label: 'Sleeves' },
-  { key: 'arms', label: 'Arms' },
-  { key: 'pants', label: 'Pants' },
-  { key: 'legs', label: 'Legs' },
+  ...LAYER_KEYS.map((key) => ({ key, label: LAYER_DISPLAY_LABELS[key] })),
 ];
 
-export const WARDROBE_PART_KEYS: readonly WardrobePartKey[] = WARDROBE_LAYERS
-  .filter((layer): layer is { key: WardrobePartKey; label: string } => layer.key !== 'fullOutfit')
-  .map((layer) => layer.key);
+export const WARDROBE_PART_KEYS: readonly WardrobePartKey[] = LAYER_KEYS.slice();
 
 let shortcutHandler: ((e: KeyboardEvent) => void) | null = null;
 let unbindModeChange: (() => void) | null = null;

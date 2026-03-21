@@ -1,5 +1,7 @@
 # Creator & Codebase — Next Steps for Cleanup
 
+> **Status: COMPLETED.** The major cleanup work outlined here has been implemented. The document is retained as historical reference.
+
 This document outlines recommended next steps for cleaning up the codebase after the creator refactoring (innerHTML removal, panel extraction, naming improvements). Use it to plan future work.
 
 ---

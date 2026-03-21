@@ -3,7 +3,7 @@
  * Supports new rigs via config without code changes.
  */
 
-import type { UVPartKey } from './skinLayout';
+import type { UVPartKey } from './layout';
 
 export type { UVPartKey };
 

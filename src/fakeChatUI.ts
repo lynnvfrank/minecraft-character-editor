@@ -3,7 +3,7 @@
  * 30s no messages → switch to idle.
  * 60s no messages → start idle wandering.
  */
-import type { SequenceStep } from './animationManager';
+import type { SequenceStep } from './animation';
 import { logger } from './logger';
 
 const CANNED_RESPONSES = [

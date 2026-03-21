@@ -1,5 +1,7 @@
 # Creator innerHTML Refactoring Plan
 
+> **Status: COMPLETED.** This refactoring has been fully implemented. The document is retained as historical reference.
+
 This document describes how to refactor `src/creator.ts` to reduce and improve `innerHTML` usage. Another agent or developer can follow these instructions to complete the work.
 
 **Workflow:** Implement each phase in order. Before proceeding to the next phase, pause and ask the user for approval. Use TODOs to track progress.

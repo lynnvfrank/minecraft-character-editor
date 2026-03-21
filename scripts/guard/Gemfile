@@ -1,0 +1,10 @@
+# Gemfile
+
+source "https://rubygems.org"
+
+group :development do
+  gem "guard", "~> 2.18"          # Core Guard (latest stable works on Ruby 3.0.2)
+  gem "guard-shell", "~> 0.7"     # Plugin to run shell commands or Ruby blocks
+  gem "qdrant-ruby"               # Qdrant client for index-changed
+  gem "dotenv"                    # Load .env for QDRANT_URL, EMBEDDER_MODULE
+end

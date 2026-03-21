@@ -28,13 +28,15 @@ rm -rf node_modules/electron/dist
 node node_modules/electron/install.js
 ```
 
-## Run The Web App
+## Run The App (Web)
 
 Start the Vite development server:
 
 ```bash
 npm run dev
 ```
+
+`npm run dev` also refreshes generated asset manifests first.
 
 Open the URL shown in the terminal, usually `http://localhost:5173`.
 
@@ -43,13 +45,7 @@ Useful routes:
 - Viewer: `http://localhost:5173/`
 - Creator: `http://localhost:5173/#/creator`
 
-Useful dev commands:
-
-- `npm run dev:log` - run Vite with client log relay enabled
-- `npm run dev:log:debug` - verbose logging
-- `npm run preview` - preview the production Vite build locally
-
-## Build The Web App
+## Build And Preview (Web)
 
 Create the production build:
 
@@ -57,18 +53,13 @@ Create the production build:
 npm run build
 ```
 
-That command also refreshes generated asset manifests before building:
-
-- `public/wardrobe/skins/index.json`
-- `public/animations/index.json`
-
 Preview the built site:
 
 ```bash
 npm run preview
 ```
 
-## Run The Electron App
+## Run The App (Electron)
 
 For local Electron development:
 
@@ -82,38 +73,50 @@ For a production-style Electron launch:
 npm run electron
 ```
 
-What these do:
+Both commands:
 
+- regenerate asset manifests
 - build the Vite app into `dist/`
 - enable `VITE_SOCKET_ENABLED=true`
 - start Electron with `electron/main.js`
 
-The Electron app starts an embedded local server and loads the app in a `BrowserWindow`.
-
-Notes:
-
-- The local server defaults to port `5173`
-- if `5173` is busy, the Electron shell can fall back to `5174`
-- the tray/menu shell lives in `electron/`
-
-## Common Scripts
+To package desktop builds:
 
 ```bash
-npm run generate-skins
-npm run generate-animations
-npm run generate-previews
-npm run clear-previews-skins
-npm run clear-previews-parts
-npm run set-skin <skin-name>
-npm run set-animation <animation-key>
+npm run pack
+npm run dist
 ```
 
-Examples:
+- `npm run pack` creates an unpacked app in `release/`
+- `npm run dist` creates distributable artifacts using `electron-builder`
+
+## Core npm Commands
 
 ```bash
-npm run set-skin RunningboyRig
-npm run set-animation bored
+# Development
+npm run dev
+npm run dev:log
+npm run dev:log:info
+npm run dev:log:debug
+npm run dev:log:trace
+
+# Build and run
+npm run build
+npm run preview
+npm run start
+npm run electron:dev
+npm run electron
+
+# Asset pipeline
+npm run assets:generate
+npm run assets:clean
+npm run wardrobe:generate
+npm run wardrobe:clean
+npm run animations:generate
+npm run animations:clean
 ```
+
+See `docs/NPM-TOOLING.md` for a full script-by-script guide.
 
 ## Project Structure
 
@@ -124,30 +127,27 @@ minecraft-3d-viewer/
 ├── src/                          # Viewer, creator, animation, and UI code
 ├── public/
 │   ├── models/                   # FBX rigs
-│   ├── animations/               # FBX animation clips + generated manifest
-│   ├── skins/                    # Skin PNGs + generated manifest
+│   ├── animations/               # FBX clips + generated manifest
+│   ├── wardrobe/skins/           # Skin PNGs + generated manifests/previews
 │   └── sequences/                # Composite animation sequences
 ├── scripts/                      # Manifest generation and helper scripts
 └── docs/                         # Specs and supporting documentation
 ```
 
-## Packaging Electron Builds
+## Documentation Map
 
-To create distributable desktop builds:
+- `docs/specs/CHARACTER-CREATION-SCREEN-SPEC.md` - full creator UX and behavior spec
+- `docs/specs/CREATOR-VIEWER-STATE-MANAGEMENT.md` - state boundaries between creator/viewer
+- `docs/specs/MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md` - skin art process, constraints, and QA
+- `docs/specs/SPEC-electron.md` - Electron migration and architecture intent
+- `docs/minecraft-skin-layout-specification.md` - canonical skin layout and UV reference
+- `docs/LOGGING-ARCHITECTURE.md` and `docs/LOGGING-IMPLEMENTATION.md` - logging design + implementation
+- `docs/TROUBLESHOOTING.md` - debugging workflows and known issues
+- `docs/ELECTRON-PACKAGING.md` - packaging and distribution workflow
+- `docs/archive/` - historical docs retained for context
 
-```bash
-npm run pack
-npm run dist
-```
+## For Future Agents
 
-- `npm run pack` creates an unpacked app in `release/`
-- `npm run dist` creates installable artifacts using `electron-builder`
+If you are an agent working in this repository, start with:
 
-See `docs/ELECTRON-PACKAGING.md` for the full packaging and publishing guide.
-
-## Related Docs
-
-- `docs/CHARACTER-CREATION-SCREEN-SPEC.md`
-- `docs/SPEC-electron.md`
-- `docs/ELECTRON-PACKAGING.md`
-- `docs/minecraft-skin-layout-specification.md`
+- `docs/AGENT-README.md` for scope, execution flow, command usage, platform baseline, and constraints

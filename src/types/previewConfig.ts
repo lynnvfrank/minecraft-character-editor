@@ -1,4 +1,4 @@
-import type { LayerKey } from '../skinLayout';
+import type { LayerKey } from '../skin';
 
 export type PreviewPresetKey =
   | 'fullOutfit'
