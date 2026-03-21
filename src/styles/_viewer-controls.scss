@@ -1,0 +1,285 @@
+/* Hide panels when URL params chat=0|off|false or controls=0|off|false */
+[data-chat-hidden="1"] #fake-chat-container { display: none !important; }
+[data-controls-hidden="1"] #controls-bar { display: none !important; }
+
+/* Test mode: hide normal controls, show test panel */
+#test-controls {
+  display: none;
+  flex: 0 0 auto;
+}
+[data-test-mode="1"] #controls-bar,
+[data-test-mode="1"] #fake-chat-container { display: none !important; }
+[data-test-mode="1"] #test-controls {
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7));
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.test-controls-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.test-controls-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.test-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.test-controls-custom input[type="number"] {
+  width: 3.5em;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f5f5;
+  font-size: 0.85rem;
+}
+.test-controls-custom input[type="number"].test-control-input-speed {
+  width: 4em;
+}
+
+.test-control-btn {
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f5f5f5;
+  font-size: 0.85rem;
+  cursor: pointer;
+  background: rgba(63, 140, 255, 0.2);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.test-control-btn:hover {
+  background: rgba(63, 140, 255, 0.35);
+  border-color: rgba(63, 140, 255, 0.5);
+}
+
+.test-control-btn:active {
+  background: rgba(63, 140, 255, 0.25);
+}
+
+.test-control-strategy-btn.active {
+  border-color: rgba(143, 212, 255, 0.6);
+  background: rgba(63, 140, 255, 0.4);
+}
+
+.test-control-strategy-label {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-right: 0.35rem;
+}
+
+#controls-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.7));
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.anim-control-group {
+  flex-shrink: 0;
+  max-width: 480px;
+  max-height: 140px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.nav-control-group {
+  flex-direction: row;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.nav-link {
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  font-size: 0.9rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+.nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
+body[data-route="creator"] a.nav-link[href^="#/creator"] { color: #6db; font-weight: 600; }
+body[data-route="viewer"] a.nav-link[href="#/"] { color: #6db; font-weight: 600; }
+body[data-route="preview"] a.nav-link[href="#/preview"] { color: #6db; font-weight: 600; }
+
+.skin-control-group {
+  flex-shrink: 0;
+  flex: 0 0 200px;
+  min-width: 300px;
+  max-height: 140px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.skin-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.skin-preview {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: #1a1a2e;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.skin-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+.skin-preview:hover {
+  border-color: rgba(192, 132, 252, 0.5);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3);
+}
+
+.skin-preview.active {
+  border-color: #c084fc;
+  box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.4);
+}
+
+.group-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.anim-button {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f5f5f5;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.12s ease,
+    box-shadow 0.18s ease;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55);
+}
+
+.anim-button {
+  background: radial-gradient(circle at top left, #3f8cff, #1b1f3b);
+}
+
+.anim-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.7);
+}
+
+.anim-button:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+
+.anim-button.active {
+  border-color: #8fd4ff;
+  box-shadow: 0 0 0 1px rgba(143, 212, 255, 0.4),
+    0 10px 26px rgba(0, 0, 0, 0.8);
+}
+
+.sequence-control-group {
+  flex-shrink: 0;
+  max-width: 520px;
+  max-height: 140px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sequence-button {
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f5f5f5;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+  background: radial-gradient(circle at top left, #7c3aed, #1b1f3b);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55);
+}
+
+.sequence-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(192, 132, 252, 0.5);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.7);
+}
+
+.sequence-button:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 640px) {
+  #controls-bar {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.7rem);
+  }
+
+  .skin-control-group {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .button-row {
+    gap: 0.3rem;
+  }
+
+  .anim-button {
+    flex: 1 1 auto;
+    min-width: 4rem;
+    font-size: 0.8rem;
+    padding: 0.35rem 0.6rem;
+  }
+}

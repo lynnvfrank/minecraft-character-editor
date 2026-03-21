@@ -19,30 +19,29 @@ Usability session notes with Mazi (12) and Arlo (8). Ordered by usability impact
 
 ## Usability enhancements (high priority)
 
-- **✅** Creator.Wardrobe - when selecting "No Head" or any no option it does not actually mean none. It goes back to what was on the skin. Sometimes users want to remove the hat and have it deleted. Need to add No hat and current hat, then the possible choices
-
-### Discoverability and feedback
+### Creator Discoverability and feedback
 
 - **✅** **Lock feedback** — When drawing on a locked layer, show feedback: flash the lock icon and wiggle the layer slightly.
 - **✅ Skin color sampling** — Sample skin color from the model when it’s opened, instead of starting from scratch.
+- **✅** Creator.Wardrobe - when selecting "No Head" or any no option it does not actually mean none. It goes back to what was on the skin. Sometimes users want to remove the hat and have it deleted. Need to add No hat and current hat, then the possible choices
 
-### Camera and view
-
-- ⬜️ **3D on-screen camera controls** — Add on-screen buttons to move/rotate the 3D camera (physical controls instead of only mouse).
-- ⬜️ **Physical camera controls** — Allow moving the camera at an angle around the frozen character.
-- ⬜️ **Wardrobe mode views** — (1) “Follow the outfit” — camera tracks selected part; (2) “Static zoomed out” — fixed view that never tracks.
-
-### Drawing tools
+### Creator Drawing tools
 
 - **✅ Starting draw color** - set to one from the skin if one has not been chosen by the user
 - **Mirror mode** — Add mirror mode when drawing (paint to both sides).
 - **✅ Color palette** — Make the color palette larger.
 
+### Creator Camera and view
+
+- ⬜️ **3D on-screen camera controls** — Add on-screen buttons to move/rotate the 3D camera (physical controls instead of only mouse).
+- ⬜️ **Physical camera controls** — Allow moving the camera at an angle around the frozen character.
+- ⬜️ **Wardrobe mode views** — (1) “Follow the outfit” — camera tracks selected part; (2) “Static zoomed out” — fixed view that never tracks.
+
 ### Character identity
 
 - ⬜️ **Name the character** — Let users give the character a name.
 
-### 2D view
+### Creator.2D view
 
 - ⬜️ **Hidden layers** — When layers are hidden: collapse the view, show a note about hidden parts, or make them visible in some way.
 - ⬜️ **2D camera focus** — When layers are hidden, focus the camera on the visible part.

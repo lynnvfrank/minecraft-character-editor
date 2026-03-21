@@ -1,0 +1,19 @@
+// Main styles entry — modular SCSS partials
+// Order matters for cascade; matches original style.css structure
+
+@use 'reset';
+@use 'routes';
+@use 'creator/layout';
+@use 'creator/swatches';
+@use 'creator/animations';
+@use 'creator/panels';
+@use 'creator/wardrobe';
+@use 'creator/panels-right';
+@use 'creator/layers';
+@use 'creator/color-picker';
+@use 'creator/hover-info';
+@use 'creator/tools';
+@use 'creator/canvas';
+@use 'app-shell';
+@use 'viewer-controls';
+@use 'fake-chat';

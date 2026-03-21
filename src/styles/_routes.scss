@@ -1,0 +1,100 @@
+/* Route-based visibility: #/creator vs #/ or #/home */
+#creator-panel {
+  display: none;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+body[data-route="creator"] {
+  display: block;
+  position: relative;
+}
+body[data-route="creator"] #creator-panel {
+  display: flex !important;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 260px;
+  min-width: 220px;
+  max-width: 280px;
+  z-index: 10;
+}
+body[data-route="creator"] #creator-view-wrapper {
+  display: flex !important;
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+}
+body[data-route="creator"] #app {
+  display: flex !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+body[data-route="creator"] #controls-bar,
+body[data-route="creator"] #test-controls,
+body[data-route="preview"] #controls-bar,
+body[data-route="preview"] #test-controls {
+  display: none !important;
+}
+
+/* 3D edit mode: 3D view is large, hide 2D canvas */
+body[data-route="creator"][data-edit-mode="3d"] .creator-canvas-area {
+  display: none !important;
+}
+
+/* 2D edit mode only: 2D canvas is large, padded at bottom so it sits higher above the toolbar */
+body[data-route="creator"][data-edit-mode="2d"] .creator-canvas-area {
+  display: flex !important;
+  flex: 1 1 auto;
+  padding-bottom: 5rem;
+}
+body[data-route="creator"][data-edit-mode="2d"] .creator-blocky-grid {
+  display: grid !important;
+}
+body[data-route="creator"][data-edit-mode="wardrobe"] .creator-canvas-area {
+  display: none !important;
+}
+
+.creator-3d-preview-slot {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  height: 256px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  background: rgba(20, 25, 40, 0.92);
+}
+.creator-3d-preview-slot #app {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.creator-3d-preview-slot #three-canvas-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Viewer route: creator-panel hidden, wrapper and app fill space */
+body[data-route="viewer"],
+body[data-route="preview"] {
+  display: flex;
+  flex-direction: column;
+}
+body[data-route="viewer"] #creator-view-wrapper,
+body[data-route="preview"] #creator-view-wrapper {
+  display: flex !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+body[data-route="viewer"] .creator-canvas-area,
+body[data-route="preview"] .creator-canvas-area {
+  display: none !important;
+}

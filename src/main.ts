@@ -1,4 +1,4 @@
-import './style.css';
+import './styles/index.scss';
 import * as THREE from 'three';
 import {
   initCreator,

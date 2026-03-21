@@ -1,0 +1,92 @@
+/* Tools panel — horizontal layout in bottom-center */
+.creator-tools-panel {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 0.75rem 1.125rem;
+  font-size: 1.275rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+/* Route-level creator/viewer transitions: keep tools panel participating */
+body[data-route="creator"] .creator-tools-panel:not(.creator-mode-anim-in-top):not(.creator-mode-anim-out-top):not(.creator-mode-anim-in-bottom):not(.creator-mode-anim-out-bottom) {
+  animation: creator-pop-in-bottom 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+body[data-creator-exiting="1"] .creator-tools-panel:not(.creator-mode-anim-in-top):not(.creator-mode-anim-out-top):not(.creator-mode-anim-in-bottom):not(.creator-mode-anim-out-bottom) {
+  animation: creator-slide-out-bottom 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.creator-tools-panel-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.375rem;
+}
+.creator-tools-panel-tools-row {
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+.creator-tools-panel-edit-mode {
+  width: 100%;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.15rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.creator-tools-panel-edit-mode .creator-tools-panel-btn {
+  flex: 1;
+}
+.creator-tools-panel-divider {
+  width: 0;
+  height: auto;
+  min-height: 2.25rem;
+  margin: 0 0.375rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: none;
+}
+.creator-tools-panel-btn {
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.creator-tools-panel-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.creator-tools-panel-btn.active {
+  background: rgba(63, 140, 255, 0.3);
+  border-color: rgba(63, 140, 255, 0.6);
+}
+.creator-tools-panel-btn-icon {
+  width: auto;
+  padding: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Toolbar (bottom-center) buttons scaled 1.5× */
+.creator-tools-panel .creator-tools-panel-btn {
+  padding: 0.525rem 0.9rem;
+  border-radius: 9px;
+  font-size: 1.2rem;
+}
+.creator-tools-panel .creator-tools-panel-btn-icon {
+  padding: 0.6rem;
+}
+.creator-tools-panel-btn-icon svg {
+  flex-shrink: 0;
+}
+.creator-tools-panel-undo-redo {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+}
+.creator-tools-panel-undo-redo .creator-tools-panel-btn {
+  flex: 0 0 auto;
+}

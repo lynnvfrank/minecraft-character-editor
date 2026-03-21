@@ -1,0 +1,140 @@
+/* Swatches panel — floating lower-right, 5×5 grid of color squares */
+.creator-swatches-panel {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.creator-swatches-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+.creator-swatches-tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+.creator-swatches-tabs-hidden {
+  display: none !important;
+}
+.creator-swatches-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.creator-swatches-tab:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+}
+.creator-swatches-tab.active {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+  border-bottom-color: rgba(63, 140, 255, 0.8);
+  background: rgba(255, 255, 255, 0.06);
+}
+.creator-swatches-title {
+  flex: 1;
+  min-width: 0;
+}
+.creator-swatches-panel:not(.creator-swatches-panel-collapsed) .creator-swatches-title {
+  display: none;
+}
+.creator-swatches-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  font-size: 0.7rem;
+  transition: background 0.15s ease;
+}
+.creator-swatches-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.creator-swatches-icon-expand {
+  display: none;
+}
+.creator-swatches-panel-collapsed .creator-swatches-icon-minimize {
+  display: none;
+}
+.creator-swatches-panel-collapsed .creator-swatches-icon-expand {
+  display: inline-block;
+}
+.creator-swatches-panel-collapsed .creator-swatch-grid {
+  display: none;
+}
+.creator-swatches-panel-collapsed .creator-swatches-header {
+  margin-bottom: 0;
+}
+.creator-swatches-panel-collapsed {
+  padding: 0.35rem 0.5rem;
+}
+.creator-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  gap: 0.25rem;
+  min-height: 140px;
+}
+
+.creator-swatch-item {
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 20px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.creator-swatch-item-empty {
+  background: rgba(255, 255, 255, 0.08);
+  border-style: dashed;
+  cursor: default;
+  pointer-events: none;
+}
+
+.creator-swatch-item:not(.creator-swatch-item-empty):hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+}
+.creator-swatch-draggable {
+  cursor: grab;
+}
+.creator-swatch-draggable:active {
+  cursor: grabbing;
+}
+.creator-swatch-drop-target.creator-swatch-drag-over {
+  box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.8);
+  outline: none;
+}

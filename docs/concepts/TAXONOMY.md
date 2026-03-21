@@ -47,7 +47,9 @@ This document defines the canonical structure of the `src/` directory. Use it wh
 ```
 src/
 ├── main.ts
-├── style.css
+├── styles/           # SCSS partials (index.scss imports all)
+│   ├── creator/      # layout, swatches, panels, layers, tools, canvas, etc.
+│   └── _*.scss       # reset, routes, app-shell, viewer-controls, fake-chat
 │
 ├── domain/           # types, constants, schemas
 ├── lib/              # logger, color, trapezoidBounds

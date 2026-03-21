@@ -1,0 +1,155 @@
+/* Left panels container */
+.creator-left-panels {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 20;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+body[data-route="creator"] .creator-left-panels {
+  display: flex;
+}
+
+.creator-left-top-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.creator-upper-left-panels {
+  width: 250px;
+  flex: 0 0 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.creator-upper-right-panels-root {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
+  width: var(--creator-right-panel-width);
+}
+body[data-route="creator"] .creator-upper-right-panels-root {
+  display: flex;
+}
+body[data-route="creator"] .creator-upper-left-panels {
+  animation: creator-slide-in-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+body[data-creator-exiting="1"] .creator-upper-left-panels {
+  animation: creator-slide-out-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Save/Download panel: in bottom-left group, above Home, visible in all Creator modes. Animates in from left. */
+.creator-save-download-panel {
+  display: flex;
+  flex-direction: row;
+  gap: 0.35rem;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+body[data-route="creator"] .creator-lower-left-panels .creator-save-download-panel {
+  animation: creator-slide-in-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+body[data-creator-exiting="1"] .creator-lower-left-panels .creator-save-download-panel {
+  animation: creator-slide-out-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.creator-save-download-panel .creator-save-download-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.creator-save-download-panel .creator-save-download-btn img {
+  flex-shrink: 0;
+}
+
+.creator-mode-panel {
+  display: flex;
+  flex-direction: row;
+  gap: 0.35rem;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.creator-mode-panel .creator-tools-panel-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.25rem;
+}
+.creator-mode-panel .creator-tools-panel-btn svg {
+  flex-shrink: 0;
+}
+
+/* Canvas overlays (Rulers, Template) */
+.creator-canvas-overlays-panel {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.creator-canvas-overlays-panel .creator-tools-panel-btn {
+  flex: 1;
+  min-width: 0;
+}
+.creator-lower-left-panels {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Bottom-center panel group — horizontal toolbar */
+.creator-bottom-center-panels {
+  display: none;
+  position: absolute;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+}
+body[data-route="creator"] .creator-bottom-center-panels {
+  display: flex;
+}

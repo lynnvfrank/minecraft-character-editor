@@ -1,0 +1,138 @@
+/* Lower-right panels container (layers + hover info) */
+.creator-lower-right-panels {
+  display: none;
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+body[data-route="creator"] .creator-lower-right-panels {
+  display: flex;
+  flex-direction: column;
+  animation: creator-slide-in-right 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+body[data-creator-exiting="1"] .creator-lower-right-panels {
+  animation: creator-slide-out-right 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.preview-lower-right-panels {
+  display: none;
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+body[data-route="preview"] .preview-lower-right-panels {
+  display: flex;
+}
+
+/* Right panels group — wraps all lower-right panels for logical grouping and drag-drop safety */
+.creator-right-panels-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: var(--creator-right-panel-width);
+  gap: 0.5rem;
+  background: rgba(12, 16, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.preview-right-panels-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  background: rgba(12, 16, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  width: 260px;
+}
+
+.preview-camera-panel,
+.preview-camera-info-panel {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.preview-camera-panel-title,
+.preview-camera-info-title {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.preview-camera-button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.preview-camera-preset-btn {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.preview-camera-preset-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.preview-camera-preset-btn.active {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.preview-camera-info-panel {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.preview-camera-info-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.preview-camera-info-line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.preview-camera-info-label {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.preview-camera-info-value {
+  color: rgba(255, 255, 255, 0.94);
+  word-break: break-word;
+}
