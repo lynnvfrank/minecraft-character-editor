@@ -37,6 +37,7 @@ export type CharacterControllerDeps = {
     isCreatorIdleCompletingTransition: () => boolean;
     applyCreatorCharacterPose: (detail?: { mode?: string }) => void;
   } | null;
+  getCreatorTransitionInFlight?: () => boolean;
   getAnimationManager: () => {
     isInWalkToPhase?: () => boolean;
     isBusy?: () => boolean;
@@ -73,6 +74,7 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
     getSequencesList,
     onPreviewRouteAfterCharacterReady,
     getCreatorPoseController,
+    getCreatorTransitionInFlight = () => false,
     getAnimationManager,
     highlightActiveButton,
     highlightActiveSkin,
@@ -253,6 +255,7 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
                   cpc?.applyCreatorCharacterPose();
                   return;
                 }
+                if (getCreatorTransitionInFlight()) return;
                 if (!char.idleAction || char.currentAction === char.idleAction) return;
                 if (getAnimationManager()?.isInWalkToPhase?.() || getAnimationManager()?.isBusy?.()) return;
                 fadeToAction(char, char.idleAction!, 0.3);

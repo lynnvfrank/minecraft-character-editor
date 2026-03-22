@@ -338,6 +338,14 @@ function applyRoute(routeInfo?: RouteInfo): void {
     initCreator();
     // Re-apply creator layout for current mode (especially when returning in 2D).
     updateCreator3DViewPlacement();
+    const mode = getEditMode();
+    if (mode === '3d' || mode === '2d') {
+      requestAnimationFrame(() => {
+        if (getRoute() === 'creator' && getEditMode() === mode) {
+          creatorPoseController.applyCreatorCharacterPose();
+        }
+      });
+    }
     window.setTimeout(() => {
       creatorPoseController.snapCameraToCreatorView(creatorPoseController.getCreatorCameraPose());
     }, 0);
@@ -1150,6 +1158,7 @@ async function main(): Promise<void> {
     creatorPoseController: null as CreatorPoseController | null,
     animationManager: null as ReturnType<typeof createAnimationManager> | null,
     getCharacter: ((id: string) => sceneContext?.characters[id]) as (id: string) => CharacterState | undefined,
+    getCreatorTransitionInFlight: (() => false) as () => boolean,
   };
 
   viewerUIController = createViewerUIController({
@@ -1177,6 +1186,7 @@ async function main(): Promise<void> {
     getSequencesList: () => sequencesList,
     onPreviewRouteAfterCharacterReady: () => void syncPreviewRouteState(),
     getCreatorPoseController: () => controllerRefs.creatorPoseController,
+    getCreatorTransitionInFlight: () => controllerRefs.getCreatorTransitionInFlight(),
     getAnimationManager: () => controllerRefs.animationManager,
     highlightActiveButton: (charId, action) => viewerUIController.highlightActiveButton(charId, action),
     highlightActiveSkin: (charId, path) => viewerUIController.highlightActiveSkin(charId, path),
@@ -1281,6 +1291,7 @@ async function main(): Promise<void> {
     CREATOR_EXIT_ANIMATION_MS
   });
   controllerRefs.creatorPoseController = creatorPoseController;
+  controllerRefs.getCreatorTransitionInFlight = creatorTransitionHandler.getTransitionInFlight;
   getCreatorTransitionInFlight = creatorTransitionHandler.getTransitionInFlight;
   setupCreatorTransitionButton(creatorTransitionHandler);
   setupViewerTransitionButton(creatorTransitionHandler);
