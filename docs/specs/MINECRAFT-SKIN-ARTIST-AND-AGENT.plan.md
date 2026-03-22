@@ -1,10 +1,11 @@
 # Minecraft Skin — Artist & Agent Specification
 
-**Purpose:**  
-1. Give artists exact pixel boundaries for every body part when drawing skins.  
+**Purpose:**
+
+1. Give artists exact pixel boundaries for every body part when drawing skins.
 2. Enable AI agents to generate new Minecraft skins using tools like ImageMagick, applying color theory, fashion design patterns, and prints.
 
-**Canvas:** 64×64 pixels. Origin (0,0) is top-left.  
+**Canvas:** 64×64 pixels. Origin (0,0) is top-left.
 **Output:** Standard Minecraft skin PNG (64×64).
 
 ---
@@ -14,9 +15,10 @@
 Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use these bounds when painting or placing pixels.
 
 ### Coordinate System
-- **X:** 0 = left edge, 63 = right edge  
-- **Y:** 0 = top edge, 63 = bottom edge  
-- **Width/Height:** Pixel count in that dimension  
+
+- **X:** 0 = left edge, 63 = right edge
+- **Y:** 0 = top edge, 63 = bottom edge
+- **Width/Height:** Pixel count in that dimension
 - **Region extent:** X ranges from `X` to `X + Width - 1`; Y from `Y` to `Y + Height - 1`
 
 ---
@@ -26,7 +28,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 0–31, Y 0–15 (32×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 8 | 0 | 8 | 8 | X:8–15, Y:0–7 |
 | Bottom | 16 | 0 | 8 | 8 | X:16–23, Y:0–7 |
 | Right | 0 | 8 | 8 | 8 | X:0–7, Y:8–15 |
@@ -43,7 +45,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 32–63, Y 0–15 (32×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 40 | 0 | 8 | 8 | X:40–47, Y:0–7 |
 | Bottom | 48 | 0 | 8 | 8 | X:48–55, Y:0–7 |
 | Right | 32 | 8 | 8 | 8 | X:32–39, Y:8–15 |
@@ -60,7 +62,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 16–39, Y 16–31 (24×16 px total span)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 20 | 16 | 8 | 4 | X:20–27, Y:16–19 |
 | Bottom | 28 | 16 | 8 | 4 | X:28–35, Y:16–19 |
 | Right | 16 | 20 | 4 | 12 | X:16–19, Y:20–31 |
@@ -77,7 +79,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 16–39, Y 32–47 (24×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 20 | 32 | 8 | 4 | X:20–27, Y:32–35 |
 | Bottom | 28 | 32 | 8 | 4 | X:28–35, Y:32–35 |
 | Right | 16 | 36 | 4 | 12 | X:16–19, Y:36–47 |
@@ -94,7 +96,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 0–15, Y 16–31 (16×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 4 | 16 | 4 | 4 | X:4–7, Y:16–19 |
 | Bottom | 8 | 16 | 4 | 4 | X:8–11, Y:16–19 |
 | Right | 0 | 20 | 4 | 12 | X:0–3, Y:20–31 |
@@ -111,7 +113,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 0–15, Y 32–47 (16×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 4 | 32 | 4 | 4 | X:4–7, Y:32–35 |
 | Bottom | 8 | 32 | 4 | 4 | X:8–11, Y:32–35 |
 | Right | 0 | 36 | 4 | 12 | X:0–3, Y:36–47 |
@@ -126,7 +128,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 16–31, Y 48–63 (16×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 20 | 48 | 4 | 4 | X:20–23, Y:48–51 |
 | Bottom | 24 | 48 | 4 | 4 | X:24–27, Y:48–51 |
 | Right | 16 | 52 | 4 | 12 | X:16–19, Y:52–63 |
@@ -141,7 +143,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 0–15, Y 48–63 (16×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 4 | 48 | 4 | 4 | X:4–7, Y:48–51 |
 | Bottom | 8 | 48 | 4 | 4 | X:8–11, Y:48–51 |
 | Right | 0 | 52 | 4 | 12 | X:0–3, Y:52–63 |
@@ -156,7 +158,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 40–55, Y 16–31 (16×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 44 | 16 | 4 | 4 | X:44–47, Y:16–19 |
 | Bottom | 48 | 16 | 4 | 4 | X:48–51, Y:16–19 |
 | Right | 40 | 20 | 4 | 12 | X:40–43, Y:20–31 |
@@ -171,7 +173,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 40–55, Y 32–47 (16×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 44 | 32 | 4 | 4 | X:44–47, Y:32–35 |
 | Bottom | 48 | 32 | 4 | 4 | X:48–51, Y:32–35 |
 | Right | 40 | 36 | 4 | 12 | X:40–43, Y:36–47 |
@@ -186,7 +188,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 32–47, Y 48–63 (16×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 36 | 48 | 4 | 4 | X:36–39, Y:48–51 |
 | Bottom | 40 | 48 | 4 | 4 | X:40–43, Y:48–51 |
 | Right | 32 | 52 | 4 | 12 | X:32–35, Y:52–63 |
@@ -201,7 +203,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 **Overall bounds:** X 48–63, Y 48–63 (16×16 px)
 
 | Face | X | Y | W | H | Pixel range (inclusive) |
-|------|---|---|---|---|------------------------|
+| ------ | --- | --- | --- | --- | ------------------------ |
 | Top | 52 | 48 | 4 | 4 | X:52–55, Y:48–51 |
 | Bottom | 56 | 48 | 4 | 4 | X:56–59, Y:48–51 |
 | Right | 48 | 52 | 4 | 12 | X:48–51, Y:52–63 |
@@ -214,7 +216,7 @@ Every drawable region is defined by **X, Y, Width, Height** (0-indexed). Use the
 ### Transparency Rules
 
 | Layer type | Parts | Transparency |
-|------------|-------|--------------|
+| ------------ | ------- | -------------- |
 | **Primary** | Head, Body, Right Leg, Left Leg, Right Arm, Left Arm | No transparency. Replace transparent pixels with solid color (e.g. skin tone or black) or avoid leaving them empty. |
 | **Overlay** | Hat, Jacket, Right Pants, Left Pants, Right Sleeves, Left Sleeves | Transparency allowed. Use for holes, visors, open jackets, shorts, cuffs, etc. |
 
@@ -235,7 +237,7 @@ This section is for AI agents that generate Minecraft skins using ImageMagick or
 ### Color Theory for Skins
 
 | Scheme | Use case | Example |
-|--------|----------|---------|
+| -------- | ---------- | --------- |
 | **Complementary** | High contrast, striking | Red + green, blue + orange |
 | **Analogous** | Cohesive, smooth | Blue, teal, green |
 | **Triadic** | Balanced, vibrant | Red, yellow, blue |
@@ -255,7 +257,8 @@ This section is for AI agents that generate Minecraft skins using ImageMagick or
 ### Fashion Design Patterns
 
 | Pattern | Description | How to apply in ImageMagick |
-|---------|-------------|-----------------------------|
+| --------- | ------------- | ----------------------------- |
+
 | **Solid** | Single flat color | `-fill #RRGGBB -draw "rectangle X,Y W,H"` |
 | **Horizontal stripes** | Bands across | Create small stripe tile, then `-tile stripe.png -draw "rectangle X,Y W,H"` |
 | **Vertical stripes** | Bands down | Same, rotate tile 90° |
@@ -273,6 +276,7 @@ This section is for AI agents that generate Minecraft skins using ImageMagick or
 Create a small pattern tile (e.g. 4×4, 8×8) and use ImageMagick `-tile` to repeat it across a region.
 
 **Example patterns:**
+
 - **Floral:** Small flower shapes, repeat.
 - **Geometric:** Triangles, diamonds, hexagons.
 - **Camouflage:** Organic blobs in 2–3 colors.
@@ -281,6 +285,7 @@ Create a small pattern tile (e.g. 4×4, 8×8) and use ImageMagick `-tile` to rep
 - **Star/confetti:** Scattered small shapes.
 
 **ImageMagick tile workflow:**
+
 ```bash
 # Create 4×4 pattern
 convert -size 4x4 xc:none \
@@ -296,22 +301,26 @@ convert result.png -tile pattern.png -draw "rectangle 20,20 28,32" result.png
 ### ImageMagick Command Reference
 
 **Create blank skin (transparent):**
+
 ```bash
 convert -size 64x64 xc:none skin.png
 ```
 
 **Create blank skin (solid base, e.g. skin tone):**
+
 ```bash
 convert -size 64x64 xc:'#D4A574' skin.png
 ```
 
 **Fill a rectangular region with solid color:**
+
 ```bash
 convert skin.png -fill '#RRGGBB' -draw "rectangle X,Y X+W-1,Y+H-1" skin.png
 ```
 Note: ImageMagick `rectangle` uses top-left (X,Y) and bottom-right (X2,Y2). Use `X+W-1`, `Y+H-1` for inclusive bounds.
 
 **Fill multiple regions (same color):**
+
 ```bash
 convert skin.png -fill '#RRGGBB' \
   -draw "rectangle 20,20 28,32" \
@@ -320,6 +329,7 @@ convert skin.png -fill '#RRGGBB' \
 ```
 
 **Create gradient and paste into region:**
+
 ```bash
 convert -size 8x12 gradient:#FF0000-#0000FF gradient_body.png
 convert skin.png gradient_body.png -geometry +20+20 -composite skin.png
@@ -334,11 +344,12 @@ convert skin.png -tile mpr:pat -draw "rectangle 20,20 28,32" skin.png
 ### Region → ImageMagick Bounds (X,Y to X2,Y2)
 
 For `rectangle X,Y X2,Y2`, use:
+
 - **X2 = X + Width - 1**
 - **Y2 = Y + Height - 1**
 
 | Part | Region | draw "rectangle X,Y X2,Y2" |
-|------|--------|----------------------------|
+| ------ | -------- | ---------------------------- |
 | Head front | 8,8 8×8 | 8,8 15,15 |
 | Body front | 20,20 8×12 | 20,20 27,31 |
 | Right leg front | 4,20 4×12 | 4,20 7,31 |
@@ -390,7 +401,7 @@ left_sleeve_*: (see table section 12)
 ## Appendix: Quick Bounds Table (X, Y, W, H)
 
 | Part | X | Y | W | H |
-|------|---|---|---|---|
+| ------ | --- | --- | --- | --- |
 | Head | 0 | 0 | 32 | 16 |
 | Hat | 32 | 0 | 32 | 16 |
 | Body | 16 | 16 | 24 | 16 |

@@ -7,7 +7,7 @@ A lift-and-shift analysis for porting the Minecraft 3D Character Viewer from Thr
 ## 1. Executive Summary
 
 | Aspect | Verdict |
-|--------|---------|
+| -------- | --------- |
 | **Feasibility** | Feasible but non-trivial |
 | **Effort** | Medium–High |
 | **Critical blocker** | FBX pipeline — Babylon.js has no built-in FBX loader |
@@ -22,7 +22,7 @@ Migration is achievable but requires an asset conversion pipeline and significan
 ### 2.1 Renderer
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **File** | [src/main.ts](src/main.ts) L219–245 |
 | **API** | `THREE.WebGLRenderer`, antialiasing, PCF soft shadows |
 | **Setup** | `shadowMap.enabled`, `shadowMap.type = PCFSoftShadowMap`, pixel ratio capped at 2 |
@@ -31,7 +31,7 @@ Migration is achievable but requires an asset conversion pipeline and significan
 ### 2.2 Camera
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **File** | [src/main.ts](src/main.ts) L225–240 |
 | **API** | `THREE.PerspectiveCamera`, `OrbitControls` |
 | **Config** | FOV 45°, near 0.1, far 100; position (0, 1.5, Z); target (0, 1, 0) |
@@ -40,7 +40,7 @@ Migration is achievable but requires an asset conversion pipeline and significan
 ### 2.3 Trapezoid Bounds (Bounding Region)
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **File** | [src/trapezoidBounds.ts](src/trapezoidBounds.ts) |
 | **Logic** | Not a visual AABB — frustum-derived trapezoid in XZ for walk limits |
 | **Functions** | `getTrapezoidBounds()`, `clampToTrapezoid()` |
@@ -49,7 +49,7 @@ Migration is achievable but requires an asset conversion pipeline and significan
 ### 2.4 Model
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **File** | [src/main.ts](src/main.ts) L450–531 |
 | **Loader** | `FBXLoader` |
 | **Scale** | 0.01 (FBX exported at centimeter scale) |
@@ -59,7 +59,7 @@ Migration is achievable but requires an asset conversion pipeline and significan
 ### 2.5 Skin Rendering
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **File** | [src/main.ts](src/main.ts) L377–431, 507–552 |
 | **Source** | 64×64 PNG, `MINECRAFT_SKIN_UVS` per body part |
 | **Mapping** | `_getMinecraftPartFromMeshName()` maps mesh names to skin regions |
@@ -71,7 +71,7 @@ Migration is achievable but requires an asset conversion pipeline and significan
 ### 2.6 Animations
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **Files** | [src/main.ts](src/main.ts), [src/animationManager.ts](src/animationManager.ts) |
 | **API** | `THREE.AnimationMixer`, `THREE.AnimationAction` |
 | **Flow** | `mixer.update(delta)` in animate loop; `fadeToAction()` cross-fades |
@@ -84,7 +84,7 @@ All FBX clips are in-place (no root motion). Downloaded from Mixamo with "Withou
 ### 2.8 Animation Sequences
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **File** | [src/animationManager.ts](src/animationManager.ts) |
 | **API** | `playSequence([steps])` — steps: `animation`, `walkTo`, `pause` |
 | **Walk flow** | Turn → start-walking → walking (lerp position) → stop-walking |
@@ -94,7 +94,7 @@ All FBX clips are in-place (no root motion). Downloaded from Mixamo with "Withou
 ### 2.9 State Engine
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **File** | [src/characterAI.ts](src/characterAI.ts) |
 | **States** | idle → wandering (after 10s) \| noticing (user activity) → approaching → interacting |
 | **Features** | Micro-emotes, procedural head look-at, body turn toward camera |
@@ -115,7 +115,7 @@ All FBX clips are in-place (no root motion). Downloaded from Mixamo with "Withou
 ### Stay with Three.js
 
 | Benefit | Detail |
-|---------|--------|
+| --------- | -------- |
 | **FBX in-place** | Direct FBX loading; no conversion pipeline |
 | **Mature Mixamo path** | Mixamo → FBX → Three.js is well documented |
 | **No asset changes** | Existing FBX and skins remain as-is |
@@ -128,7 +128,7 @@ All FBX clips are in-place (no root motion). Downloaded from Mixamo with "Withou
 ### Move to Babylon.js
 
 | Benefit | Detail |
-|---------|--------|
+| --------- | -------- |
 | **Inspector** | Built-in scene inspector (`@babylonjs/inspector`) |
 | **Tooling** | Babylon.js Editor available |
 | **Features** | Physics, particles, GUI, sound built in |
@@ -141,7 +141,7 @@ All FBX clips are in-place (no root motion). Downloaded from Mixamo with "Withou
 ## 4. Problematic Parts (Detailed)
 
 | Severity | Area | Issue | Impact |
-|----------|------|-------|--------|
+| ---------- | ------ | ------- | -------- |
 | **Critical** | FBX | Babylon.js has no built-in FBX loader | Must convert all FBX to glTF or .babylon via Blender (or similar) |
 | **High** | Animation API | Different model: `Skeleton`, `AnimationGroup` vs `AnimationMixer` | Crossfade, loop modes, events must be reimplemented |
 | **Medium** | BonesCharacter | Converted rigs may change bone names | `findBonesCharacter`, `getBonesCharacterYawDeg`, `resetBonesCharacter` need remapping |
@@ -157,7 +157,7 @@ All FBX clips are in-place (no root motion). Downloaded from Mixamo with "Withou
 The logging system is **framework-agnostic** and requires no changes.
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **File** | [src/logger.ts](src/logger.ts) |
 | **Dependencies** | No Three.js imports; uses `console`, `fetch`, `performance`, `localStorage`, URL params |
 | **Instrumentation** | Same calls: `logger.info('animation', 'Walk start', {...})` etc. |
@@ -173,7 +173,7 @@ See [docs/LOGGING-IMPLEMENTATION.md](docs/LOGGING-IMPLEMENTATION.md) for integra
 ### Current Custom Debug Tools
 
 | Tool | Purpose | Three.js-specific? |
-|------|---------|--------------------|
+| ------ | --------- | -------------------- |
 | Isolated test page | Turn/walk without characterAI | Uses `getCharacter`, `animationManager`, camera |
 | Pause / step frame | Freeze loop, advance one frame | `mixer.update()`, `animationManager.tick()` |
 | Debug overlay | model.rotation.y, active action, turnLerp, etc. | `char.model`, `char.currentAction`, `getDebugState()` |
@@ -189,7 +189,7 @@ See [docs/LOGGING-IMPLEMENTATION.md](docs/LOGGING-IMPLEMENTATION.md) for integra
 ### Compatibility
 
 | Current tool | Babylon equivalent | Works same? |
-|--------------|--------------------|-------------|
+| -------------- | -------------------- | ------------- |
 | Isolated test page | Same concept | Yes — rewire to Babylon scene/character |
 | Pause / step | Same concept | Yes — Babylon has `scene.paused` |
 | Debug overlay | Custom | Yes — keep overlay, change data sources |
@@ -261,7 +261,7 @@ flowchart TD
 ## 8. Recommendation
 
 | Scenario | Recommendation |
-|----------|----------------|
+| ---------- | ---------------- |
 | **Prioritize FBX workflow, low risk, minimal effort** | Stay with Three.js |
 | **Prioritize Inspector, WebGPU, or advanced features** | Migrate to Babylon.js if asset conversion work is acceptable |
 
@@ -280,7 +280,7 @@ flowchart TD
 ## 10. Dependencies
 
 | Dependency | Purpose |
-|------------|---------|
+| ------------ | --------- |
 | FBX2glTF (recommended) | Batch FBX → glTF without Blender; see Section 11 |
 | Blender (optional) | FBX → glTF if Blender-specific processing needed |
 | `@babylonjs/core` | Core engine and loaders |
@@ -299,7 +299,7 @@ Batch conversion of FBX to glTF is feasible. The project has **38 animations** a
 [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) is a command-line tool that converts FBX to glTF 2.0. No Blender required.
 
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **Binaries** | Prebuilt for Windows, macOS, Linux |
 | **Single file** | `FBX2glTF --binary -i input.fbx -o output` |
 | **Output** | `.glb` (binary) or `.gltf` (JSON) |
@@ -325,6 +325,7 @@ blender --background -P convert_fbx_to_gltf.py
 ```
 
 **Sample script (`convert_fbx_to_gltf.py`):**
+
 ```python
 import bpy
 import os
@@ -349,7 +350,7 @@ for d, out in [(anim_dir, out_anim), (model_dir, out_model)]:
 ### 11.3 Recommendation
 
 | Approach | When to use |
-|----------|-------------|
+| ---------- | ------------- |
 | **FBX2glTF** | Default — no Blender dependency, fast, CI-friendly |
 | **Blender Python** | When Blender-specific edits or rig fixes are required |
 

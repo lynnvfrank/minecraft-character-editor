@@ -36,40 +36,57 @@ Usability session notes with Mazi (12) and Arlo (8). Ordered by usability impact
 - **✅** **3D on-screen camera controls** — Add on-screen buttons to move/rotate the 3D camera (physical controls instead of only mouse).
 - **✅** **Physical camera controls** — Allow moving the camera at an angle around the frozen character.
 
-### Character identity
-
-- ⬜️ **Name the character** — Let users give the character a name.
-
 ---
 
 ## Enhancements (medium priority)
 
-- ⬜️ **Creator.2D Skin swatches** - updates more often than at the start
-- ⬜️ **Progressive disclosure** — Unlock outfit pieces as users select different outfits; outerwear later; body parts first.
-- ⬜️ **“Level up” moment** — Character starts dancing and new controls appear progressively
-- ⬜️  **Group body parts and outerwear** — Separate body parts from outerwear in the UI.
-- ⬜️  **Doll shape for layers** — Use a doll/mannequin shape for the outerwear panel phots (models with a color that constrasts the choice: white to black or the traditional pick color that games have used).
-- ⬜️  Undo/Redo visual history. The panel for undo/redo "creator-undo-redo-panel" could have a draw to pop out that lets you see the skin at various stages. It could also show each of the operations
+### User Customization
+
+- ⬜️ **Name the character** — Let users give the character a name
+
+### Creator
+
+- ⬜️ **Wardrobe mode views** — (1) “Follow the outfit” — camera tracks selected part; (2) “Static zoomed out” — fixed view that never tracks
+- ⬜️ **Doll shape for layers** — Use a doll/mannequin shape for the outerwear panel phots (models with a color that contrasts the choice: white to black or the traditional pick color that games have used).
+- ⬜️ **Group body parts and outerwear** — Separate body parts from outerwear in the UI.
+- ⬜️ **Creator.3D/2D** - Undo/Redo visual history. The panel for undo/redo "creator-undo-redo-panel" could have a draw to pop out that lets you see the skin at various stages. It could also show each of the operations
   - brush [color] (x,y)
   - erase (x,y)
   - fill [color] (x,y)
-- ⬜️  **Color panel order** — progressive disclosure: Lead with skin color swatches, then highlight/shadow, then color wheel and swatch history.
-- ⬜️ **Wardrobe mode views** — (1) “Follow the outfit” — camera tracks selected part; (2) “Static zoomed out” — fixed view that never tracks.
 
-### Creator.2D view
+- ⬜️ **Creator.2D Skin swatches** - updates more often than at the start
+- ⬜️ **Hidden layers** — When layers are hidden: collapse the view, show a note about hidden parts, or make them visible in some way
+- ⬜️ **Creator.2D camera focus** — When layers are hidden, focus the camera on the visible part
+- ⬜️ **Creator2d 3D camera view moves to paint location** — Animate the 3D camera toward where paint is placed
+- ⬜️ **Mannequin mode** — Shopping outer layers with blank face, solid color characters, possibly computed.
 
-- ⬜️ **Hidden layers** — When layers are hidden: collapse the view, show a note about hidden parts, or make them visible in some way.
-- ⬜️ **2D camera focus** — When layers are hidden, focus the camera on the visible part.
-- ⬜️ **3D camera to paint location** — Animate the 3D camera toward where paint is placed.
+### Preview Generation
 
----
+- ⬜️ **Mannequin for Preview Generation** — the current parts images use a model with colors. The base model to appear in the preview would be more neutral and showcase the layer better
 
 ## Bigger concepts (lower priority)
 
-- ⬜️  **Seed skins** — Seed initial skins to show body vs. outerwear contrast.
-- ⬜️  **Mannequin mode** — Shopping outer layers with blank face, solid color characters, possibly computed.
+### User Impact
+
+- ⬜️  **Seed skins** — Seed initial skins to show body vs. outerwear contrast
+- ⬜️  **User controls** - user is able to move the character around the world
+
+### Experiences
+
+- ⬜️  **Home mode world** — Home mode loads a world or environment around the character
 - ⬜️  **Runway mode** — Watch outfits go by, emote to react, earn outfits through participation.
+
+### User Onboarding
+
+- ⬜️ **Progressive disclosure** — Unlock outfit pieces as users select different outfits; outerwear later; body parts first.
+- ⬜️ **Color panel order** — progressive disclosure: Lead with skin color swatches, then highlight/shadow, then color wheel and swatch history.
+- ⬜️ **“Level up” moment** — Character starts dancing and new controls appear progressively
 - ⬜️  **Progressive unlock UX** — Lock some features behind operations, always with a bypass; unlock via engagement.\
+
+## User Experience
+
+- ⬜️  **Touch screen** - built with touch screen devices in mind
+- ⬜️  **Controller support** - user is able to use a controller to move the character in home and creator modes
 
 ---
 
@@ -79,3 +96,4 @@ Usability session notes with Mazi (12) and Arlo (8). Ordered by usability impact
 - Mazi understood the layers idea quickly.
 - Locks made sense once explained; lock feedback would help before explanation.
 - Skin color swatches are a strong starting point for the color panel.
+
