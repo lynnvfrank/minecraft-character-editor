@@ -9,6 +9,7 @@ export {
   adjustHexBrightness,
   Color
 } from './color';
+export { easeOutCubic } from './easing';
 export {
   getTrapezoidBounds,
   clampToTrapezoid,

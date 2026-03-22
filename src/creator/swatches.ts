@@ -1,7 +1,100 @@
-import { subscribe, CREATOR_EVENTS } from './events';
-import { isValidHex } from '../lib/color';
+import { registerComponentBindings, CREATOR_EVENTS } from '../events/appEvents';
+import { isValidHex, normalizeHex, rgbToHex, hexToRgb } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { SwatchesContext, SwatchPaletteId } from './api';
+import type { CreatorState } from '../state';
+
+/** Squared RGB distance between two hex colors (faster than sqrt). */
+export function colorDistanceSq(a: string, b: string): number {
+  const [r1, g1, b1] = hexToRgb(a);
+  const [r2, g2, b2] = hexToRgb(b);
+  return (r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2;
+}
+
+/** Extract unique colors from skin canvas, selecting a diverse subset. Returns up to maxColors hex colors. */
+export function extractColorsFromSkin(canvas: HTMLCanvasElement, maxColors = 25): string[] {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return [];
+  const w = canvas.width;
+  const h = canvas.height;
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const seen = new Set<string>();
+  const alphaThreshold = 16;
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3];
+    if (a < alphaThreshold) continue;
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const hex = rgbToHex(r, g, b).toLowerCase();
+    seen.add(hex);
+  }
+  const unique = Array.from(seen);
+  if (unique.length <= maxColors) return unique;
+  const selected: string[] = [unique[0]!];
+  const remaining = new Set(unique.slice(1));
+  while (selected.length < maxColors && remaining.size > 0) {
+    let bestColor = '';
+    let bestMinDist = -1;
+    for (const c of remaining) {
+      let minDist = Infinity;
+      for (const s of selected) {
+        const d = colorDistanceSq(c, s);
+        if (d < minDist) minDist = d;
+      }
+      if (minDist > bestMinDist) {
+        bestMinDist = minDist;
+        bestColor = c;
+      }
+    }
+    if (bestColor) {
+      selected.push(bestColor);
+      remaining.delete(bestColor);
+    } else break;
+  }
+  return selected;
+}
+
+export type ColorActions = {
+  addToSwatch: (hex: string) => void;
+  applyColorToUI: (hex: string, addToSwatchList?: boolean, markAsUserSelected?: boolean) => void;
+  setSwatchAt: (index: number, hex: string) => void;
+};
+
+/** Create color actions that modify state and publish events. */
+export function createColorActions(
+  state: CreatorState,
+  publish: (event: string, detail?: unknown) => void,
+  swatchMax: number
+): ColorActions {
+  function addToSwatch(hex: string): void {
+    const normalized = hex.toLowerCase();
+    state.swatchColors = state.swatchColors.filter((c) => c.toLowerCase() !== normalized);
+    state.swatchColors.unshift(normalized);
+    if (state.swatchColors.length > swatchMax) state.swatchColors.pop();
+    publish(CREATOR_EVENTS.SWATCH_HISTORY_CHANGE);
+  }
+
+  function applyColorToUI(hex: string, addToSwatchList = true, markAsUserSelected = true): void {
+    const normalized = normalizeHex(hex);
+    if (!normalized) return;
+    if (markAsUserSelected) state.userHasSelectedColor = true;
+    state.currentColor = normalized;
+    if (addToSwatchList) addToSwatch(normalized);
+    publish(CREATOR_EVENTS.CURRENT_COLOR_CHANGE, { color: normalized });
+  }
+
+  function setSwatchAt(index: number, hex: string): void {
+    if (state.activeSwatchPalette !== 'history') return;
+    const normalized = normalizeHex(hex);
+    if (!normalized) return;
+    while (state.swatchColors.length <= index) state.swatchColors.push('');
+    state.swatchColors[index] = normalized;
+    publish(CREATOR_EVENTS.SWATCH_HISTORY_CHANGE);
+  }
+
+  return { addToSwatch, applyColorToUI, setSwatchAt };
+}
 
 const PALETTES: { id: SwatchPaletteId; label: string }[] = [
   { id: 'history', label: 'History' },
@@ -172,12 +265,18 @@ export function buildSwatchesPanel(ctx: SwatchesContext): void {
     if (swatchesMinimized) updateHeaderCollapsedDisplay();
   };
 
-  subscribe(CREATOR_EVENTS.SWATCH_HISTORY_CHANGE, refreshSlots);
-  subscribe(CREATOR_EVENTS.SWATCH_PALETTE_CHANGE, () => {
-    updateTabsActive();
-    refreshSlots();
-  });
-  subscribe(CREATOR_EVENTS.SKIN_LOAD_CHANGE, refreshSlots);
+  registerComponentBindings([
+    { event: CREATOR_EVENTS.SWATCH_HISTORY_CHANGE, scope: 'creator', handler: () => refreshSlots() },
+    {
+      event: CREATOR_EVENTS.SWATCH_PALETTE_CHANGE,
+      scope: 'creator',
+      handler: () => {
+        updateTabsActive();
+        refreshSlots();
+      },
+    },
+    { event: CREATOR_EVENTS.SKIN_LOAD_CHANGE, scope: 'creator', handler: () => refreshSlots() },
+  ]);
 
   container.appendChild(panel);
   updateTabsActive();

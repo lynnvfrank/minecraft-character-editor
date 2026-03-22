@@ -1,5 +1,5 @@
-import { subscribe, CREATOR_EVENTS } from './events';
-import type { CreatorTexturePositionDetail, CreatorLockFeedbackDetail } from './events';
+import { registerComponentBindings, CREATOR_EVENTS } from '../events/appEvents';
+import type { CreatorTexturePositionDetail, CreatorLockFeedbackDetail } from '../events/appEvents';
 import type { SkinLayersContext, PartSide } from './api';
 import { createIcon } from './icons';
 import { isLayerWithParts } from '../skin';
@@ -254,38 +254,52 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   updateCollapsedUI();
   updateLayerButtonUI(panel);
 
-  subscribe(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, (e: CustomEvent<CreatorTexturePositionDetail>) => {
-    const layer = e.detail?.layer ?? null;
-    const layersPanel = document.getElementById('creator-layers-panel');
-    if (!layersPanel) return;
-    layersPanel.querySelectorAll<HTMLElement>('.creator-layers-panel-row').forEach((row) => {
-      const rowLayer = row.dataset.layer;
-      const shouldHighlight = layer != null && rowLayer === layer;
-      row.classList.toggle('creator-layers-panel-row-highlight', !!shouldHighlight);
-    });
-  });
-
-  subscribe(CREATOR_EVENTS.LAYER3D_CHANGE, () => {
-    if (panel) updateLayerButtonUI(panel);
-  });
-
   const LOCK_FEEDBACK_DURATION_MS = 400;
-  subscribe(CREATOR_EVENTS.LOCK_FEEDBACK, (e: CustomEvent<CreatorLockFeedbackDetail>) => {
-    const layer = e.detail?.layer;
-    if (!layer) return;
-    const panelEl = document.getElementById('creator-layers-panel');
-    if (!panelEl) return;
-    const row = panelEl.querySelector<HTMLElement>(`.creator-layers-panel-row[data-layer="${layer}"]`);
-    if (!row) return;
-    const lockEl = row.querySelector<SVGElement>('.creator-layer-lock');
-    row.classList.add('creator-layer-row-wiggle');
-    if (lockEl) lockEl.classList.add('creator-layer-lock-flash');
-    const clear = () => {
-      row.classList.remove('creator-layer-row-wiggle');
-      if (lockEl) lockEl.classList.remove('creator-layer-lock-flash');
-    };
-    setTimeout(clear, LOCK_FEEDBACK_DURATION_MS);
-  });
+  registerComponentBindings(
+    [
+      {
+        event: CREATOR_EVENTS.TEXTURE_POSITION_CHANGE,
+        scope: 'creator',
+        handler: (e: CustomEvent<CreatorTexturePositionDetail>) => {
+          const layer = e.detail?.layer ?? null;
+          const layersPanel = document.getElementById('creator-layers-panel');
+          if (!layersPanel) return;
+          layersPanel.querySelectorAll<HTMLElement>('.creator-layers-panel-row').forEach((row) => {
+            const rowLayer = row.dataset.layer;
+            const shouldHighlight = layer != null && rowLayer === layer;
+            row.classList.toggle('creator-layers-panel-row-highlight', !!shouldHighlight);
+          });
+        },
+      },
+      {
+        event: CREATOR_EVENTS.LAYER3D_CHANGE,
+        scope: 'creator',
+        handler: () => {
+          if (panel) updateLayerButtonUI(panel);
+        },
+      },
+      {
+        event: CREATOR_EVENTS.LOCK_FEEDBACK,
+        scope: 'creator',
+        handler: (e: CustomEvent<CreatorLockFeedbackDetail>) => {
+          const layer = e.detail?.layer;
+          if (!layer) return;
+          const panelEl = document.getElementById('creator-layers-panel');
+          if (!panelEl) return;
+          const row = panelEl.querySelector<HTMLElement>(`.creator-layers-panel-row[data-layer="${layer}"]`);
+          if (!row) return;
+          const lockEl = row.querySelector<SVGElement>('.creator-layer-lock');
+          row.classList.add('creator-layer-row-wiggle');
+          if (lockEl) lockEl.classList.add('creator-layer-lock-flash');
+          const clear = () => {
+            row.classList.remove('creator-layer-row-wiggle');
+            if (lockEl) lockEl.classList.remove('creator-layer-lock-flash');
+          };
+          setTimeout(clear, LOCK_FEEDBACK_DURATION_MS);
+        },
+      },
+    ]
+  );
 
   upperLeftPanels.appendChild(panel);
 }

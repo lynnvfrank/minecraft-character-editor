@@ -86,6 +86,9 @@ The app is intended to work on macOS, Windows, and Linux, but packaging is most 
 6. **Known platform quirk**
    - Mac Retina cursor ghosting in creator paint mode is a known issue (see `docs/TROUBLESHOOTING.md`).
 
+7. **External skin/animation control**
+   - POST `/api/skin` and `/api/animation` (or socket) drive the character in home mode. Events flow through the app event system; see `docs/concepts/EVENT-SYSTEM.md`.
+
 ## High-Value Files
 
 - `src/main.ts` - app orchestration, model load, skin/animation behavior
@@ -105,6 +108,10 @@ The app is intended to work on macOS, Windows, and Linux, but packaging is most 
 
 ## Related Docs
 
+- `docs/concepts/CHARACTERS.md` - Character data model, config, event payloads
+- `docs/concepts/CONFIGURATION.md` - Configurable options, merge order
+- `docs/concepts/EVENT-SYSTEM.md` - App events, skin/animation handlers
+- `docs/concepts/SCENE-CONTEXT.md` - Scene ownership, adding characters
 - `docs/NPM-TOOLING.md`
 - `docs/ELECTRON-PACKAGING.md`
 - `docs/TROUBLESHOOTING.md`

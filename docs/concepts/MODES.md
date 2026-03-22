@@ -161,6 +161,30 @@ Submodes share **`route: creator`** and differ by `state.editMode` in `src/creat
 
 ---
 
+## Transition flow
+
+Design click and Home button transitions are coordinated by the **creator transition handler** (`src/controllers/transitions/creatorTransitionHandler.ts`):
+
+1. **Design click** → `transitionHandler.enterCreator()` → waits for clip, stops animation manager, applies pose, animates camera, sets `location.hash` → `hashchange` → `syncModeMachineFromHash` → machine sends `GO_CREATOR` → entry runs `applyRoute`
+2. **Home button** → `transitionHandler.exitCreator()` → normalizes layers, sets tool, delay, sets `location.hash = '#/'` → `hashchange` → machine sends `GO_HOME` → entry runs `applyRoute`
+
+The handler encapsulates `creatorTransitionInFlight` so buttons can show "Designing..." and disable during transitions. `applyRoute` remains the callback for applying UI and behavior; the machine continues to receive events via hash sync.
+
+```mermaid
+flowchart LR
+  Design[Design click] --> TH[creatorTransitionHandler]
+  Home[Home button] --> TH
+  TH -->|enterCreator| Hash1[location.hash = #/creator/...]
+  TH -->|exitCreator| Hash2[location.hash = #/]
+  Hash1 --> HC[hashchange]
+  Hash2 --> HC
+  HC --> Sync[syncModeMachineFromHash]
+  Sync --> MM[appModeMachine]
+  MM -->|GO_CREATOR / GO_HOME| Apply[applyRoute]
+```
+
+---
+
 ## Combined transition diagram
 
 ```mermaid
@@ -199,6 +223,7 @@ flowchart TB
 | Mode change event | `CREATOR_EVENTS.EDIT_MODE_CHANGE` in `src/creatorEvents.ts` |
 | Mode toggle UI | `src/creator/editorToolsPanel.ts` (Wardrobe / 3D / 2D buttons, keys 1–3) |
 | Layout: where the WebGL canvas lives | `updateCreator3DViewPlacement()` in `src/main.ts` |
+| Design/Home transitions | `createCreatorTransitionHandler()` in `src/controllers/transitions/creatorTransitionHandler.ts` |
 
 ---
 

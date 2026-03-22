@@ -12,6 +12,7 @@ import {
   clampToTrapezoid,
   WALK_CYCLE_DISTANCE
 } from '../lib/trapezoidBounds';
+import { DEFAULT_CHARACTER_ID } from '../domain';
 
 /** Minimal character state required for animation manager (main's CharacterState extends this) */
 export type CharacterStateLike = {
@@ -132,7 +133,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   function getStrategy(): TurnStrategy {
     return getTurnStrategy?.() ?? 'lerp';
   }
-  const CHAR_ID = 'runningboy';
+  const CHAR_ID = DEFAULT_CHARACTER_ID;
 
   let queue: SequenceStep[] = [];
   let isPlaying = false;

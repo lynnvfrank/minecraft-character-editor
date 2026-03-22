@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import type { SequenceStep } from '../animation';
 import { logFacingChange } from '../debug/debugFacing';
+import { DEFAULT_CHARACTER_ID } from '../domain';
 
 /** Minimal character state (matches main's CharacterState / CharacterStateLike) */
 export type CharacterStateLike = {
@@ -45,7 +46,7 @@ export type CharacterAIDeps = {
   };
 };
 
-const CHAR_ID = 'runningboy';
+const CHAR_ID = DEFAULT_CHARACTER_ID;
 
 /** Micro-emotes for idle variations — quick, non-disruptive */
 const IDLE_MICRO_EMOTES = [

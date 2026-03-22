@@ -11,6 +11,9 @@ export type SceneContext = {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   controls: OrbitControls;
+  clock: THREE.Clock;
+  characters: Record<string, unknown>;
+  container: HTMLElement;
 };
 
 const DEFAULT_PARAMS = new URLSearchParams();
@@ -42,7 +45,8 @@ export function initScene(
   addLights(scene);
   addGround(scene);
 
-  return { scene, camera, renderer, controls };
+  const clock = new THREE.Clock();
+  return { scene, camera, renderer, controls, clock, characters: {}, container };
 }
 
 export function addLights(scene: THREE.Scene): void {

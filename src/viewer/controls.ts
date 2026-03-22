@@ -23,7 +23,7 @@ import {
   updateHoverInfo,
   getPartDisplayNameAtCoords
 } from '../creator';
-import { subscribe, publish, CREATOR_EVENTS } from '../creator/events';
+import { subscribe, publish, CREATOR_EVENTS } from '../events/appEvents';
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();

@@ -1,5 +1,6 @@
-import { subscribe, CREATOR_EVENTS } from './events';
-import type { CreatorTexturePositionDetail } from './events';
+import { registerComponentBindings, CREATOR_EVENTS } from '../events/appEvents';
+import type { CreatorTexturePositionDetail } from '../events/appEvents';
+import { TOOL_LABELS, type DrawingTool } from './api';
 import { getCreatorPanelsContainer } from './container';
 
 export function buildTexturePositionPanel(): void {
@@ -39,55 +40,55 @@ export function buildTexturePositionPanel(): void {
   panel.appendChild(textSpan);
 
   const formatToolName = (tool: CreatorTexturePositionDetail['tool'] | undefined): string => {
-    switch (tool) {
-      case 'brush': return 'Brush';
-      case 'eraser': return 'Eraser';
-      case 'fill': return 'Fill';
-      case 'eyedropper': return 'Dropper';
-      default: return 'Navigate';
-    }
+    return tool && tool in TOOL_LABELS ? TOOL_LABELS[tool as DrawingTool] : TOOL_LABELS.navigate;
   };
 
   const setEmpty = () => {
     textSpan.textContent = '—';
   };
 
-  subscribe(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, (e: CustomEvent<CreatorTexturePositionDetail>) => {
-    const { skinX, skinY, tool, currentColor, hoverColor } = e.detail ?? {
-      skinX: -1,
-      skinY: -1,
-      tool: 'navigate',
-      currentColor: null,
-      hoverColor: null
-    };
+  registerComponentBindings([
+    {
+      event: CREATOR_EVENTS.TEXTURE_POSITION_CHANGE,
+      scope: 'creator',
+      handler: (e: CustomEvent<CreatorTexturePositionDetail>) => {
+        const { skinX, skinY, tool, currentColor, hoverColor } = e.detail ?? {
+          skinX: -1,
+          skinY: -1,
+          tool: 'navigate',
+          currentColor: null,
+          hoverColor: null
+        };
 
-    if (skinX < 0 || skinY < 0) {
-      setEmpty();
-      return;
-    }
+        if (skinX < 0 || skinY < 0) {
+          setEmpty();
+          return;
+        }
 
-    if (!textSpan.contains(toolSpan)) {
-      textSpan.replaceChildren(toolSpan, colorSpan, coordsSpan);
-    }
+        if (!textSpan.contains(toolSpan)) {
+          textSpan.replaceChildren(toolSpan, colorSpan, coordsSpan);
+        }
 
-    toolSpan.textContent = `${formatToolName(tool)}`;
+        toolSpan.textContent = `${formatToolName(tool)}`;
 
-    const showCurrentColorSwatch = tool === 'brush' || tool === 'fill';
-    const showHoverColorSwatch = tool === 'eyedropper' || tool === 'eraser';
-    colorSpan.style.display = showCurrentColorSwatch || showHoverColorSwatch ? 'inline-flex' : 'none';
-    if (showCurrentColorSwatch) {
-      colorLabelSpan.textContent = '';
-      const normalizedColor = currentColor ?? '#000000';
-      colorSwatch.style.backgroundColor = normalizedColor;
-    }
-    if (showHoverColorSwatch) {
-      colorLabelSpan.textContent = '';
-      const eyedropColor = hoverColor ?? null;
-      colorSwatch.style.backgroundColor = eyedropColor ?? 'transparent';
-    }
+        const showCurrentColorSwatch = tool === 'brush' || tool === 'fill';
+        const showHoverColorSwatch = tool === 'eyedropper' || tool === 'eraser';
+        colorSpan.style.display = showCurrentColorSwatch || showHoverColorSwatch ? 'inline-flex' : 'none';
+        if (showCurrentColorSwatch) {
+          colorLabelSpan.textContent = '';
+          const normalizedColor = currentColor ?? '#000000';
+          colorSwatch.style.backgroundColor = normalizedColor;
+        }
+        if (showHoverColorSwatch) {
+          colorLabelSpan.textContent = '';
+          const eyedropColor = hoverColor ?? null;
+          colorSwatch.style.backgroundColor = eyedropColor ?? 'transparent';
+        }
 
-    coordsSpan.textContent = `(${skinX},${skinY})`;
-  });
+        coordsSpan.textContent = `(${skinX},${skinY})`;
+      },
+    },
+  ]);
 
   container.appendChild(panel);
 }

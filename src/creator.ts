@@ -1,40 +1,62 @@
 /**
  * Character creator: higher-res working canvas, 64×64 export.
- * Step 2–6: Route, shell, canvas, brush, eraser, fill, layers.
- * Step 7: Undo/Redo.
- * Resolution: work at WORK_SIZE (e.g. 128×128), export downscaled to 64×64.
+ *
+ * Facade that wires wardrobe, modePanels, layerVisibility, canvasCoords,
+ * skinGallery, and swatches. Exposes initCreator, setEditMode, loadSkinFromPath,
+ * and other public APIs.
  */
 
-import { SKIN_LAYER_BOUNDS, SKIN_PART_BOUNDS, isInDeadZone, isLayerKey, isLayerWithParts, LAYER_KEYS, partToLayer, WORK_SIZE, RESOLUTION_MULTIPLIER, type Bounds } from './skin';
-import { subscribe, publish, CREATOR_EVENTS } from './creator/events';
+// --- Imports: skin & domain ---
+import { partToLayer, WORK_SIZE, RESOLUTION_MULTIPLIER } from './skin';
 import type { SkinEntry } from './domain';
-import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode, type PartSide } from './creator/api';
-import { createCreatorState } from './state';
-import { normalizeHex, rgbToHex, hexToRgb } from './lib/color';
+
+// --- Imports: creator modules ---
+import {
+  getSkinCanvas,
+  getLayerAndPartAtCoords,
+  getPartDisplayNameAtCoords,
+  captureCanvasImageData,
+} from './creator/canvasCoords';
 import {
   buildColorToolbar,
   buildColorPickerPanel,
   buildSwatchesPanel,
   buildSkinLayersPanel,
   buildEditorToolsPanel,
+  buildTexturePositionPanel,
   unregisterEditorToolShortcuts,
   buildWardrobePartsPanel,
   buildWardrobeLibraryPanels,
-  renderWardrobeLibraryPanel,
   unregisterWardrobeShortcuts,
-  WARDROBE_PART_PANEL_CONFIGS,
-  getWardrobePanelIdForLayer,
-  buildTexturePositionPanel,
 } from './creator/index';
 import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
-import { getCapture3DThumbnail, getCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
 import * as blockyEditor from './creator/blockyEditor';
+import { createEditorToolKeyBindings } from './creator/shortcuts';
+import { createModePanelTransitions } from './creator/modePanels';
+import { createLayerVisibilityApi } from './creator/layerVisibility';
+import { createWardrobeApi, WARDROBE_ORIGINAL } from './creator/wardrobe';
+import { createColorActions, extractColorsFromSkin } from './creator/swatches';
+import { createSkinGalleryApi } from './creator/skinGallery';
 
+// --- Imports: events, state, lib, viewer ---
+import { subscribe, publish, CREATOR_EVENTS } from './events/appEvents';
+import { createCreatorState } from './state';
+import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode, type PartSide } from './creator/api';
+import { rgbToHex } from './lib/color';
+import { getCapture3DThumbnail, getCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
+
+// --- Constants ---
 const UNDO_LIMIT = 50;
-const SWATCH_MAX = 25; /* 5 columns × 5 rows */
+const SWATCH_MAX = 25;
+const BRUSH_SIZE = 1;
+/** Alpha threshold for eyedropper to treat a pixel as opaque (2/255). */
+export const EYEDROPPER_ALPHA_THRESHOLD = 2 / 255;
+
+const FALLBACK_SKINS: SkinEntry[] = [{ path: '/wardrobe/skins/RunningboyRig.png', label: 'Default' }];
+
 /** Groups for layers panel display; separator shown after each group. */
 const LAYER_GROUPS: readonly (readonly string[])[] = [
   ['hat', 'head'],
@@ -43,392 +65,91 @@ const LAYER_GROUPS: readonly (readonly string[])[] = [
   ['pants', 'legs'],
 ];
 
+// --- Module state ---
 const state = createCreatorState();
-const BRUSH_SIZE = 1;
-const MODE_TRANSITION_MS = 450;
 
-let skinCanvas: HTMLCanvasElement | null = null;
+const modePanelTransitions = createModePanelTransitions();
+const layerVisibilityApi = createLayerVisibilityApi(state, publish);
+const colorActions = createColorActions(state, publish, SWATCH_MAX);
+const { addToSwatch, applyColorToUI, setSwatchAt } = colorActions;
+
 let blockyCtx: blockyEditor.BlockyEditorContext | null = null;
-
-/** True once a skin has been loaded into the creator (from gallery or on route enter). Used to preserve canvas when re-entering creator. */
 let creatorCanvasPopulated = false;
-let modePanelsBound = false;
-let modePanelsCurrentMode: EditMode | null = null;
-let modeTransitionToken = 0;
-let savedLayerStateBeforeNonEditMode: {
-  visible: Record<string, boolean>;
-  partVisible: Record<string, { L?: boolean; R?: boolean }>;
-  locked: Record<string, boolean>;
-} | null = null;
+let creatorCurrentSkinPath: string | null = null;
 
-export function getCreatorCanvasPopulated(): boolean {
-  return creatorCanvasPopulated;
-}
+let loadSkinFromPathFn: (path: string) => Promise<void> = async () => {};
 
+const wardrobeApi = createWardrobeApi({
+  getSkinCanvas,
+  captureCanvasImageData,
+  applyProgrammaticCanvasImage: (data: ImageData) => {
+    const canvas = getSkinCanvas();
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    ctx.putImageData(data, 0, 0);
+    creatorCanvasPopulated = true;
+    state.skinSwatchColors = extractColorsFromSkin(canvas, SWATCH_MAX);
+    if (!state.userHasSelectedColor && state.skinSwatchColors.length > 0) {
+      applyColorToUI(state.skinSwatchColors[0]!, false, false);
+    }
+    if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
+    updateAllUndoRedoButtons();
+    publish(CREATOR_EVENTS.CANVAS_CHANGE);
+  },
+  onLoadSkin: (path) => loadSkinFromPathFn(path),
+  getCapture3DThumbnail,
+  getCapture3DPartThumbnail,
+  getCreatorCanvasPopulated: () => creatorCanvasPopulated,
+  getCreatorCurrentSkinPath: () => creatorCurrentSkinPath,
+  getEditMode: () => state.editMode,
+  updateAllUndoRedoButtons,
+  renderToDisplay: () => { if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx); },
+  animateModePanelIn: modePanelTransitions.animateModePanelIn,
+  animateModePanelOut: modePanelTransitions.animateModePanelOut,
+});
+
+const skinGalleryApi = createSkinGalleryApi({
+  getSkinCanvas,
+  state,
+  setCreatorCanvasPopulated: (v) => { creatorCanvasPopulated = v; },
+  setCreatorCurrentSkinPath: (path) => { creatorCurrentSkinPath = path; },
+  wardrobeApi,
+  publish,
+  applyColorToUI,
+  updateAllUndoRedoButtons,
+  renderToDisplay: () => { if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx); },
+  exportTo64x64DataURL: () => skinIO.exportTo64x64DataURL(getSkinCanvas()),
+  getCapture3DThumbnail,
+  loadSkinToCanvas: skinIO.loadSkinToCanvas,
+  captureCanvasForUndo: skinIO.captureCanvasImageData,
+  pushUndoLoad: (beforeData, afterData) => {
+    state.redoStack = [];
+    state.undoStack.push({ type: 'load', beforeData, afterData });
+    if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
+  },
+  swatchMax: SWATCH_MAX,
+  getWardrobeBaseSkinPath: wardrobeApi.getWardrobeBaseSkinPath,
+});
+
+loadSkinFromPathFn = skinGalleryApi.loadSkinFromPath;
+
+// --- Re-exports ---
+export { WARDROBE_ORIGINAL };
+export { getLayerAtCoords, getLayerAndPartAtCoords, getPartDisplayNameAtCoords } from './creator/canvasCoords';
+export { getBrushCursorStyleFor3D } from './creator/brush';
+export { uvToWorkingCoords } from './skin';
+
+// --- Private helpers ---
 function isCreatorEditMode(mode: EditMode): boolean {
   return mode === EDIT_MODE_2D || mode === EDIT_MODE_3D;
 }
 
-function clearLayerSoloModes(): void {
-  state.layer3DSoloMode = false;
-  state.layer3DSoloBeforeState = null;
-  state.layer3DSoloCurrentLayer = null;
-  state.layer3DSoloLockMode = false;
-  state.layer3DSoloLockBeforeState = null;
-  state.layer3DSoloLockCurrentLayer = null;
+function getOverlayCanvas(): HTMLCanvasElement | null {
+  return document.getElementById('creator-overlay-canvas') as HTMLCanvasElement | null;
 }
 
-function saveLayerStateAndNormalizeForNonEditMode(): void {
-  if (!savedLayerStateBeforeNonEditMode) {
-    savedLayerStateBeforeNonEditMode = {
-      visible: { ...state.layer3DVisible },
-      partVisible: Object.fromEntries(
-        Object.entries(state.layer3DPartVisible).map(([k, v]) => [k, { ...v }])
-      ),
-      locked: { ...state.layer3DLocked },
-    };
-  }
-  clearLayerSoloModes();
-  setLayer3DVisibleAll(Object.fromEntries(LAYER_KEYS.map((k) => [k, true])));
-  state.layer3DPartVisible = {};
-  publish(CREATOR_EVENTS.LAYER3D_CHANGE);
-  setLayer3DLockedAll(Object.fromEntries(LAYER_KEYS.map((k) => [k, false])));
-}
-
-function restoreLayerStateForEditMode(): void {
-  if (!savedLayerStateBeforeNonEditMode) return;
-  clearLayerSoloModes();
-  setLayer3DVisibleAll(savedLayerStateBeforeNonEditMode.visible);
-  state.layer3DPartVisible = Object.fromEntries(
-    Object.entries(savedLayerStateBeforeNonEditMode.partVisible).map(([k, v]) => [k, { ...v }])
-  );
-  setLayer3DLockedAll(savedLayerStateBeforeNonEditMode.locked);
-  savedLayerStateBeforeNonEditMode = null;
-}
-
-type PanelDirection = 'left' | 'right' | 'top' | 'bottom';
-type ModePanelConfig = {
-  id: string;
-  modes: readonly EditMode[];
-  enterFrom: PanelDirection;
-  exitTo: PanelDirection;
-};
-
-const MODE_PANEL_HIDDEN_CLASS = 'creator-mode-panel-hidden';
-const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
-  { id: 'creator-save-download-panel', modes: ['wardrobe', '2d', '3d'], enterFrom: 'left', exitTo: 'left' },
-  { id: 'creator-wardrobe-parts-panel', modes: ['wardrobe'], enterFrom: 'left', exitTo: 'left' },
-  { id: 'creator-upper-right-panels-root', modes: ['wardrobe'], enterFrom: 'right', exitTo: 'right' },
-  { id: 'creator-canvas-overlays-panel', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
-  { id: 'creator-layers-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
-  { id: 'creator-tools-panel', modes: ['2d', '3d'], enterFrom: 'bottom', exitTo: 'bottom' },
-  { id: 'creator-undo-redo-panel', modes: ['2d', '3d'], enterFrom: 'bottom', exitTo: 'bottom' },
-  { id: 'creator-right-panels-group', modes: ['2d', '3d'], enterFrom: 'right', exitTo: 'right' },
-  { id: 'creator-3d-preview-slot', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
-];
-
-import type { WardrobeLayerKey, WardrobePartKey } from './creator/wardrobePartsPanel';
-import { WARDROBE_PART_KEYS } from './creator/wardrobePartsPanel';
-
-/** Sentinel for "use base skin" on overlay parts. Base parts use null. */
-export const WARDROBE_ORIGINAL = '__original__' as const;
-const WARDROBE_OVERLAY_KEYS = ['hat', 'jacket', 'sleeves', 'pants'] as const satisfies readonly WardrobePartKey[];
-
-let wardrobeSelectedLayer: WardrobeLayerKey = 'fullOutfit';
-let wardrobeCompositeToken = 0;
-let creatorCurrentSkinPath: string | null = null;
-let wardrobeBaseSkinPath: string | null = null;
-let wardrobeBaseSkinData: ImageData | null = null;
-let wardrobeLibrariesLoaded = false;
-let wardrobeLibrariesPromise: Promise<void> | null = null;
-const wardrobeImageCache = new Map<string, Promise<HTMLImageElement>>();
-type WardrobeSelectionState = Record<WardrobePartKey, string | null>;
-type WardrobeLibraryState = Record<WardrobePartKey, SkinEntry[]>;
-const wardrobeSelections: WardrobeSelectionState = {
-  hat: WARDROBE_ORIGINAL,
-  head: null,
-  jacket: WARDROBE_ORIGINAL,
-  body: null,
-  arms: null,
-  sleeves: WARDROBE_ORIGINAL,
-  pants: WARDROBE_ORIGINAL,
-  legs: null,
-};
-const wardrobeLibraries: WardrobeLibraryState = {
-  hat: [],
-  head: [],
-  jacket: [],
-  body: [],
-  arms: [],
-  sleeves: [],
-  pants: [],
-  legs: [],
-};
-
-const wardrobeOriginalPreviews: Record<WardrobePartKey, string | null> = {
-  hat: null,
-  head: null,
-  jacket: null,
-  body: null,
-  arms: null,
-  sleeves: null,
-  pants: null,
-  legs: null,
-};
-let wardrobeOriginalPreviewSignature = '';
-let wardrobeOriginalCaptureToken = 0;
-
-/** Skins from /wardrobe/skins/index.json (manifest). */
-let manifestOutfitSkins: SkinEntry[] = [];
-/** Skins saved via the Save button (path = data URL). */
-const savedOutfitSkins: SkinEntry[] = [];
-
-function clearWardrobePanelAnim(el: HTMLElement): void {
-  clearModeAnimClasses(el);
-}
-
-function hideAllWardrobeLibraryPanels(): void {
-  const panels = document.querySelectorAll<HTMLElement>('.creator-wardrobe-library-panel');
-  panels.forEach((panel) => {
-    clearWardrobePanelAnim(panel);
-    setModePanelHidden(panel, true);
-  });
-}
-
-let wardrobePanelTransitionToken = 0;
-
-function showWardrobeLibraryPanel(layer: WardrobeLayerKey | null): void {
-  const targetPanelId = layer ? getWardrobePanelIdForLayer(layer) : null;
-  const targetPanel = targetPanelId ? document.getElementById(targetPanelId) as HTMLElement | null : null;
-  const currentPanel = document.querySelector<HTMLElement>(
-    '.creator-wardrobe-library-panel:not(.creator-mode-panel-hidden)',
-  );
-
-  if (!targetPanel) {
-    hideAllWardrobeLibraryPanels();
-    return;
-  }
-
-  if (!currentPanel || currentPanel === targetPanel) {
-    clearWardrobePanelAnim(targetPanel);
-    setModePanelHidden(targetPanel, false);
-    return;
-  }
-
-  const token = ++wardrobePanelTransitionToken;
-  animateModePanelOut(currentPanel, 'right');
-
-  window.setTimeout(() => {
-    if (token !== wardrobePanelTransitionToken) return;
-    clearModeAnimClasses(currentPanel);
-    setModePanelHidden(currentPanel, true);
-    animateModePanelIn(targetPanel, 'right');
-  }, MODE_TRANSITION_MS);
-}
-
-function setWardrobeSelectedLayer(layer: WardrobeLayerKey): void {
-  wardrobeSelectedLayer = layer;
-  const isBasePart =
-    layer === 'head' || layer === 'body' || layer === 'arms' || layer === 'legs';
-  if (isBasePart && wardrobeSelections[layer] !== null) {
-    wardrobeSelections[layer] = null;
-    syncWardrobeLibraryActiveStates();
-    void resolveWardrobeComposite();
-  }
-  showWardrobeLibraryPanel(state.editMode === 'wardrobe' ? layer : null);
-}
-
-function getAnimClass(prefix: 'in' | 'out', dir: PanelDirection): string {
-  return `creator-mode-anim-${prefix}-${dir}`;
-}
-
-function clearModeAnimClasses(el: HTMLElement): void {
-  el.classList.remove(
-    'creator-mode-anim-in-left',
-    'creator-mode-anim-in-right',
-    'creator-mode-anim-in-top',
-    'creator-mode-anim-in-bottom',
-    'creator-mode-anim-out-left',
-    'creator-mode-anim-out-right',
-    'creator-mode-anim-out-top',
-    'creator-mode-anim-out-bottom'
-  );
-}
-
-function setModePanelHidden(el: HTMLElement, hidden: boolean): void {
-  el.classList.toggle(MODE_PANEL_HIDDEN_CLASS, hidden);
-}
-
-function animateModePanelIn(el: HTMLElement, dir: PanelDirection): void {
-  clearModeAnimClasses(el);
-  setModePanelHidden(el, false);
-  void el.offsetWidth;
-  el.classList.add(getAnimClass('in', dir));
-}
-
-function animateModePanelOut(el: HTMLElement, dir: PanelDirection): void {
-  clearModeAnimClasses(el);
-  setModePanelHidden(el, false);
-  void el.offsetWidth;
-  el.classList.add(getAnimClass('out', dir));
-}
-
-function mountPreviewSlotForMode(): void {
-  const previewSlot = document.getElementById('creator-3d-preview-slot');
-  const lowerLeftPanels = document.getElementById('creator-lower-left-panels');
-  if (!previewSlot) return;
-
-  // Keep the preview slot at the top of the lower-left stack (above Keep/Save, Home)
-  // so in Creator.2D the 3D view appears above the Keep and Save panel.
-  if (lowerLeftPanels) {
-    if (previewSlot.parentElement !== lowerLeftPanels || previewSlot !== lowerLeftPanels.firstElementChild) {
-      lowerLeftPanels.insertBefore(previewSlot, lowerLeftPanels.firstChild);
-    }
-  } else {
-    // Fallback placement if lower-left is unavailable.
-    const rightGroup = document.getElementById('creator-right-panels-group');
-    if (rightGroup && previewSlot.parentElement !== rightGroup) rightGroup.appendChild(previewSlot);
-  }
-}
-
-function applyModePanelsImmediate(mode: EditMode): void {
-  modeTransitionToken += 1;
-  mountPreviewSlotForMode();
-  let needsResizeAfterShow = false;
-  for (const cfg of MODE_PANEL_CONFIGS) {
-    const el = document.getElementById(cfg.id) as HTMLElement | null;
-    if (!el) continue;
-    clearModeAnimClasses(el);
-    const isVisibleInMode = cfg.modes.includes(mode);
-    setModePanelHidden(el, !isVisibleInMode);
-    if (isVisibleInMode && (cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group' || cfg.id === 'creator-upper-right-panels-root')) {
-      needsResizeAfterShow = true;
-    }
-  }
-  if (needsResizeAfterShow) {
-    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-  }
-  modePanelsCurrentMode = mode;
-}
-
-function transitionModePanels(targetMode: EditMode): void {
-  mountPreviewSlotForMode();
-  if (modePanelsCurrentMode == null) {
-    applyModePanelsImmediate(targetMode);
-    return;
-  }
-  if (modePanelsCurrentMode === targetMode) {
-    applyModePanelsImmediate(targetMode);
-    return;
-  }
-
-  const fromMode = modePanelsCurrentMode;
-  const token = ++modeTransitionToken;
-  const hideNow: Array<{ el: HTMLElement; cfg: ModePanelConfig }> = [];
-  const showLater: Array<{ el: HTMLElement; cfg: ModePanelConfig }> = [];
-
-  for (const cfg of MODE_PANEL_CONFIGS) {
-    const el = document.getElementById(cfg.id) as HTMLElement | null;
-    if (!el) continue;
-    const inFrom = cfg.modes.includes(fromMode);
-    const inTarget = cfg.modes.includes(targetMode);
-    if (inFrom && !inTarget) hideNow.push({ el, cfg });
-    else if (!inFrom && inTarget) showLater.push({ el, cfg });
-    else if (inFrom && inTarget) {
-      clearModeAnimClasses(el);
-      setModePanelHidden(el, false);
-    } else {
-      clearModeAnimClasses(el);
-      setModePanelHidden(el, true);
-    }
-  }
-
-  hideNow.forEach(({ el, cfg }) => animateModePanelOut(el, cfg.exitTo));
-
-  const enterDelayMs = hideNow.length > 0 ? MODE_TRANSITION_MS : 0;
-  window.setTimeout(() => {
-    if (token !== modeTransitionToken) return;
-    hideNow.forEach(({ el }) => {
-      clearModeAnimClasses(el);
-      setModePanelHidden(el, true);
-    });
-    showLater.forEach(({ el, cfg }) => {
-      animateModePanelIn(el, cfg.enterFrom);
-    });
-    if (showLater.some(({ cfg }) => cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group' || cfg.id === 'creator-upper-right-panels-root')) {
-      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-    }
-    modePanelsCurrentMode = targetMode;
-  }, enterDelayMs);
-}
-
-function bindModePanelTransitions(): void {
-  if (modePanelsBound) return;
-  modePanelsBound = true;
-  subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, (e: CustomEvent<{ mode?: EditMode }>) => {
-    const nextMode = (e.detail?.mode ?? state.editMode) as EditMode;
-    transitionModePanels(nextMode);
-  });
-}
-
-function addToSwatch(hex: string): void {
-  const normalized = hex.toLowerCase();
-  state.swatchColors = state.swatchColors.filter((c) => c.toLowerCase() !== normalized);
-  state.swatchColors.unshift(normalized);
-  if (state.swatchColors.length > SWATCH_MAX) state.swatchColors.pop();
-  publish(CREATOR_EVENTS.SWATCH_HISTORY_CHANGE);
-}
-
-function pointInBounds(x: number, y: number, b: Bounds): boolean {
-  return x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
-}
-
-/** Return which layer (head, hat, body, etc.) contains the given working coords, or null. */
-export function getLayerAtCoords(workingX: number, workingY: number): string | null {
-  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
-  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
-  for (const layer of LAYER_KEYS) {
-    const bounds = SKIN_LAYER_BOUNDS[layer];
-    if (!bounds) continue;
-    for (const b of bounds) {
-      if (pointInBounds(normX, normY, b)) return layer;
-    }
-  }
-  return null;
-}
-
-/** Return layer and part side (L/R) at coords. side is undefined for single-part layers. */
-export function getLayerAndPartAtCoords(
-  workingX: number,
-  workingY: number
-): { layer: string; side?: PartSide } | null {
-  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
-  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
-  for (const layer of LAYER_KEYS) {
-    const bounds = SKIN_LAYER_BOUNDS[layer];
-    if (!bounds) continue;
-    for (let i = 0; i < bounds.length; i++) {
-      const b = bounds[i]!;
-      if (pointInBounds(normX, normY, b)) {
-        const side: PartSide | undefined = isLayerWithParts(layer) ? (i === 0 ? 'R' : 'L') : undefined;
-        return { layer, side };
-      }
-    }
-  }
-  return null;
-}
-
-/** Return the specific part display name (Right leg, Left pants, etc.) at coords, or null. */
-export function getPartDisplayNameAtCoords(workingX: number, workingY: number): string | null {
-  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
-  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
-  if (isInDeadZone(normX, normY)) return null;
-  for (const { part, bounds } of SKIN_PART_BOUNDS) {
-    for (const b of bounds) {
-      if (pointInBounds(normX, normY, b)) return part;
-    }
-  }
-  return null;
+export function getCreatorCanvasPopulated(): boolean {
+  return creatorCanvasPopulated;
 }
 
 /** 3D mode: can we paint on this layer/part? (visible and not locked) */
@@ -445,319 +166,9 @@ function canPaintOn3DLayer(info: { layer: string; side?: PartSide } | null): boo
   return true;
 }
 
-/** 3D mode: is the pixel at (workingX, workingY) in a paintable layer? */
 function isInPaintable3DLayer(workingX: number, workingY: number): boolean {
   return canPaintOn3DLayer(getLayerAndPartAtCoords(workingX, workingY));
 }
-
-
-function getSkinCanvas(): HTMLCanvasElement {
-  if (!skinCanvas) {
-    skinCanvas = document.createElement('canvas');
-    skinCanvas.width = WORK_SIZE;
-    skinCanvas.height = WORK_SIZE;
-    // Establish context with willReadFrequently so readback (getImageData, etc.) is efficient.
-    skinCanvas.getContext('2d', { willReadFrequently: true });
-  }
-  return skinCanvas;
-}
-
-function getOverlayCanvas(): HTMLCanvasElement | null {
-  return document.getElementById('creator-overlay-canvas') as HTMLCanvasElement | null;
-}
-
-function captureCanvasImageData(canvas: HTMLCanvasElement): ImageData | null {
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return null;
-  return ctx.getImageData(0, 0, canvas.width, canvas.height);
-}
-
-function cloneImageData(data: ImageData): ImageData {
-  return new ImageData(new Uint8ClampedArray(data.data), data.width, data.height);
-}
-
-function applyProgrammaticCanvasImage(data: ImageData): void {
-  const canvas = getSkinCanvas();
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return;
-  ctx.putImageData(data, 0, 0);
-  creatorCanvasPopulated = true;
-  state.skinSwatchColors = extractColorsFromSkin(canvas);
-  if (!state.userHasSelectedColor && state.skinSwatchColors.length > 0) {
-    state.currentColor = state.skinSwatchColors[0]!;
-    publish(CREATOR_EVENTS.CURRENT_COLOR_CHANGE, { color: state.currentColor });
-  }
-  if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
-  updateAllUndoRedoButtons();
-  publish(CREATOR_EVENTS.CANVAS_CHANGE);
-}
-
-function resetWardrobeSelections(): void {
-  wardrobeCompositeToken += 1;
-  for (const part of WARDROBE_PART_KEYS) {
-    wardrobeSelections[part] = WARDROBE_OVERLAY_KEYS.includes(part as (typeof WARDROBE_OVERLAY_KEYS)[number])
-      ? WARDROBE_ORIGINAL
-      : null;
-  }
-}
-
-function captureWardrobeBaseFromCurrentCanvas(path: string | null = creatorCurrentSkinPath): void {
-  if (!creatorCanvasPopulated) return;
-  const snapshot = captureCanvasImageData(getSkinCanvas());
-  if (!snapshot) return;
-  wardrobeBaseSkinData = snapshot;
-  wardrobeBaseSkinPath = path;
-  wardrobeOriginalPreviewSignature = '';
-  if (state.editMode === 'wardrobe') {
-    ensureWardrobeOriginalPreviewsScheduled();
-  }
-}
-
-/** True if any part has a library path selected (not null, not Original). */
-function hasWardrobeLibrarySelection(): boolean {
-  return WARDROBE_PART_KEYS.some(
-    (part) => wardrobeSelections[part] != null && wardrobeSelections[part] !== WARDROBE_ORIGINAL
-  );
-}
-
-function loadWardrobeImage(path: string): Promise<HTMLImageElement> {
-  const cached = wardrobeImageCache.get(path);
-  if (cached) return cached;
-  const pending = new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load wardrobe part: ${path}`));
-    img.src = path;
-  });
-  wardrobeImageCache.set(path, pending);
-  return pending;
-}
-
-function clearPartBoundsToTransparent(destCtx: CanvasRenderingContext2D, part: WardrobePartKey): void {
-  const bounds = SKIN_LAYER_BOUNDS[part] ?? [];
-  const scale = RESOLUTION_MULTIPLIER;
-  bounds.forEach((rect) => {
-    const x = rect.x * scale;
-    const y = rect.y * scale;
-    const w = rect.w * scale;
-    const h = rect.h * scale;
-    const imgData = destCtx.getImageData(x, y, w, h);
-    imgData.data.fill(0, 0, imgData.data.length);
-    destCtx.putImageData(imgData, x, y);
-  });
-}
-
-async function resolveWardrobeComposite(): Promise<void> {
-  if (!wardrobeBaseSkinData) return;
-  const token = ++wardrobeCompositeToken;
-  const result = cloneImageData(wardrobeBaseSkinData);
-  const destCanvas = document.createElement('canvas');
-  destCanvas.width = WORK_SIZE;
-  destCanvas.height = WORK_SIZE;
-  const destCtx = destCanvas.getContext('2d', { willReadFrequently: true });
-  const srcCanvas = document.createElement('canvas');
-  srcCanvas.width = WORK_SIZE;
-  srcCanvas.height = WORK_SIZE;
-  const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
-  if (!destCtx || !srcCtx) return;
-  destCtx.putImageData(result, 0, 0);
-  srcCtx.imageSmoothingEnabled = false;
-
-  for (const part of WARDROBE_PART_KEYS) {
-    const selected = wardrobeSelections[part];
-    const isOverlay = (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(part);
-
-    if (selected === null) {
-      if (isOverlay) {
-        clearPartBoundsToTransparent(destCtx, part);
-      }
-      continue;
-    }
-    if (selected === WARDROBE_ORIGINAL) {
-      continue;
-    }
-
-    let img: HTMLImageElement;
-    try {
-      img = await loadWardrobeImage(selected);
-    } catch {
-      continue;
-    }
-    if (token !== wardrobeCompositeToken) return;
-
-    srcCtx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
-    srcCtx.drawImage(img, 0, 0, WORK_SIZE, WORK_SIZE);
-    const bounds = SKIN_LAYER_BOUNDS[part] ?? [];
-    bounds.forEach((rect) => {
-      const x = rect.x * RESOLUTION_MULTIPLIER;
-      const y = rect.y * RESOLUTION_MULTIPLIER;
-      const w = rect.w * RESOLUTION_MULTIPLIER;
-      const h = rect.h * RESOLUTION_MULTIPLIER;
-      const partData = srcCtx.getImageData(x, y, w, h);
-      destCtx.putImageData(partData, x, y);
-    });
-  }
-
-  if (token !== wardrobeCompositeToken) return;
-  const composed = destCtx.getImageData(0, 0, WORK_SIZE, WORK_SIZE);
-  applyProgrammaticCanvasImage(composed);
-}
-
-async function applyWardrobePartSelection(part: WardrobePartKey, path: string | null): Promise<void> {
-  if (!wardrobeBaseSkinData) {
-    captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
-  }
-  wardrobeSelections[part] = path;
-  syncWardrobeLibraryActiveStates();
-  await resolveWardrobeComposite();
-}
-
-async function selectWardrobeOutfit(path: string): Promise<void> {
-  resetWardrobeSelections();
-  await loadSkinFromPath(path);
-  captureWardrobeBaseFromCurrentCanvas(path);
-  void resolveWardrobeComposite();
-  renderWardrobeLibraries();
-}
-
-function getWardrobeOriginalPreviewSignature(): string {
-  return (wardrobeBaseSkinPath ?? 'default') + '_' + (wardrobeBaseSkinData ? '1' : '0');
-}
-
-const WARDROBE_ORIGINAL_CAPTURE_MAX_RETRIES = 20;
-
-async function captureWardrobeOriginalPreviews(retryCount = 0): Promise<void> {
-  if (!wardrobeBaseSkinData) return;
-  const token = ++wardrobeOriginalCaptureToken;
-  await resolveWardrobeComposite();
-  if (token !== wardrobeOriginalCaptureToken) return;
-
-  const capturePart = getCapture3DPartThumbnail();
-  if (!capturePart) {
-    if (retryCount < WARDROBE_ORIGINAL_CAPTURE_MAX_RETRIES) {
-      window.setTimeout(() => void captureWardrobeOriginalPreviews(retryCount + 1), 150);
-    }
-    return;
-  }
-
-  const partKeys: WardrobePartKey[] = ['hat', 'head', 'jacket', 'body', 'arms', 'sleeves', 'pants', 'legs'];
-  let successCount = 0;
-  for (const part of partKeys) {
-    if (token !== wardrobeOriginalCaptureToken) return;
-    try {
-      const dataUrl = await capturePart(part, 128);
-      if (token !== wardrobeOriginalCaptureToken) return;
-      if (dataUrl) {
-        wardrobeOriginalPreviews[part] = dataUrl;
-        successCount++;
-      }
-    } catch {
-      // ignore per-part failures
-    }
-  }
-  if (token !== wardrobeOriginalCaptureToken) return;
-
-  if (successCount > 0) {
-    wardrobeOriginalPreviewSignature = getWardrobeOriginalPreviewSignature();
-    renderWardrobeLibraries();
-  } else if (retryCount < WARDROBE_ORIGINAL_CAPTURE_MAX_RETRIES) {
-    window.setTimeout(() => void captureWardrobeOriginalPreviews(retryCount + 1), 150);
-  }
-}
-
-function ensureWardrobeOriginalPreviewsScheduled(): void {
-  if (!wardrobeBaseSkinData) return;
-  const currentSig = getWardrobeOriginalPreviewSignature();
-  if (wardrobeOriginalPreviewSignature === currentSig) return;
-  void captureWardrobeOriginalPreviews();
-}
-
-function renderWardrobeLibraries(): void {
-  ensureWardrobeOriginalPreviewsScheduled();
-
-  WARDROBE_PART_PANEL_CONFIGS.forEach((config) => {
-    const isOverlay = (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(config.key);
-    renderWardrobeLibraryPanel({
-      selectorId: config.selectorId,
-      items: wardrobeLibraries[config.key],
-      activeValue: wardrobeSelections[config.key],
-      includeNone: isOverlay,
-      noneLabel: config.noneLabel,
-      includeOriginal: true,
-      originalLabel: 'Original',
-      originalPreview: wardrobeOriginalPreviews[config.key],
-      originalSentinel: WARDROBE_ORIGINAL,
-      onSelect: (value) => {
-        void applyWardrobePartSelection(config.key, value);
-      },
-    });
-  });
-  syncWardrobeLibraryActiveStates();
-}
-
-function syncWardrobeLibraryActiveStates(): void {
-  const activeOutfitPath = wardrobeBaseSkinPath ?? creatorCurrentSkinPath;
-  const outfitsContainer = document.getElementById('creator-skin-selector');
-  if (outfitsContainer) {
-    outfitsContainer.querySelectorAll<HTMLElement>('.creator-skin-preview').forEach((el) => {
-      el.classList.toggle('active', el.dataset.path === activeOutfitPath);
-    });
-  }
-
-  WARDROBE_PART_PANEL_CONFIGS.forEach((config) => {
-    const selector = document.getElementById(config.selectorId);
-    if (!selector) return;
-    const activeValue = wardrobeSelections[config.key];
-    const isBasePanel = !(WARDROBE_OVERLAY_KEYS as readonly string[]).includes(config.key);
-    selector.querySelectorAll<HTMLElement>('.creator-wardrobe-library-item').forEach((el) => {
-      const isNone = el.dataset.none === '1';
-      const isOriginal = el.dataset.original === '1';
-      const isActive = isNone
-        ? activeValue === null
-        : isOriginal
-          ? activeValue === WARDROBE_ORIGINAL || (isBasePanel && activeValue === null)
-          : el.dataset.path === activeValue;
-      el.classList.toggle('active', isActive);
-    });
-  });
-}
-
-async function ensureWardrobeLibrariesLoaded(): Promise<void> {
-  if (wardrobeLibrariesLoaded) {
-    renderWardrobeLibraries();
-    return;
-  }
-  if (wardrobeLibrariesPromise) {
-    await wardrobeLibrariesPromise;
-    return;
-  }
-
-  wardrobeLibrariesPromise = (async () => {
-    buildWardrobeLibraryPanels();
-    await Promise.all(
-      WARDROBE_PART_PANEL_CONFIGS.map(async (config) => {
-        try {
-          const res = await fetch(`/wardrobe/parts/${config.key}/index.json`);
-          const data = await res.json();
-          wardrobeLibraries[config.key] = Array.isArray(data) ? data : [];
-        } catch {
-          wardrobeLibraries[config.key] = [];
-        }
-      }),
-    );
-    wardrobeLibrariesLoaded = true;
-    renderWardrobeLibraries();
-  })();
-
-  try {
-    await wardrobeLibrariesPromise;
-  } finally {
-    wardrobeLibrariesPromise = null;
-  }
-}
-
-
-export { getBrushCursorStyleFor3D } from './creator/brush';
 
 function updateCanvasCursor(): void {
   const grid = document.getElementById('creator-blocky-grid');
@@ -794,261 +205,19 @@ function performRedo(): void {
   publish(CREATOR_EVENTS.CANVAS_CHANGE);
 }
 
-/** Apply a color to currentColor and publish. If addToSwatchList is true, prepends to swatch list. Subscribers handle UI updates. */
-function applyColorToUI(hex: string, addToSwatchList = true, markAsUserSelected = true): void {
-  const normalized = normalizeHex(hex);
-  if (!normalized) return;
-  if (markAsUserSelected) state.userHasSelectedColor = true;
-  state.currentColor = normalized;
-  if (addToSwatchList) addToSwatch(normalized);
-  publish(CREATOR_EVENTS.CURRENT_COLOR_CHANGE, { color: normalized });
-}
-
-/** Set swatch at index (for drag-drop). Only applies to History palette; no-op for Skin. */
-function setSwatchAt(index: number, hex: string): void {
-  if (state.activeSwatchPalette !== 'history') return;
-  const normalized = normalizeHex(hex);
-  if (!normalized) return;
-  while (state.swatchColors.length <= index) state.swatchColors.push('');
-  state.swatchColors[index] = normalized;
-  publish(CREATOR_EVENTS.SWATCH_HISTORY_CHANGE);
-}
-
-/** Squared RGB distance between two hex colors (faster than sqrt). */
-function colorDistanceSq(a: string, b: string): number {
-  const [r1, g1, b1] = hexToRgb(a);
-  const [r2, g2, b2] = hexToRgb(b);
-  return (r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2;
-}
-
-/** Extract unique colors from skin canvas, selecting a diverse subset. Returns up to SWATCH_MAX hex colors. */
-function extractColorsFromSkin(canvas: HTMLCanvasElement): string[] {
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return [];
-  const w = canvas.width;
-  const h = canvas.height;
-  const data = ctx.getImageData(0, 0, w, h).data;
-  const seen = new Set<string>();
-  const alphaThreshold = 16;
-  for (let i = 0; i < data.length; i += 4) {
-    const a = data[i + 3];
-    if (a < alphaThreshold) continue;
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    const hex = rgbToHex(r, g, b).toLowerCase();
-    seen.add(hex);
-  }
-  const unique = Array.from(seen);
-  if (unique.length <= SWATCH_MAX) return unique;
-  const selected: string[] = [unique[0]!];
-  const remaining = new Set(unique.slice(1));
-  while (selected.length < SWATCH_MAX && remaining.size > 0) {
-    let bestColor = '';
-    let bestMinDist = -1;
-    for (const c of remaining) {
-      let minDist = Infinity;
-      for (const s of selected) {
-        const d = colorDistanceSq(c, s);
-        if (d < minDist) minDist = d;
-      }
-      if (minDist > bestMinDist) {
-        bestMinDist = minDist;
-        bestColor = c;
-      }
-    }
-    if (bestColor) {
-      selected.push(bestColor);
-      remaining.delete(bestColor);
-    } else break;
-  }
-  return selected;
-}
-
-const FALLBACK_SKINS: SkinEntry[] = [{ path: '/wardrobe/skins/RunningboyRig.png', label: 'Default' }];
-
-export async function loadSkinFromPath(path: string): Promise<void> {
-  const canvas = getSkinCanvas();
-  const result = await skinIO.loadSkinToCanvas(path, canvas, skinIO.captureCanvasImageData);
-  if (!result) return;
-  creatorCurrentSkinPath = path;
-  creatorCanvasPopulated = true;
-  const { beforeData, afterData } = result;
-  state.redoStack = [];
-  state.undoStack.push({ type: 'load', beforeData, afterData });
-  if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
-  state.skinSwatchColors = extractColorsFromSkin(canvas);
-  if (!state.userHasSelectedColor && state.skinSwatchColors.length > 0) {
-    state.currentColor = state.skinSwatchColors[0]!;
-    publish(CREATOR_EVENTS.CURRENT_COLOR_CHANGE, { color: state.currentColor });
-  }
-  publish(CREATOR_EVENTS.SKIN_LOAD_CHANGE, { path });
-  publish(CREATOR_EVENTS.CANVAS_CHANGE);
-  if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
-  updateAllUndoRedoButtons();
-
-  // Highlight active skin in creator load-skins panel.
-  const selector = document.getElementById('creator-skin-selector');
-  if (selector) {
-    selector.querySelectorAll<HTMLElement>('.creator-skin-preview').forEach((el) => {
-      el.classList.toggle('active', el.dataset.path === (wardrobeBaseSkinPath ?? path));
-    });
-  }
-  if (state.editMode === 'wardrobe' && !hasWardrobeLibrarySelection()) {
-    captureWardrobeBaseFromCurrentCanvas(path);
-    syncWardrobeLibraryActiveStates();
-  }
-}
-
-function renderOutfitsPanel(): void {
-  const container = document.getElementById('creator-skin-selector');
-  if (!container) return;
-  const allSkins = [...manifestOutfitSkins, ...savedOutfitSkins];
-  container.innerHTML = '';
-  allSkins.forEach((skin, index) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'skin-preview creator-skin-preview creator-wardrobe-library-item';
-    btn.dataset.path = skin.path;
-    btn.dataset.index = String(index);
-    btn.setAttribute('aria-label', `Load skin: ${skin.label}`);
-    const img = document.createElement('img');
-    img.src = skin.preview ?? skin.path;
-    img.alt = skin.label;
-    img.loading = 'lazy';
-    btn.appendChild(img);
-    btn.addEventListener('click', () => {
-      if (state.editMode === 'wardrobe') {
-        void selectWardrobeOutfit(skin.path);
-        return;
-      }
-      void loadSkinFromPath(skin.path);
-    });
-    container.appendChild(btn);
-  });
-  syncWardrobeLibraryActiveStates();
-  bindOutfitsKeyboardNav(container);
-}
-
-function bindOutfitsKeyboardNav(container: HTMLElement): void {
-  if (container.dataset.outfitsNavBound === '1') return;
-  container.dataset.outfitsNavBound = '1';
-
-  // Keyboard navigation within skins grid (arrow keys).
-  container.addEventListener('keydown', (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement | null;
-    if (!target || !target.classList.contains('creator-skin-preview')) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-
-    const buttons = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('.creator-skin-preview')
-    );
-    if (buttons.length === 0) return;
-
-    const currentIndex = buttons.indexOf(target as HTMLButtonElement);
-    if (currentIndex === -1) return;
-
-    const cols = 4; // grid width: 4 skins per row
-    let nextIndex = currentIndex;
-
-    if (e.key === 'ArrowRight') {
-      if (currentIndex < buttons.length - 1) {
-        nextIndex = currentIndex + 1;
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    } else if (e.key === 'ArrowLeft') {
-      if (currentIndex > 0) {
-        nextIndex = currentIndex - 1;
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    } else if (e.key === 'ArrowDown') {
-      const candidate = currentIndex + cols;
-      if (candidate < buttons.length) {
-        nextIndex = candidate;
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    } else if (e.key === 'ArrowUp') {
-      const candidate = currentIndex - cols;
-      if (candidate >= 0) {
-        nextIndex = candidate;
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    } else if (e.key === ' ') {
-      // Spacebar: return focus to wardrobe parts panel, do not change selection.
-      const wardrobePanel = document.getElementById('creator-wardrobe-parts-panel');
-      if (wardrobePanel) {
-        const activeBtn = wardrobePanel.querySelector<HTMLButtonElement>(
-          '.creator-wardrobe-parts-btn.active'
-        );
-        (activeBtn ?? wardrobePanel.querySelector<HTMLButtonElement>('.creator-wardrobe-parts-btn'))
-          ?.focus();
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }
-
-    if (nextIndex !== currentIndex) {
-      const nextBtn = buttons[nextIndex];
-      if (nextBtn) {
-        nextBtn.focus();
-        nextBtn.click(); // keep current skin in sync with selection
-      }
-    }
-  });
-}
-
-function setupCreatorSkinGallery(skins: SkinEntry[]): void {
-  manifestOutfitSkins = skins;
-  renderOutfitsPanel();
-}
-
-async function saveCurrentSkinToOutfits(): Promise<void> {
-  const dataUrl = exportTo64x64DataURL();
-  if (!dataUrl) return;
-  const n = savedOutfitSkins.length + 1;
-  const capture = getCapture3DThumbnail();
-  const preview = capture ? await capture(128) : null;
-  savedOutfitSkins.push({
-    path: dataUrl,
-    label: `Saved ${n}`,
-    preview: preview ?? dataUrl,
-  });
-  requestAnimationFrame(() => renderOutfitsPanel());
-}
-
-function downloadCurrentSkin(): void {
-  const dataUrl = exportTo64x64DataURL();
-  if (!dataUrl) return;
-  const a = document.createElement('a');
-  a.href = dataUrl;
-  a.download = `skin-${Date.now()}.png`;
-  a.click();
-}
-
-/** Report texture position under pointer. Publishes event; subscribers update hover info and layers panel. */
 function reportTexturePosition(part: string | null, skinX: number, skinY: number, hoverColorHint: string | null = null): void {
   const layer = part != null ? partToLayer(part) : null;
   const tool = state.activeTool;
   let hoverColor: string | null = hoverColorHint;
   if (tool === 'eyedropper' && skinX >= 0 && skinY >= 0) {
     if (hoverColor != null) {
-      // 3D controls may provide a precomputed "through transparency" sample.
       publish(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, {
-        part,
-        layer,
-        skinX,
-        skinY,
-        tool,
+        part, layer, skinX, skinY, tool,
         currentColor: state.currentColor,
         hoverColor,
       });
       return;
     }
-    // Hover info must never block drawing interactions; ignore sampling errors.
     try {
       const wx = Math.floor(skinX * RESOLUTION_MULTIPLIER);
       const wy = Math.floor(skinY * RESOLUTION_MULTIPLIER);
@@ -1059,17 +228,13 @@ function reportTexturePosition(part: string | null, skinX: number, skinY: number
     }
   }
   publish(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, {
-    part,
-    layer,
-    skinX,
-    skinY,
-    tool,
+    part, layer, skinX, skinY, tool,
     currentColor: state.currentColor,
     hoverColor,
   });
 }
 
-/** Update hover info payload for 2D/3D views. Optional hoverColor is used by eyedropper hover in 3D. */
+/** Update hover info and publish texture position; used by 2D/3D editors. */
 export function updateHoverInfo(part: string | null, skinX: number, skinY: number, hoverColor: string | null = null): void {
   reportTexturePosition(part, skinX, skinY, hoverColor);
 }
@@ -1104,16 +269,16 @@ function buildCreatorPanels(): void {
     layerLocked: state.layer3DLocked,
     isLayersPanelCollapsed: () => state.layersPanel3DCollapsed,
     setLayersPanelCollapsed: (collapsed: boolean) => { state.layersPanel3DCollapsed = collapsed; },
-    setLayerVisible: setLayer3DVisible,
-    setLayerPartVisible,
-    getPartVisible,
-    setLayerLocked: setLayer3DLocked,
-    onVisibilitySoloClick: handleVisibilityAltClick,
-    onLockSoloClick: handleLockAltClick,
-    syncVisibilityCheckboxes,
-    syncLockCheckboxes,
-    clearSoloIndicator: updateSoloIndicator,
-    setupDragToToggle,
+    setLayerVisible: layerVisibilityApi.setLayer3DVisible,
+    setLayerPartVisible: layerVisibilityApi.setLayerPartVisible,
+    getPartVisible: layerVisibilityApi.getPartVisible,
+    setLayerLocked: layerVisibilityApi.setLayer3DLocked,
+    onVisibilitySoloClick: layerVisibilityApi.onVisibilitySoloClick,
+    onLockSoloClick: layerVisibilityApi.onLockSoloClick,
+    syncVisibilityCheckboxes: layerVisibilityApi.syncVisibilityCheckboxes,
+    syncLockCheckboxes: layerVisibilityApi.syncLockCheckboxes,
+    clearSoloIndicator: layerVisibilityApi.clearSoloIndicator,
+    setupDragToToggle: layerVisibilityApi.setupDragToToggle,
     layerGroups: LAYER_GROUPS,
   };
   const editorToolsCtx = {
@@ -1142,15 +307,15 @@ function buildCreatorPanels(): void {
   buildWardrobeLibraryPanels();
   buildWardrobePartsPanel({
     getEditMode: () => state.editMode,
-    getSelectedLayer: () => wardrobeSelectedLayer,
-    setSelectedLayer: (layer) => setWardrobeSelectedLayer(layer),
+    getSelectedLayer: () => wardrobeApi.getWardrobeSelectedLayer(),
+    setSelectedLayer: (layer) => wardrobeApi.setWardrobeSelectedLayer(layer),
   });
   buildSaveDownloadPanel({
-    onSave: saveCurrentSkinToOutfits,
-    onDownload: downloadCurrentSkin,
+    onSave: skinGalleryApi.saveCurrentSkinToOutfits,
+    onDownload: skinGalleryApi.downloadCurrentSkin,
   });
   buildTexturePositionPanel();
-  applyModePanelsImmediate(state.editMode);
+  modePanelTransitions.applyModePanelsImmediate(state.editMode);
 }
 
 function setupCanvasAreaResize(): void {
@@ -1171,10 +336,9 @@ function setupCanvasAreaResize(): void {
   });
 }
 
-/**
- * Initialize the creator: 64×64 skin state, display canvas, toolbar, brush.
- * Call when the creator panel is shown.
- */
+// --- Public API: initialization ---
+
+/** Initialize the creator: DOM, panels, blocky grid, keyboard shortcuts. */
 export function initCreator(): void {
   const skin = getSkinCanvas();
   const ctx = skin.getContext('2d', { willReadFrequently: true });
@@ -1184,7 +348,7 @@ export function initCreator(): void {
     ctx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
   }
   if (isCreatorEditMode(state.editMode)) {
-    restoreLayerStateForEditMode();
+    layerVisibilityApi.restoreLayerStateForEditMode();
   }
   document.body.dataset.editMode = state.editMode;
   const wrapper = document.getElementById('creator-view-wrapper');
@@ -1207,7 +371,7 @@ export function initCreator(): void {
       container.appendChild(group);
     }
   }
-  mountPreviewSlotForMode();
+  modePanelTransitions.mountPreviewSlotForMode();
   blockyCtx = {
     state,
     getSkinCanvas,
@@ -1233,38 +397,42 @@ export function initCreator(): void {
   };
   buildCreatorPanels();
   if (state.editMode === 'wardrobe') {
-    captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
+    wardrobeApi.captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
   }
-  showWardrobeLibraryPanel(state.editMode === 'wardrobe' ? wardrobeSelectedLayer : null);
+  wardrobeApi.showWardrobeLibraryPanel(state.editMode === 'wardrobe' ? wardrobeApi.getWardrobeSelectedLayer() : null);
   blockyEditor.buildBlockyGrid();
   blockyEditor.buildRulers();
   blockyEditor.setupBlockyGridEvents(blockyCtx);
   blockyEditor.renderToDisplay(blockyCtx);
   setupCanvasAreaResize();
-  bindModePanelTransitions();
+  modePanelTransitions.bindModePanelTransitions(() => state.editMode);
 
   (async () => {
     try {
       const res = await fetch('/wardrobe/skins/index.json');
       const data = await res.json();
       const skins: SkinEntry[] = Array.isArray(data) && data.length > 0 ? data : FALLBACK_SKINS;
-      setupCreatorSkinGallery(skins);
-      renderWardrobeLibraries();
+      skinGalleryApi.setupCreatorSkinGallery(skins);
+      wardrobeApi.renderWardrobeLibraries();
     } catch {
-      setupCreatorSkinGallery(FALLBACK_SKINS);
-      renderWardrobeLibraries();
+      skinGalleryApi.setupCreatorSkinGallery(FALLBACK_SKINS);
+      wardrobeApi.renderWardrobeLibraries();
     }
   })();
-  void ensureWardrobeLibrariesLoaded();
+  void wardrobeApi.ensureWardrobeLibrariesLoaded();
 
   const downloadBtn = document.getElementById('creator-download-btn');
-  downloadBtn?.addEventListener('click', () => {
-    const dataUrl = exportTo64x64DataURL();
-    if (!dataUrl) return;
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = `skin-${Date.now()}.png`;
-    a.click();
+  downloadBtn?.addEventListener('click', () => skinGalleryApi.downloadCurrentSkin());
+
+  const { keyBindings, ctrlKeyBindings } = createEditorToolKeyBindings({
+    getEditMode: () => state.editMode,
+    setEditMode,
+    setActiveTool,
+    performUndo,
+    performRedo,
+    addToSwatch,
+    getCurrentColor: () => state.currentColor,
+    updateAllUndoRedoButtons,
   });
 
   document.addEventListener('keydown', (e) => {
@@ -1274,60 +442,30 @@ export function initCreator(): void {
     if (inInput) return;
 
     if (e.ctrlKey || e.metaKey) {
-      if (e.key === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) {
-          performRedo();
-        } else {
-          performUndo();
-        }
-        updateAllUndoRedoButtons();
-        return;
-      }
-      if (e.shiftKey && (e.key === '+' || e.key === '=')) {
-        e.preventDefault();
-        addToSwatch(state.currentColor);
+      const ctrlHandler = ctrlKeyBindings[e.key];
+      if (ctrlHandler) {
+        ctrlHandler(e);
         return;
       }
     }
 
     if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-      switch (e.key) {
-        case 'Tab':
-          e.preventDefault();
-          setEditMode(getEditMode() === EDIT_MODE_3D ? EDIT_MODE_2D : EDIT_MODE_3D);
-          return;
-        case 'h':
-        case 'H':
-          e.preventDefault();
-          setActiveTool('navigate');
-          return;
-        case 'b':
-        case 'B':
-          e.preventDefault();
-          setActiveTool('brush');
-          return;
-        case 'e':
-        case 'E':
-          e.preventDefault();
-          setActiveTool('eraser');
-          return;
-        case 'g':
-        case 'G':
-          e.preventDefault();
-          setActiveTool('fill');
-          return;
-      }
+      const handler = keyBindings[e.key];
+      if (handler) handler(e);
     }
   });
 }
 
-/** Returns the working canvas (WORK_SIZE × WORK_SIZE). */
+/** Load a skin from a path (e.g. /wardrobe/skins/...). */
+export async function loadSkinFromPath(path: string): Promise<void> {
+  return skinGalleryApi.loadSkinFromPath(path);
+}
+
 export function getCreatorSkinCanvas(): HTMLCanvasElement {
   return getSkinCanvas();
 }
 
-/** Current edit mode: 'wardrobe' | '2d' | '3d'. */
+// --- Public API: mode & routing ---
 export function getEditMode(): EditMode {
   return state.editMode;
 }
@@ -1339,287 +477,100 @@ function syncCreatorModeUrl(mode: EditMode): void {
   history.replaceState(null, '', `${location.pathname}${location.search}${nextHash}`);
 }
 
-/** Whether Edit 3D mode is active (paint on 3D model). */
 export function getEditMode3D(): boolean {
   return state.editMode === EDIT_MODE_3D;
 }
 
-/** Set edit mode and dispatch EDIT_MODE_CHANGE with { mode, previousMode }. */
+/** Set edit mode (wardrobe, 2d, 3d). Optionally sync URL hash. */
 export function setEditMode(mode: EditMode, options: { syncUrl?: boolean } = {}): void {
   const previousMode = state.editMode;
   const wasEditMode = isCreatorEditMode(previousMode);
   const willBeEditMode = isCreatorEditMode(mode);
   if (wasEditMode && !willBeEditMode) {
-    saveLayerStateAndNormalizeForNonEditMode();
+    layerVisibilityApi.saveLayerStateAndNormalizeForNonEditMode();
   } else if (!wasEditMode && willBeEditMode) {
-    restoreLayerStateForEditMode();
+    layerVisibilityApi.restoreLayerStateForEditMode();
   }
   state.editMode = mode;
   document.body.dataset.editMode = mode;
   publish(CREATOR_EVENTS.EDIT_MODE_CHANGE, { mode: state.editMode, previousMode });
 
   if (mode === 'wardrobe') {
-    resetWardrobeSelections();
-    captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
-    void resolveWardrobeComposite();
-    renderWardrobeLibraries();
-    showWardrobeLibraryPanel(wardrobeSelectedLayer);
+    wardrobeApi.resetWardrobeSelections();
+    wardrobeApi.captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
+    void wardrobeApi.resolveWardrobeComposite();
+    wardrobeApi.renderWardrobeLibraries();
+    wardrobeApi.showWardrobeLibraryPanel(wardrobeApi.getWardrobeSelectedLayer());
   } else {
-    showWardrobeLibraryPanel(null);
+    wardrobeApi.showWardrobeLibraryPanel(null);
   }
   if (options.syncUrl !== false) {
     syncCreatorModeUrl(mode);
   }
 }
 
-/** Save current layer visibility/lock and force all visible+unlocked (used when leaving creator route from 2D/3D). */
 export function normalizeLayerStateForNonEditMode(): void {
   if (!isCreatorEditMode(state.editMode)) return;
-  saveLayerStateAndNormalizeForNonEditMode();
+  layerVisibilityApi.saveLayerStateAndNormalizeForNonEditMode();
 }
 
-/** Set Edit 3D mode (true = 3d, false = 2d) and dispatch change event. */
 export function setEditMode3D(is3D: boolean): void {
   setEditMode(is3D ? EDIT_MODE_3D : EDIT_MODE_2D);
 }
 
-/** Remove creator mode-button number shortcuts (called when leaving creator route). */
 export function unregisterCreatorShortcuts(): void {
   unregisterEditorToolShortcuts();
   unregisterWardrobeShortcuts();
 }
 
-/** 3D layers panel: visibility state (layer hidden = not rendered, brush ignored). */
+// --- Public API: layer visibility ---
 export function getLayer3DVisible(): Record<string, boolean> {
   return { ...state.layer3DVisible };
 }
 
-/** 3D layers panel: per-part visibility overrides (L/R). */
 export function getLayer3DPartVisible(): Record<string, { L?: boolean; R?: boolean }> {
   return JSON.parse(JSON.stringify(state.layer3DPartVisible));
 }
 
-/** Is the given part visible? (layer must be visible; part override defaults to true when undefined.) */
 export function getPartVisible(layer: string, side: PartSide): boolean {
-  if (state.layer3DVisible[layer] !== true) return false;
-  const parts = state.layer3DPartVisible[layer];
-  const val = side === 'R' ? parts?.R : parts?.L;
-  return val !== false;
+  return layerVisibilityApi.getPartVisible(layer, side);
 }
 
-/** 3D layers panel: lock state (locked = brush ignored, part stays visible). */
 export function getLayer3DLocked(): Record<string, boolean> {
   return { ...state.layer3DLocked };
 }
 
-/** Set visibility for a layer and dispatch change event. */
 export function setLayer3DVisible(layer: string, visible: boolean): void {
-  if (isLayerKey(layer)) {
-    const previous = state.layer3DVisible[layer];
-    state.layer3DVisible[layer] = visible;
-    if (previous !== visible) {
-      publish(CREATOR_EVENTS.LAYER3D_CHANGE, { layer, property: 'visibility', visible });
-    }
-  }
+  layerVisibilityApi.setLayer3DVisible(layer, visible);
 }
 
-/** Set visibility for a layer part (L/R) and dispatch change event. */
 export function setLayerPartVisible(layer: string, side: PartSide, visible: boolean): void {
-  if (!isLayerKey(layer) || !isLayerWithParts(layer)) return;
-  if (!state.layer3DPartVisible[layer]) state.layer3DPartVisible[layer] = {};
-  const prev = state.layer3DPartVisible[layer]![side];
-  state.layer3DPartVisible[layer]![side] = visible;
-  if (prev !== visible) {
-    publish(CREATOR_EVENTS.LAYER3D_CHANGE, { layer, property: 'partVisibility', side, visible });
-  }
+  layerVisibilityApi.setLayerPartVisible(layer, side, visible);
 }
 
-/** Set visibility for all layers at once (used by solo visibility). */
-function setLayer3DVisibleAll(visible: Record<string, boolean>): void {
-  let changed = false;
-  for (const k of LAYER_KEYS) {
-    if (visible[k] !== undefined && state.layer3DVisible[k] !== visible[k]) {
-      state.layer3DVisible[k] = visible[k];
-      changed = true;
-    }
-  }
-  if (changed) {
-    publish(CREATOR_EVENTS.LAYER3D_CHANGE, { property: 'visibility', all: true, visibleMap: { ...state.layer3DVisible } });
-  }
-}
-
-/** Set lock for all layers at once (used by solo lock). */
-function setLayer3DLockedAll(locked: Record<string, boolean>): void {
-  for (const k of LAYER_KEYS) {
-    if (locked[k] !== undefined) state.layer3DLocked[k] = locked[k];
-  }
-  publish(CREATOR_EVENTS.LAYER3D_CHANGE);
-}
-
-/** Sync visibility checkboxes from layer3DVisible (after batch changes). */
-function syncVisibilityCheckboxes(panel: HTMLElement): void {
-  panel.querySelectorAll<HTMLInputElement>('.creator-layer-3d-visible').forEach((cb) => {
-    const layer = cb.dataset.layer;
-    if (layer && state.layer3DVisible[layer] !== undefined) cb.checked = state.layer3DVisible[layer];
-  });
-}
-
-/** Sync lock checkboxes from layer3DLocked (after batch changes). */
-function syncLockCheckboxes(panel: HTMLElement): void {
-  panel.querySelectorAll<HTMLInputElement>('.creator-layer-3d-lock').forEach((cb) => {
-    const layer = cb.dataset.layer;
-    if (layer && state.layer3DLocked[layer] !== undefined) cb.checked = state.layer3DLocked[layer];
-  });
-}
-
-/** Get layer name from element under client coords, or null. */
-function getLayerUnderPoint(clientX: number, clientY: number): string | null {
-  const el = document.elementFromPoint(clientX, clientY);
-  if (!el) return null;
-  const row = el.closest('.creator-layers-panel-row');
-  return row instanceof HTMLElement ? row.dataset.layer ?? null : null;
-}
-
-const DRAG_THRESHOLD_PX = 4;
-
-/** Setup drag-to-toggle: mousedown on label, drag over rows to apply same value. */
-function setupDragToToggle(
-  panel: HTMLElement,
-  labelSelector: string,
-  inputSelector: string,
-  getValue: (layer: string) => boolean,
-  setValue: (layer: string, value: boolean) => void,
-  sync: (panel: HTMLElement) => void,
-  canStartDrag: (e: Event) => boolean = () => true
-): void {
-  panel.querySelectorAll(labelSelector).forEach((label) => {
-    const input = label.querySelector<HTMLInputElement>(inputSelector);
-    const layer = input?.dataset.layer;
-    if (!layer) return;
-    label.addEventListener('mousedown', (e) => {
-      if (!(e instanceof MouseEvent) || e.button !== 0 || !canStartDrag(e)) return;
-      // Prevent browser text selection while click-dragging across layer rows.
-      e.preventDefault();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const dragValue = !getValue(layer);
-      let hasDragged = false;
-      const handleMove = (moveEv: MouseEvent) => {
-        if (!hasDragged) {
-          const dx = moveEv.clientX - startX;
-          const dy = moveEv.clientY - startY;
-          if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
-          hasDragged = true;
-          setValue(layer, dragValue);
-          sync(panel);
-        }
-        const targetLayer = getLayerUnderPoint(moveEv.clientX, moveEv.clientY);
-        if (targetLayer != null && isLayerKey(targetLayer)) {
-          setValue(targetLayer, dragValue);
-          sync(panel);
-        }
-      };
-      const handleClick = (clickEv: Event) => {
-        label.removeEventListener('click', handleClick, true);
-        if (hasDragged) {
-          clickEv.preventDefault();
-          clickEv.stopPropagation();
-        }
-      };
-      const handleUp = () => {
-        document.removeEventListener('mousemove', handleMove);
-        document.removeEventListener('mouseup', handleUp, true);
-      };
-      document.addEventListener('mousemove', handleMove);
-      document.addEventListener('mouseup', handleUp, true);
-      label.addEventListener('click', handleClick, true);
-    });
-  });
-}
-
-/** Sync UI after solo visibility/lock changes. Solo label text is not shown. */
-function updateSoloIndicator(panel: HTMLElement): void {
-  const indicator = panel.querySelector('.creator-layers-panel-solo-indicator');
-  indicator?.remove();
-}
-
-/** Handle Alt+click on visibility: solo this layer or restore. */
-function handleVisibilityAltClick(layer: string): void {
-  if (state.layer3DSoloMode) {
-    if (state.layer3DSoloCurrentLayer === layer) {
-      if (state.layer3DSoloBeforeState) setLayer3DVisibleAll(state.layer3DSoloBeforeState);
-      state.layer3DSoloMode = false;
-      state.layer3DSoloBeforeState = null;
-      state.layer3DSoloCurrentLayer = null;
-    } else {
-      state.layer3DSoloCurrentLayer = layer;
-      const soloState = Object.fromEntries(LAYER_KEYS.map((k) => [k, k === layer]));
-      setLayer3DVisibleAll(soloState);
-    }
-  } else {
-    state.layer3DSoloBeforeState = { ...state.layer3DVisible };
-    state.layer3DSoloCurrentLayer = layer;
-    const soloState = Object.fromEntries(LAYER_KEYS.map((k) => [k, k === layer]));
-    setLayer3DVisibleAll(soloState);
-    state.layer3DSoloMode = true;
-  }
-}
-
-/** Handle Alt+click on lock: solo this layer (unlock only this, lock all others) or restore. */
-function handleLockAltClick(layer: string): void {
-  if (state.layer3DSoloLockMode) {
-    if (state.layer3DSoloLockCurrentLayer === layer) {
-      if (state.layer3DSoloLockBeforeState) setLayer3DLockedAll(state.layer3DSoloLockBeforeState);
-      state.layer3DSoloLockMode = false;
-      state.layer3DSoloLockBeforeState = null;
-      state.layer3DSoloLockCurrentLayer = null;
-    } else {
-      state.layer3DSoloLockCurrentLayer = layer;
-      const soloState = Object.fromEntries(LAYER_KEYS.map((k) => [k, k !== layer]));
-      setLayer3DLockedAll(soloState);
-    }
-  } else {
-    state.layer3DSoloLockBeforeState = { ...state.layer3DLocked };
-    state.layer3DSoloLockCurrentLayer = layer;
-    const soloState = Object.fromEntries(LAYER_KEYS.map((k) => [k, k !== layer]));
-    setLayer3DLockedAll(soloState);
-    state.layer3DSoloLockMode = true;
-  }
-}
-
-/** Set lock for a layer and dispatch change event. */
 export function setLayer3DLocked(layer: string, locked: boolean): void {
-  if (isLayerKey(layer)) {
-    state.layer3DLocked[layer] = locked;
-    publish(CREATOR_EVENTS.LAYER3D_CHANGE);
-  }
+  layerVisibilityApi.setLayer3DLocked(layer, locked);
 }
 
-/** Active drawing tool (navigate = no paint, full orbit). */
+// --- Public API: tools ---
 export function getActiveTool(): DrawingTool {
   return state.activeTool;
 }
 
-/** Set active tool and dispatch change event. */
 export function setActiveTool(tool: DrawingTool): void {
   state.activeTool = tool;
   publish(CREATOR_EVENTS.TOOLS_CHANGE);
 }
 
-/** Brush size (fixed at 1 pixel for 3D; 1 grid cell for 2D blocky). */
 export function getBrushSize(): number {
   return BRUSH_SIZE;
 }
 
-/** WORK_SIZE for UV→pixel mapping. */
 export function getCreatorWorkSize(): number {
   return WORK_SIZE;
 }
 
-/** UV to working coords. Re-exported from skin module. */
-export { uvToWorkingCoords } from './skin';
-
-/** Start paint/eraser stroke at working coords (or do fill if fill tool). Returns true if anything was done. */
+// --- Public API: 3D painting ---
 export function paintStartFrom3D(workingX: number, workingY: number): boolean {
   if (state.activeTool === 'navigate' || state.activeTool === 'eyedropper') return false;
   if (!isInPaintable3DLayer(workingX, workingY)) return false;
@@ -1652,7 +603,6 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
   return true;
 }
 
-/** Continue paint stroke (call during drag). */
 export function paintMoveFrom3D(workingX: number, workingY: number): void {
   if (!state.currentStroke || !state.isDrawing) return;
   if (!isInPaintable3DLayer(workingX, workingY)) return;
@@ -1680,7 +630,6 @@ export function paintMoveFrom3D(workingX: number, workingY: number): void {
   publish(CREATOR_EVENTS.CANVAS_CHANGE);
 }
 
-/** End paint stroke and push to undo stack. */
 export function paintEndFrom3D(): void {
   if (state.currentStroke && state.currentStroke.pixels.length > 0) {
     state.redoStack = [];
@@ -1698,10 +647,8 @@ export function paintEndFrom3D(): void {
   updateAllUndoRedoButtons();
 }
 
-/** Alpha threshold below which a pixel is considered transparent (eyedropper ignores these). */
-export const EYEDROPPER_ALPHA_THRESHOLD = 2 / 255;
-
-/** Sample color at working coords. Returns hex and alpha (0–1), or null if out of bounds. */
+// --- Public API: color sampling ---
+/** Sample color and alpha at working-space coords; returns null if out of bounds. */
 export function sampleColorAtWithAlpha(workingX: number, workingY: number): { hex: string; alpha: number } | null {
   const skin = getSkinCanvas();
   const ctx = skin.getContext('2d', { willReadFrequently: true });
@@ -1711,18 +658,17 @@ export function sampleColorAtWithAlpha(workingX: number, workingY: number): { he
   return { hex: rgbToHex(d[0], d[1], d[2]), alpha: d[3] / 255 };
 }
 
-/** Sample color at working coords (eyedropper). Returns hex or null. */
 export function sampleColorAt(workingX: number, workingY: number): string | null {
   const result = sampleColorAtWithAlpha(workingX, workingY);
   return result ? result.hex : null;
 }
 
-/** Apply sampled color to swatch and UI (call after sampleColorAt when user picked a color). */
 export function applySampledColor(hex: string): void {
   applyColorToUI(hex);
 }
 
-/** Export the skin downscaled to 64×64 PNG. Uses nearest-neighbor for pixel-perfect output. */
+// --- Public API: export ---
+/** Export current skin as 64×64 data URL. */
 export function exportTo64x64DataURL(): string {
   return skinIO.exportTo64x64DataURL(getSkinCanvas());
 }

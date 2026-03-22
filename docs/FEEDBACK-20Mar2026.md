@@ -41,11 +41,7 @@ Usability session notes with Mazi (12) and Arlo (8). Ordered by usability impact
 
 - ⬜️ **Name the character** — Let users give the character a name.
 
-### Creator.2D view
 
-- ⬜️ **Hidden layers** — When layers are hidden: collapse the view, show a note about hidden parts, or make them visible in some way.
-- ⬜️ **2D camera focus** — When layers are hidden, focus the camera on the visible part.
-- ⬜️ **3D camera to paint location** — Animate the 3D camera toward where paint is placed.
 
 ---
 
@@ -61,6 +57,12 @@ Usability session notes with Mazi (12) and Arlo (8). Ordered by usability impact
   - erase (x,y)
   - fill [color] (x,y)
 - **Color panel order** — progressive disclosure: Lead with skin color swatches, then highlight/shadow, then color wheel and swatch history.
+
+### Creator.2D view
+
+- ⬜️ **Hidden layers** — When layers are hidden: collapse the view, show a note about hidden parts, or make them visible in some way.
+- ⬜️ **2D camera focus** — When layers are hidden, focus the camera on the visible part.
+- ⬜️ **3D camera to paint location** — Animate the 3D camera toward where paint is placed.
 
 ---
 

@@ -4,6 +4,7 @@
  */
 import * as THREE from 'three';
 import { getTrapezoidBounds, WALK_CYCLE_DISTANCE, type TurnStrategy } from '../animation';
+import { getPrimaryCharacterId } from '../domain';
 
 type AnimationManager = {
   turnTo: (targetFacingRad: number) => Promise<void>;
@@ -76,13 +77,13 @@ export function setupTestControls(deps: SetupTestControlsDeps): void {
 
   const turnRow = buttonRow();
   addButton('Turn left 90°', () => {
-    const char = getCharacter('runningboy');
+    const char = getCharacter(getPrimaryCharacterId());
     if (!char) return;
     const targetFacing = char.model.rotation.y + Math.PI / 2;
     animationManager.turnTo(targetFacing);
   }, turnRow);
   addButton('Turn right 90°', () => {
-    const char = getCharacter('runningboy');
+    const char = getCharacter(getPrimaryCharacterId());
     if (!char) return;
     const targetFacing = char.model.rotation.y - Math.PI / 2;
     animationManager.turnTo(targetFacing);

@@ -10,6 +10,14 @@ export type EditMode = typeof EDIT_MODE_2D | typeof EDIT_MODE_3D | typeof EDIT_M
 
 export type DrawingTool = 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'navigate';
 
+export const TOOL_LABELS: Record<DrawingTool, string> = {
+  brush: 'Brush',
+  eraser: 'Eraser',
+  fill: 'Fill',
+  eyedropper: 'Dropper',
+  navigate: 'Navigate',
+};
+
 const DRAWING_TOOLS: readonly DrawingTool[] = ['brush', 'eraser', 'fill', 'eyedropper', 'navigate'];
 
 export function isDrawingTool(s: string | undefined): s is DrawingTool {
