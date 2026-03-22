@@ -260,6 +260,10 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
 
               if (idleAction) fadeToAction(getSceneContext().characters[config.id] as CharacterState, idleAction, 0);
 
+              if (getRoute() === 'creator') {
+                getCreatorPoseController()?.applyCreatorCharacterPose();
+              }
+
               if (Object.keys(getSceneContext().characters).length === 1) {
                 onFirstCharacterReady(skins, animationsList, getSequencesList());
               }

@@ -25,6 +25,24 @@ export const APP_EVENTS = {
   'app:creator:canvas-change': 'app:creator:canvas-change',
   /** Creator: lock feedback (painted on locked layer) */
   'app:creator:lock-feedback': 'app:creator:lock-feedback',
+  /** Creator: camera yaw left */
+  'app:creator:camera-yaw-left': 'app:creator:camera-yaw-left',
+  /** Creator: camera yaw right */
+  'app:creator:camera-yaw-right': 'app:creator:camera-yaw-right',
+  /** Creator: camera pitch up */
+  'app:creator:camera-pitch-up': 'app:creator:camera-pitch-up',
+  /** Creator: camera pitch down */
+  'app:creator:camera-pitch-down': 'app:creator:camera-pitch-down',
+  /** Creator: camera zoom in */
+  'app:creator:camera-zoom-in': 'app:creator:camera-zoom-in',
+  /** Creator: camera zoom out */
+  'app:creator:camera-zoom-out': 'app:creator:camera-zoom-out',
+  /** Creator: camera recenter */
+  'app:creator:camera-recenter': 'app:creator:camera-recenter',
+  /** Creator: camera move started (tween in progress) */
+  'app:creator:camera-move-start': 'app:creator:camera-move-start',
+  /** Creator: camera move ended */
+  'app:creator:camera-move-end': 'app:creator:camera-move-end',
   /** Character: skin changed (UI or external) */
   'app:character:skin-change': 'app:character:skin-change',
   /** Character: animation play requested (UI or external) */
@@ -56,6 +74,9 @@ export type AppCreatorTexturePositionDetail = {
 /** Detail for app:creator:lock-feedback */
 export type AppCreatorLockFeedbackDetail = { layer: string };
 
+/** Detail for app:creator:camera-yaw-left, camera-yaw-right, camera-pitch-up, camera-pitch-down */
+export type AppCreatorCameraAngleDetail = { degrees?: number };
+
 /** Detail for app:creator:skin-load-change */
 export type AppCreatorSkinLoadDetail = { path: string };
 
@@ -83,6 +104,15 @@ export const CREATOR_EVENTS = {
   LAYER3D_CHANGE: APP_EVENTS['app:creator:layer3d-change'],
   CANVAS_CHANGE: APP_EVENTS['app:creator:canvas-change'],
   LOCK_FEEDBACK: APP_EVENTS['app:creator:lock-feedback'],
+  CAMERA_YAW_LEFT: APP_EVENTS['app:creator:camera-yaw-left'],
+  CAMERA_YAW_RIGHT: APP_EVENTS['app:creator:camera-yaw-right'],
+  CAMERA_PITCH_UP: APP_EVENTS['app:creator:camera-pitch-up'],
+  CAMERA_PITCH_DOWN: APP_EVENTS['app:creator:camera-pitch-down'],
+  CAMERA_ZOOM_IN: APP_EVENTS['app:creator:camera-zoom-in'],
+  CAMERA_ZOOM_OUT: APP_EVENTS['app:creator:camera-zoom-out'],
+  CAMERA_RECENTER: APP_EVENTS['app:creator:camera-recenter'],
+  CAMERA_MOVE_START: APP_EVENTS['app:creator:camera-move-start'],
+  CAMERA_MOVE_END: APP_EVENTS['app:creator:camera-move-end'],
 } as const;
 
 /** Re-export types for creator events (backward compatibility) */

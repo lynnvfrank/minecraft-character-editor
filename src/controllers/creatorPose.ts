@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { logger } from '../lib';
 import type { CharacterStateLike } from '../animation';
 import type { CharacterState } from './characterTypes';
-import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE, type EditMode } from '../creator/api';
+import { EDIT_MODE_WARDROBE, type EditMode } from '../creator/api';
 
 export type CameraPose = { target: THREE.Vector3; position: THREE.Vector3 };
 
@@ -138,16 +138,11 @@ export function createCreatorPoseController(deps: CreatorPoseDeps): CreatorPoseC
     char.mixer.addEventListener('finished', onFinished);
   }
 
-  function applyCreatorCharacterPose(detail?: { mode?: string; previousMode?: string }) {
+  function applyCreatorCharacterPose(_detail?: { mode?: string; previousMode?: string }) {
     const mode = deps.getEditMode();
-    const previousMode = detail?.previousMode;
-    const fromWardrobeToEdit =
-      previousMode === EDIT_MODE_WARDROBE && (mode === EDIT_MODE_3D || mode === EDIT_MODE_2D);
 
     if (mode === EDIT_MODE_WARDROBE) {
       lockCharacterToCreatorIdle();
-    } else if (fromWardrobeToEdit) {
-      letIdleCompleteThenFreeze();
     } else {
       lockCharacterFrozenForPainting();
     }

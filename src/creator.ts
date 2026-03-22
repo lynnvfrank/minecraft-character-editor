@@ -47,6 +47,7 @@ import { createCreatorState } from './state';
 import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode, type PartSide } from './creator/api';
 import { rgbToHex } from './lib/color';
 import { getCapture3DThumbnail, getCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
+import { buildCameraControls } from './viewer/CameraControls';
 
 // --- Constants ---
 const UNDO_LIMIT = 50;
@@ -315,6 +316,7 @@ function buildCreatorPanels(): void {
     onDownload: skinGalleryApi.downloadCurrentSkin,
   });
   buildTexturePositionPanel();
+  buildCameraControls();
   modePanelTransitions.applyModePanelsImmediate(state.editMode);
 }
 

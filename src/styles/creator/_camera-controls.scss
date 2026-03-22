@@ -1,0 +1,53 @@
+/* Top-center panel group — camera controls toolbar (wardrobe + 3d modes)
+ * Uses left/right + margin for centering (not transform) so mode transition
+ * animations (creator-mode-anim-in-top) don't override horizontal centering. */
+.creator-top-center-panels {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
+  width: fit-content;
+  z-index: 20;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+}
+body[data-route="creator"] .creator-top-center-panels {
+  display: flex;
+}
+
+.creator-camera-controls-toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.creator-camera-controls-btn {
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.creator-camera-controls-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.creator-camera-controls-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

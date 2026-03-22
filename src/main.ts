@@ -42,6 +42,7 @@ import {
 import { createCharacterEventsController } from './controllers/characterEvents';
 import { createAnimationLoopController } from './controllers/animationLoop';
 import { createCreatorPoseController, type CreatorPoseController } from './controllers/creatorPose';
+import { createCreatorCameraController } from './controllers/creatorCameraController';
 import {
   startModeActor,
   getModeActor,
@@ -1211,6 +1212,13 @@ async function main(): Promise<void> {
     creatorTargetOffsetFromCharacter: CREATOR_TARGET_OFFSET_FROM_CHARACTER,
     creatorIdleTransitionMinDurationSec: CREATOR_IDLE_TRANSITION_MIN_DURATION_SEC,
     easeOutCubic,
+  });
+
+  createCreatorCameraController({
+    getSceneContext,
+    getRoute,
+    getEditMode,
+    creatorPoseController,
   });
 
   if (getRoute() === 'creator') {

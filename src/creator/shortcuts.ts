@@ -3,7 +3,18 @@
  * Add new shortcuts by extending KEY_BINDINGS or CTRL_KEY_BINDINGS.
  */
 import type { EditMode } from './api';
-import { EDIT_MODE_2D, EDIT_MODE_3D } from './api';
+import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE } from './api';
+
+/** Fallback order when mode panel DOM is unavailable. */
+const FALLBACK_EDIT_MODES: readonly EditMode[] = [EDIT_MODE_WARDROBE, EDIT_MODE_3D, EDIT_MODE_2D];
+
+function getOrderedEditModes(): EditMode[] {
+  const buttons = document.querySelectorAll<HTMLButtonElement>('.creator-tools-panel-mode-btn');
+  const modes = Array.from(buttons)
+    .map((btn) => btn.dataset.mode)
+    .filter((m): m is string => typeof m === 'string' && m.length > 0) as EditMode[];
+  return modes.length > 0 ? modes : [...FALLBACK_EDIT_MODES];
+}
 
 export type EditorToolShortcutDeps = {
   getEditMode: () => EditMode;
@@ -36,7 +47,13 @@ export function createEditorToolKeyBindings(
   const keyBindings: Record<string, (e: KeyboardEvent) => void> = {
     Tab: (e) => {
       e.preventDefault();
-      setEditMode(getEditMode() === EDIT_MODE_3D ? EDIT_MODE_2D : EDIT_MODE_3D);
+      const modes = getOrderedEditModes();
+      const current = getEditMode();
+      const idx = modes.indexOf(current);
+      const nextIdx = e.shiftKey
+        ? (idx <= 0 ? modes.length - 1 : idx - 1)
+        : (idx < 0 || idx >= modes.length - 1 ? 0 : idx + 1);
+      setEditMode(modes[nextIdx]);
     },
     h: (e) => {
       e.preventDefault();

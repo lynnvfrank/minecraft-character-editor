@@ -29,6 +29,15 @@ Unified app event bus for domain state changes. All app-level events flow throug
 | `app:creator:layer3d-change` | creator | creator.ts, controls | main, skinLayersPanel, blockyEditor | `{ layer?, property?, ... }` |
 | `app:creator:canvas-change` | creator | creator.ts, blockyEditor | main | (none) |
 | `app:creator:lock-feedback` | creator | controls, blockyEditor | skinLayersPanel | `{ layer: string }` |
+| `app:creator:camera-yaw-left` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
+| `app:creator:camera-yaw-right` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
+| `app:creator:camera-pitch-up` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
+| `app:creator:camera-pitch-down` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
+| `app:creator:camera-zoom-in` | creator | CameraControls | creatorCameraController | (none) |
+| `app:creator:camera-zoom-out` | creator | CameraControls | creatorCameraController | (none) |
+| `app:creator:camera-recenter` | creator | CameraControls | creatorCameraController | (none) |
+| `app:creator:camera-move-start` | creator | creatorCameraController | CameraControls | (none) |
+| `app:creator:camera-move-end` | creator | creatorCameraController | CameraControls | (none) |
 | `app:character:skin-change` | character | main (UI + socket) | main | `{ characterId?, path }` |
 | `app:character:animation-play` | character | main (UI + socket) | main | `{ characterId?, name }` |
 

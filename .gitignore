@@ -6,6 +6,9 @@ dist
 *.tgz
 release
 
+# Cursor generated files
+.cursor/*.log
+
 # Generated wardrobe assets (keep source skins in wardrobe/skins)
 public/wardrobe/parts/
 public/wardrobe/skins/previews/
