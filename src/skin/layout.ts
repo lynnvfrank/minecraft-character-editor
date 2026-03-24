@@ -159,6 +159,68 @@ export function getLayerBoundsByKey(): Record<LayerKey, Bounds[]> {
   return SKIN_LAYER_BOUNDS;
 }
 
+/** Returns bounds for any wardrobe part (atomic or composite). For unknown parts, returns []. */
+export function getPartBounds(part: string): Bounds[] {
+  if (part in WARDROBE_COMPOSITE_BOUNDS) {
+    return WARDROBE_COMPOSITE_BOUNDS[part as WardrobeCompositeKey];
+  }
+  if (isLayerKey(part)) {
+    return SKIN_LAYER_BOUNDS[part];
+  }
+  return [];
+}
+
+/**
+ * Wardrobe composite part keys (taxonomy: body.torso, body.jacket, etc.).
+ * Used for part-only skin generation and previews.
+ */
+export const WARDROBE_COMPOSITE_KEYS = [
+  'torso',
+  'jacketGroup',
+  'bottom',
+  'center',
+  'top',
+  'all',
+] as const;
+export type WardrobeCompositeKey = (typeof WARDROBE_COMPOSITE_KEYS)[number];
+
+/**
+ * All wardrobe part keys (atomic + composite) for generation scripts.
+ */
+export const WARDROBE_PART_KEYS = [...LAYER_KEYS, ...WARDROBE_COMPOSITE_KEYS] as const;
+export type WardrobePartKey = (typeof WARDROBE_PART_KEYS)[number];
+
+/**
+ * Bounds for composite parts (union of child regions).
+ * Used by generate-wardrobe-parts.ts.
+ */
+export const WARDROBE_COMPOSITE_BOUNDS: Record<WardrobeCompositeKey, Bounds[]> = {
+  torso: [...SKIN_LAYER_BOUNDS.body, ...SKIN_LAYER_BOUNDS.arms],
+  jacketGroup: [...SKIN_LAYER_BOUNDS.jacket, ...SKIN_LAYER_BOUNDS.sleeves],
+  bottom: [...SKIN_LAYER_BOUNDS.legs, ...SKIN_LAYER_BOUNDS.pants],
+  center: [
+    ...SKIN_LAYER_BOUNDS.jacket,
+    ...SKIN_LAYER_BOUNDS.body,
+    ...SKIN_LAYER_BOUNDS.sleeves,
+    ...SKIN_LAYER_BOUNDS.arms,
+  ],
+  top: [...SKIN_LAYER_BOUNDS.head, ...SKIN_LAYER_BOUNDS.hat],
+  all: [{ x: 0, y: 0, w: 64, h: 64 }],
+};
+
+/**
+ * Camera preset to use for each composite part (per Creator.Wardrobe plan).
+ * body.head for top; body.chest for center/torso/jacket; body.legs for bottom.
+ */
+export const WARDROBE_COMPOSITE_CAMERA_PRESET: Record<WardrobeCompositeKey, LayerKey | 'fullOutfit'> = {
+  torso: 'body',
+  jacketGroup: 'jacket',
+  bottom: 'legs',
+  center: 'body',
+  top: 'head',
+  all: 'fullOutfit',
+};
+
 /**
  * Human-readable label per layer for UI (wardrobe panel, etc.).
  */

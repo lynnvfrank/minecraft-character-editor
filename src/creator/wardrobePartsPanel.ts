@@ -1,19 +1,174 @@
 import { subscribe, CREATOR_EVENTS } from './events';
 import { createEl } from './dom';
 import type { CreatorEditModeDetail } from './events';
-import { LAYER_KEYS, LAYER_DISPLAY_LABELS, type LayerKey } from '../skin';
+import {
+  LAYER_KEYS,
+  LAYER_DISPLAY_LABELS,
+  WARDROBE_COMPOSITE_KEYS,
+  type LayerKey,
+} from '../skin';
+import modeWardrobeFullOutfit from './mode.wardrobe.fullOutfit.svg';
+import modeWardrobeTop from './mode.wardrobe.top.svg';
+import modeWardrobeHead from './mode.wardrobe.head.svg';
+import modeWardrobeHat from './mode.wardrobe.hat.svg';
+import modeWardrobeCenter from './mode.wardrobe.center.svg';
+import modeWardrobeJacketGroup from './mode.wardrobe.jacketGroup.svg';
+import modeWardrobeJacket from './mode.wardrobe.jacket.svg';
+import modeWardrobeSleeves from './mode.wardrobe.sleeves.svg';
+import modeWardrobeTorso from './mode.wardrobe.torso.svg';
+import modeWardrobeBody from './mode.wardrobe.body.svg';
+import modeWardrobeArms from './mode.wardrobe.arms.svg';
+import modeWardrobeBottom from './mode.wardrobe.bottom.svg';
+import modeWardrobePants from './mode.wardrobe.pants.svg';
+import modeWardrobeLegs from './mode.wardrobe.legs.svg';
+import modeWardrobeAll from './mode.wardrobe.all.svg';
 
-export type WardrobeLayerKey = 'fullOutfit' | LayerKey;
+const LAYER_PLACEHOLDER_URLS: Record<WardrobeLayerKey, string> = {
+  fullOutfit: modeWardrobeFullOutfit,
+  top: modeWardrobeTop,
+  head: modeWardrobeHead,
+  hat: modeWardrobeHat,
+  center: modeWardrobeCenter,
+  jacketGroup: modeWardrobeJacketGroup,
+  jacket: modeWardrobeJacket,
+  sleeves: modeWardrobeSleeves,
+  torso: modeWardrobeTorso,
+  body: modeWardrobeBody,
+  arms: modeWardrobeArms,
+  bottom: modeWardrobeBottom,
+  pants: modeWardrobePants,
+  legs: modeWardrobeLegs,
+  all: modeWardrobeAll,
+};
+
+export type WardrobeLayerKey = 'fullOutfit' | LayerKey | (typeof WARDROBE_COMPOSITE_KEYS)[number];
 
 export type WardrobePartKey = Exclude<WardrobeLayerKey, 'fullOutfit'>;
 
-/** Derived from skin module LAYER_KEYS + LAYER_DISPLAY_LABELS; fullOutfit is UI-only. */
-export const WARDROBE_LAYERS: readonly { key: WardrobeLayerKey; label: string }[] = [
-  { key: 'fullOutfit', label: 'Full outfit' },
-  ...LAYER_KEYS.map((key) => ({ key, label: LAYER_DISPLAY_LABELS[key] })),
+const WARDROBE_COMPOSITE_LABELS: Record<(typeof WARDROBE_COMPOSITE_KEYS)[number], string> = {
+  torso: 'Torso',
+  jacketGroup: 'Jacket (vest + sleeves)',
+  bottom: 'Lower body',
+  center: 'Upper body',
+  top: 'Head (hat + head)',
+  all: 'Full outfit',
+};
+
+export type WardrobeLayerTreeNode = {
+  key: WardrobeLayerKey;
+  label: string;
+  children?: WardrobeLayerTreeNode[];
+};
+
+/** Hierarchical tree (body.all → body.top/center/bottom → children). Per Creator.Wardrobe plan. */
+export const WARDROBE_LAYER_TREE: WardrobeLayerTreeNode = {
+  key: 'fullOutfit',
+  label: 'Full outfit',
+  children: [
+    {
+      key: 'top',
+      label: 'Head (hat + head)',
+      children: [
+        { key: 'head', label: 'Head' },
+        { key: 'hat', label: 'Hat' },
+      ],
+    },
+    {
+      key: 'center',
+      label: 'Upper body',
+      children: [
+        {
+          key: 'jacketGroup',
+          label: 'Jacket (vest + sleeves)',
+          children: [
+            { key: 'jacket', label: 'Jacket' },
+            { key: 'sleeves', label: 'Sleeves' },
+          ],
+        },
+        {
+          key: 'torso',
+          label: 'Torso',
+          children: [
+            { key: 'body', label: 'Body' },
+            { key: 'arms', label: 'Arms' },
+          ],
+        },
+      ],
+    },
+    {
+      key: 'bottom',
+      label: 'Lower body',
+      children: [
+        { key: 'pants', label: 'Pants' },
+        { key: 'legs', label: 'Legs' },
+      ],
+    },
+  ],
+};
+
+/** Flat list for shortcuts; derived from tree. */
+export const WARDROBE_LAYERS: readonly { key: WardrobeLayerKey; label: string }[] = (() => {
+  const out: { key: WardrobeLayerKey; label: string }[] = [];
+  function walk(n: WardrobeLayerTreeNode): void {
+    out.push({ key: n.key, label: n.label });
+    n.children?.forEach(walk);
+  }
+  walk(WARDROBE_LAYER_TREE);
+  return out;
+})();
+
+/** All part keys for wardrobe resolution (atomics first, then composites). */
+export const WARDROBE_PART_KEYS: readonly WardrobePartKey[] = [
+  ...LAYER_KEYS,
+  ...WARDROBE_COMPOSITE_KEYS,
 ];
 
-export const WARDROBE_PART_KEYS: readonly WardrobePartKey[] = LAYER_KEYS.slice();
+const WARDROBE_EXPANDED_KEY = 'creator-wardrobe-expanded';
+
+function getExpandedSet(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(WARDROBE_EXPANDED_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw) as string[];
+      return new Set(Array.isArray(arr) ? arr : []);
+    }
+  } catch {
+    // ignore
+  }
+  return new Set();
+}
+
+function setExpanded(key: string, expanded: boolean): void {
+  const set = getExpandedSet();
+  if (expanded) set.add(key);
+  else set.delete(key);
+  try {
+    sessionStorage.setItem(WARDROBE_EXPANDED_KEY, JSON.stringify([...set]));
+  } catch {
+    // ignore
+  }
+}
+
+function isExpanded(key: string): boolean {
+  return getExpandedSet().has(key);
+}
+
+/** Expand key and all ancestors so the selected layer is visible. When body.all is selected, expand it. */
+function expandAncestorsOf(key: WardrobeLayerKey, tree: WardrobeLayerTreeNode): void {
+  function findPath(n: WardrobeLayerTreeNode, target: string, path: string[]): boolean {
+    path.push(n.key);
+    if (n.key === target) return true;
+    for (const c of n.children ?? []) {
+      if (findPath(c, target, path)) return true;
+    }
+    path.pop();
+    return false;
+  }
+  const path: string[] = [];
+  if (findPath(tree, key, path)) {
+    path.forEach((k) => setExpanded(k, true));
+  }
+}
 
 let shortcutHandler: ((e: KeyboardEvent) => void) | null = null;
 let unbindModeChange: (() => void) | null = null;
@@ -58,6 +213,78 @@ function focusActiveWardrobeLibraryItem(): void {
   activeItem?.focus();
 }
 
+function buildTreeRec(
+  node: WardrobeLayerTreeNode,
+  depth: number,
+  onClick: (layer: WardrobeLayerKey) => void,
+  onExpandClick: (key: string) => void,
+  selectedLayer: WardrobeLayerKey
+): HTMLElement[] {
+  const rows: HTMLElement[] = [];
+  const hasChildren = !!node.children?.length;
+  const expanded = hasChildren && isExpanded(node.key);
+
+  const row = document.createElement('div');
+  row.className = 'creator-wardrobe-layer-row';
+  row.dataset.layer = node.key;
+  row.style.setProperty('--depth', String(depth));
+
+  const layerBtn = document.createElement('button');
+  layerBtn.type = 'button';
+  layerBtn.className =
+    'creator-wardrobe-parts-btn' + (selectedLayer === node.key ? ' active' : '');
+  layerBtn.dataset.layer = node.key;
+  layerBtn.title = node.label;
+
+  const caret = document.createElement('span');
+  caret.className = 'creator-wardrobe-layer-caret';
+  caret.setAttribute('aria-hidden', 'true');
+  if (hasChildren) {
+    caret.textContent = expanded ? '▼' : '▶';
+    caret.classList.add('creator-wardrobe-layer-caret-visible');
+  } else {
+    caret.textContent = ' ';
+    caret.classList.add('creator-wardrobe-layer-caret-placeholder');
+  }
+
+  const label = document.createElement('span');
+  label.className = 'creator-wardrobe-layer-label';
+  label.textContent = node.label;
+
+  const img = document.createElement('img');
+  img.src = LAYER_PLACEHOLDER_URLS[node.key] ?? LAYER_PLACEHOLDER_URLS.fullOutfit;
+  img.alt = '';
+  img.className = 'creator-wardrobe-layer-placeholder';
+
+  layerBtn.append(caret, label, img);
+
+  layerBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const hitCaret = (e.target as HTMLElement).closest('.creator-wardrobe-layer-caret-visible');
+    if (hitCaret && hasChildren) {
+      onExpandClick(node.key);
+    } else {
+      onClick(node.key);
+    }
+  });
+
+  row.append(layerBtn);
+  rows.push(row);
+
+  if (hasChildren && expanded) {
+    const childrenWrap = document.createElement('div');
+    childrenWrap.className = 'creator-wardrobe-layer-children';
+    for (const child of node.children!) {
+      buildTreeRec(child, depth + 1, onClick, onExpandClick, selectedLayer).forEach((r) =>
+        childrenWrap.appendChild(r)
+      );
+    }
+    rows.push(childrenWrap as unknown as HTMLElement);
+  }
+
+  return rows;
+}
+
 export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
   const host = document.getElementById('creator-upper-left-panels');
   if (!host) return;
@@ -65,24 +292,43 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
   const old = document.getElementById('creator-wardrobe-parts-panel');
   if (old) old.remove();
 
-  const panel = createEl(
-    'div',
-    { id: 'creator-wardrobe-parts-panel', className: 'creator-wardrobe-parts-panel', role: 'group', 'aria-label': 'Wardrobe parts' },
-    ...WARDROBE_LAYERS.map((l) =>
-      createEl(
-        'button',
-        {
-          type: 'button',
-          className: 'creator-wardrobe-parts-btn',
-          'data-layer': l.key,
-          title: l.label,
-        },
-        l.label
-      )
-    )
-  );
+  const panel = document.createElement('div');
+  panel.id = 'creator-wardrobe-parts-panel';
+  panel.className = 'creator-wardrobe-parts-panel creator-wardrobe-parts-panel-tree';
+  panel.setAttribute('role', 'tree');
+  panel.setAttribute('aria-label', 'Wardrobe parts');
 
-  // Place below the creator mode panel if present, otherwise at top.
+  const selectedLayer = ctx.getSelectedLayer();
+  expandAncestorsOf(selectedLayer, WARDROBE_LAYER_TREE);
+
+  const onClick = (layer: WardrobeLayerKey) => {
+    ctx.setSelectedLayer(layer);
+    expandAncestorsOf(layer, WARDROBE_LAYER_TREE);
+    rebuildTree(panel, ctx, onClick, layer);
+  };
+
+  const onExpandClick = (key: string) => {
+    setExpanded(key, !isExpanded(key));
+    rebuildTree(panel, ctx, onClick, ctx.getSelectedLayer());
+  };
+
+  function rebuildTree(
+    p: HTMLElement,
+    c: WardrobePartsPanelContext,
+    clickCb: (l: WardrobeLayerKey) => void,
+    sel: WardrobeLayerKey
+  ): void {
+    const fragment = document.createDocumentFragment();
+    buildTreeRec(WARDROBE_LAYER_TREE, 0, clickCb, onExpandClick, sel).forEach((el) =>
+      fragment.appendChild(el)
+    );
+    p.innerHTML = '';
+    p.appendChild(fragment);
+    renderActive(p, c.getSelectedLayer());
+  }
+
+  rebuildTree(panel, ctx, onClick, selectedLayer);
+
   const modePanel = document.getElementById('creator-mode-panel');
   if (modePanel && modePanel.parentElement === host) {
     host.insertBefore(panel, modePanel.nextSibling);
@@ -90,22 +336,6 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
     host.insertBefore(panel, host.firstChild);
   }
 
-  const onClick = (layer: WardrobeLayerKey) => {
-    ctx.setSelectedLayer(layer);
-    renderActive(panel, layer);
-  };
-
-  panel.querySelectorAll<HTMLButtonElement>('.creator-wardrobe-parts-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const layer = btn.dataset.layer as WardrobeLayerKey | undefined;
-      if (!layer) return;
-      onClick(layer);
-    });
-  });
-
-  renderActive(panel, ctx.getSelectedLayer());
-
-  // Shortcuts are enabled only when edit mode is wardrobe.
   unregisterWardrobeShortcuts();
   shortcutHandler = (e: KeyboardEvent) => {
     if (document.body.dataset.route !== 'creator') return;
@@ -119,7 +349,6 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
     if (isTypingInInput(e)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-    // 1..9 selects layer (and keep focus in wardrobe panel)
     const keyNum = Number.parseInt(e.key, 10);
     if (Number.isInteger(keyNum) && keyNum >= 1 && keyNum <= WARDROBE_LAYERS.length) {
       e.preventDefault();
@@ -128,19 +357,18 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
       return;
     }
 
-    // ArrowUp/ArrowDown cycle layers
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       const cur = ctx.getSelectedLayer();
       const idx = Math.max(0, WARDROBE_LAYERS.findIndex((l) => l.key === cur));
-      const nextIdx = e.key === 'ArrowUp'
-        ? (idx - 1 + WARDROBE_LAYERS.length) % WARDROBE_LAYERS.length
-        : (idx + 1) % WARDROBE_LAYERS.length;
+      const nextIdx =
+        e.key === 'ArrowUp'
+          ? (idx - 1 + WARDROBE_LAYERS.length) % WARDROBE_LAYERS.length
+          : (idx + 1) % WARDROBE_LAYERS.length;
       onClick(WARDROBE_LAYERS[nextIdx]!.key);
       return;
     }
 
-    // Spacebar: move focus into the active outfits/parts panel.
     if (e.key === ' ') {
       e.preventDefault();
       focusActiveWardrobeLibraryItem();
@@ -151,7 +379,8 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
 
   unbindModeChange = subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, (e: CustomEvent<CreatorEditModeDetail>) => {
     if (e.detail?.mode !== 'wardrobe') return;
-    renderActive(panel, ctx.getSelectedLayer());
+    expandAncestorsOf(ctx.getSelectedLayer(), WARDROBE_LAYER_TREE);
+    rebuildTree(panel, ctx, onClick, ctx.getSelectedLayer());
   });
 }
 

@@ -27,13 +27,20 @@ export {
   LAYER_TO_UV_PARTS,
   UV_PART_TO_LAYER,
   LAYER_DISPLAY_LABELS,
+  WARDROBE_COMPOSITE_KEYS,
+  WARDROBE_PART_KEYS,
+  WARDROBE_COMPOSITE_BOUNDS,
+  WARDROBE_COMPOSITE_CAMERA_PRESET,
   isLayerKey,
   isInDeadZone,
   partToLayer,
   getLayerBoundsByKey,
+  getPartBounds,
   type Bounds,
   type LayerKey,
   type UVPartKey,
+  type WardrobeCompositeKey,
+  type WardrobePartKey,
 } from './layout';
 
 export {

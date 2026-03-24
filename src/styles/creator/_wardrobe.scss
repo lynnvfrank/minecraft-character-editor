@@ -43,10 +43,54 @@ body[data-route="preview"] .app-lower-left-panels {
   gap: 0.35rem;
 }
 
+/* Hierarchical tree layout */
+.creator-wardrobe-parts-panel-tree {
+  gap: 0;
+}
+
+.creator-wardrobe-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-left: calc(var(--depth, 0) * 1rem);
+  border-radius: 4px;
+  min-height: 2rem;
+}
+
+.creator-wardrobe-parts-btn.active {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.creator-wardrobe-layer-caret {
+  flex-shrink: 0;
+  width: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.7);
+}
+.creator-wardrobe-layer-caret-visible {
+  cursor: pointer;
+}
+.creator-wardrobe-layer-caret-visible:hover {
+  color: rgba(255, 255, 255, 0.95);
+}
+.creator-wardrobe-layer-caret-placeholder {
+  visibility: hidden;
+}
+
+.creator-wardrobe-layer-children {
+  padding-left: 1rem;
+}
+
 .creator-wardrobe-parts-btn {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   text-align: left;
-  padding: 0.4rem 0.6rem;
+  padding: 0.35rem 0.5rem;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.06);
@@ -54,14 +98,30 @@ body[data-route="preview"] .app-lower-left-panels {
   font-size: 0.85rem;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .creator-wardrobe-parts-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.3);
 }
-.creator-wardrobe-parts-btn.active {
-  background: rgba(59, 130, 246, 0.22);
-  border-color: rgba(59, 130, 246, 0.5);
+
+.creator-wardrobe-layer-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.creator-wardrobe-layer-placeholder {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  object-fit: contain;
+  opacity: 0.85;
+  margin-left: auto;
 }
 .creator-wardrobe-library-header,
 .creator-wardrobe-outfits-header {

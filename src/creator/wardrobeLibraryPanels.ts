@@ -13,6 +13,50 @@ export type WardrobePartPanelConfig = {
 };
 
 export const WARDROBE_PART_PANEL_CONFIGS: readonly WardrobePartPanelConfig[] = [
+  // Composite parts (taxonomy: body.top, body.center, etc.)
+  {
+    key: 'top',
+    panelId: 'creator-wardrobe-top-panel',
+    selectorId: 'creator-wardrobe-top-selector',
+    title: 'Head (hat + head)',
+    noneLabel: 'No head',
+  },
+  {
+    key: 'center',
+    panelId: 'creator-wardrobe-center-panel',
+    selectorId: 'creator-wardrobe-center-selector',
+    title: 'Upper body',
+    noneLabel: 'No upper body',
+  },
+  {
+    key: 'bottom',
+    panelId: 'creator-wardrobe-bottom-panel',
+    selectorId: 'creator-wardrobe-bottom-selector',
+    title: 'Lower body',
+    noneLabel: 'No lower body',
+  },
+  {
+    key: 'torso',
+    panelId: 'creator-wardrobe-torso-panel',
+    selectorId: 'creator-wardrobe-torso-selector',
+    title: 'Torso',
+    noneLabel: 'No torso',
+  },
+  {
+    key: 'jacketGroup',
+    panelId: 'creator-wardrobe-jacket-group-panel',
+    selectorId: 'creator-wardrobe-jacket-group-selector',
+    title: 'Jacket (vest + sleeves)',
+    noneLabel: 'No jacket',
+  },
+  {
+    key: 'all',
+    panelId: 'creator-wardrobe-all-panel',
+    selectorId: 'creator-wardrobe-all-selector',
+    title: 'Full outfit',
+    noneLabel: 'No outfit',
+  },
+  // Atomic parts
   {
     key: 'hat',
     panelId: 'creator-wardrobe-hat-panel',

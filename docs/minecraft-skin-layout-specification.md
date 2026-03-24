@@ -282,6 +282,47 @@ For converting between formats:
 
 ---
 
+## Taxonomy (Creator.Wardrobe)
+
+Body parts use a consistent taxonomy for UI and code. Atomic parts map to layout regions; composite parts are unions of atomic parts.
+
+### Atomic Parts (Layout Keys)
+
+| Taxonomy | Display Name | Layout Key | Bounds (X, Y, W, H) |
+|----------|--------------|------------|---------------------|
+| body.hat | Hat | hat | 32, 0, 32, 16 |
+| body.head | Head | head | 0, 0, 32, 16 |
+| body.vest | Jacket | jacket | 16, 32, 24, 16 |
+| body.chest | Body | body | 16, 16, 24, 16 |
+| body.sleeves | Sleeves | sleeves | 40, 32, 16, 16 + 48, 48, 16, 16 |
+| body.arms | Arms | arms | 40, 16, 16, 16 + 32, 48, 16, 16 |
+| body.pants | Pants | pants | 0, 32, 16, 16 + 0, 48, 16, 16 |
+| body.legs | Legs | legs | 0, 16, 16, 16 + 16, 48, 16, 16 |
+
+### Composite Parts
+
+| Taxonomy | Display Name | Contains | Bounds (union of children) |
+|----------|--------------|----------|---------------------------|
+| body.torso | Torso | body.chest, body.arms | body + arms regions |
+| body.jacket | Jacket | body.vest, body.sleeves | jacket + sleeves regions |
+| body.bottom | Lower Body | body.pants, body.legs | pants + legs regions |
+| body.center | Upper Body | body.jacket, body.chest, body.sleeves, body.arms | jacket + body + sleeves + arms regions |
+| body.top | Head | body.hat, body.head | hat + head regions |
+| body.all | Full Outfit | body.top, body.center, body.bottom | entire 64×64 canvas |
+
+### Composite Part Bounds (X, Y, W, H)
+
+For cropping and part-only skin generation, each composite uses the union of its children:
+
+- **body.torso:** Body (16, 16, 24, 16) + Right Arm (40, 16, 16, 16) + Left Arm (32, 48, 16, 16)
+- **body.jacket:** Jacket (16, 32, 24, 16) + Right Sleeves (40, 32, 16, 16) + Left Sleeves (48, 48, 16, 16)
+- **body.bottom:** Right Leg (0, 16, 16, 16) + Left Leg (16, 48, 16, 16) + Right Pants (0, 32, 16, 16) + Left Pants (0, 48, 16, 16)
+- **body.center:** body.jacket + body.chest + body.arms + body.sleeves (all upper-body regions)
+- **body.top:** Head (0, 0, 32, 16) + Hat (32, 0, 32, 16)
+- **body.all:** Full 64×64 (0, 0, 64, 64)
+
+---
+
 ## Quick Reference: Region Bounds (X, Y, W, H)
 
 | Part | X | Y | W | H |
@@ -298,6 +339,12 @@ For converting between formats:
 | Right Sleeves | 40 | 32 | 16 | 16 |
 | Left Arm | 32 | 48 | 16 | 16 |
 | Left Sleeves | 48 | 48 | 16 | 16 |
+| **Composite: torso** | body + arms (multiple rects) | | | |
+| **Composite: jacketGroup** | jacket + sleeves (multiple rects) | | | |
+| **Composite: bottom** | legs + pants (multiple rects) | | | |
+| **Composite: center** | jacket + body + sleeves + arms | | | |
+| **Composite: top** | 0 | 0 | 64 | 16 |
+| **Composite: all** | 0 | 0 | 64 | 64 |
 
 ---
 

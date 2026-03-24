@@ -22,7 +22,22 @@ const PREVIEW_CONFIG_ROOT = path.join(ROOT, 'src/config/preview');
 const MANIFEST_PATH = path.join(ROOT, 'public/wardrobe/skins/index.json');
 const PREVIEWS_DIR = path.join(ROOT, 'public/wardrobe/skins/previews');
 const WARDROBE_ROOT = path.join(ROOT, 'public/wardrobe/parts');
-const WARDROBE_PART_KEYS = ['hat', 'head', 'jacket', 'body', 'arms', 'sleeves', 'pants', 'legs'];
+const WARDROBE_PART_KEYS = [
+  'hat',
+  'head',
+  'jacket',
+  'body',
+  'arms',
+  'sleeves',
+  'pants',
+  'legs',
+  'torso',
+  'jacketGroup',
+  'bottom',
+  'center',
+  'top',
+  'all',
+];
 const PORT = 5173;
 const BASE_URL = `http://localhost:${PORT}`;
 const FULL_OUTFIT_PREVIEW_CONFIG_PATH = path.join(PREVIEW_CONFIG_ROOT, 'skins', 'preview.config.json');

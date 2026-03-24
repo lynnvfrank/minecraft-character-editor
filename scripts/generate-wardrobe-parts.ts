@@ -16,7 +16,13 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
-import { LAYER_KEYS, SKIN_LAYER_BOUNDS } from '../src/skin';
+import {
+  LAYER_KEYS,
+  SKIN_LAYER_BOUNDS,
+  WARDROBE_PART_KEYS,
+  WARDROBE_COMPOSITE_BOUNDS,
+  type WardrobePartKey,
+} from '../src/skin';
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,10 +80,17 @@ async function main(): Promise<void> {
 
   const publicRoot = path.join(PROJECT_ROOT, 'public');
 
+  function getBoundsForPart(part: WardrobePartKey): { x: number; y: number; w: number; h: number }[] {
+    if (part in WARDROBE_COMPOSITE_BOUNDS) {
+      return WARDROBE_COMPOSITE_BOUNDS[part as keyof typeof WARDROBE_COMPOSITE_BOUNDS];
+    }
+    return SKIN_LAYER_BOUNDS[part as keyof typeof SKIN_LAYER_BOUNDS];
+  }
+
   /** part -> manifest entries */
   const manifests: Record<string, { path: string; items: { id?: string; path?: string; label?: string; preview?: string }[] }> = {};
 
-  for (const part of LAYER_KEYS) {
+  for (const part of WARDROBE_PART_KEYS) {
     const partDir = path.join(WARDROBE_PARTS_ROOT, part);
     ensureDir(partDir);
     ensureDir(path.join(partDir, 'previews'));
@@ -106,8 +119,8 @@ async function main(): Promise<void> {
 
     const baseName = path.basename(relPath, path.extname(relPath));
 
-    for (const part of LAYER_KEYS) {
-      const boundsList = SKIN_LAYER_BOUNDS[part];
+    for (const part of WARDROBE_PART_KEYS) {
+      const boundsList = getBoundsForPart(part);
       const partDir = path.join(WARDROBE_PARTS_ROOT, part);
       const id = `${baseName}-${part}`;
       const outName = `${id}.png`;
@@ -159,7 +172,7 @@ async function main(): Promise<void> {
   }
 
   // Write manifests
-  for (const part of LAYER_KEYS) {
+  for (const part of WARDROBE_PART_KEYS) {
     const { path: manifestPath, items } = manifests[part];
     items.sort((a, b) => String(a.label).localeCompare(String(b.label)));
     fs.writeFileSync(manifestPath, JSON.stringify(items, null, 2), 'utf-8');

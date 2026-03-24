@@ -7,7 +7,13 @@
  * showWardrobeLibraryPanel, hideAllWardrobeLibraryPanels.
  */
 
-import { SKIN_LAYER_BOUNDS, WORK_SIZE, RESOLUTION_MULTIPLIER } from '../skin';
+import {
+  SKIN_LAYER_BOUNDS,
+  WORK_SIZE,
+  RESOLUTION_MULTIPLIER,
+  getPartBounds,
+  WARDROBE_COMPOSITE_KEYS,
+} from '../skin';
 import { cloneImageData } from './canvasCoords';
 import { clearModeAnimClasses, setModePanelHidden, MODE_TRANSITION_MS } from './modePanels';
 import type { SkinEntry } from '../domain';
@@ -22,7 +28,7 @@ import {
 
 /** Sentinel for "use base skin" on overlay parts. Base parts use null. */
 export const WARDROBE_ORIGINAL = '__original__' as const;
-const WARDROBE_OVERLAY_KEYS = ['hat', 'jacket', 'sleeves', 'pants'] as const satisfies readonly WardrobePartKey[];
+const WARDROBE_OVERLAY_KEYS = ['hat', 'jacket', 'sleeves', 'pants'] as const;
 
 type WardrobeSelectionState = Record<WardrobePartKey, string | null>;
 type WardrobeLibraryState = Record<WardrobePartKey, SkinEntry[]>;
@@ -95,6 +101,12 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     sleeves: WARDROBE_ORIGINAL,
     pants: WARDROBE_ORIGINAL,
     legs: null,
+    torso: null,
+    jacketGroup: null,
+    bottom: null,
+    center: null,
+    top: null,
+    all: null,
   };
   const wardrobeLibraries: WardrobeLibraryState = {
     hat: [],
@@ -105,6 +117,12 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     sleeves: [],
     pants: [],
     legs: [],
+    torso: [],
+    jacketGroup: [],
+    bottom: [],
+    center: [],
+    top: [],
+    all: [],
   };
   const wardrobeOriginalPreviews: Record<WardrobePartKey, string | null> = {
     hat: null,
@@ -115,6 +133,12 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     sleeves: null,
     pants: null,
     legs: null,
+    torso: null,
+    jacketGroup: null,
+    bottom: null,
+    center: null,
+    top: null,
+    all: null,
   };
   let wardrobeOriginalPreviewSignature = '';
   let wardrobeOriginalCaptureToken = 0;
@@ -213,7 +237,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
   }
 
   function clearPartBoundsToTransparent(destCtx: CanvasRenderingContext2D, part: WardrobePartKey): void {
-    const bounds = SKIN_LAYER_BOUNDS[part] ?? [];
+    const bounds = getPartBounds(part);
     const scale = RESOLUTION_MULTIPLIER;
     bounds.forEach((rect) => {
       const x = rect.x * scale;
@@ -244,7 +268,9 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
     for (const part of WARDROBE_PART_KEYS) {
       const selected = wardrobeSelections[part];
-      const isOverlay = (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(part);
+      const isOverlay =
+        (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(part) &&
+        !WARDROBE_COMPOSITE_KEYS.includes(part as (typeof WARDROBE_COMPOSITE_KEYS)[number]);
 
       if (selected === null) {
         if (isOverlay) {
@@ -266,7 +292,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
       srcCtx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
       srcCtx.drawImage(img, 0, 0, WORK_SIZE, WORK_SIZE);
-      const bounds = SKIN_LAYER_BOUNDS[part] ?? [];
+      const bounds = getPartBounds(part);
       bounds.forEach((rect) => {
         const x = rect.x * RESOLUTION_MULTIPLIER;
         const y = rect.y * RESOLUTION_MULTIPLIER;
@@ -321,7 +347,17 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
       return;
     }
 
-    const partKeys: WardrobePartKey[] = ['hat', 'head', 'jacket', 'body', 'arms', 'sleeves', 'pants', 'legs'];
+    const partKeys: WardrobePartKey[] = [
+      'hat',
+      'head',
+      'jacket',
+      'body',
+      'arms',
+      'sleeves',
+      'pants',
+      'legs',
+      ...WARDROBE_COMPOSITE_KEYS,
+    ];
     let successCount = 0;
     for (const part of partKeys) {
       if (token !== wardrobeOriginalCaptureToken) return;

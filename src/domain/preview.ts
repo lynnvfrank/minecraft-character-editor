@@ -9,7 +9,13 @@ export type PreviewPresetKey =
   | 'arms'
   | 'sleeves'
   | 'pants'
-  | 'legs';
+  | 'legs'
+  | 'torso'
+  | 'jacketGroup'
+  | 'bottom'
+  | 'center'
+  | 'top'
+  | 'all';
 
 export type PreviewVector = {
   x: number;

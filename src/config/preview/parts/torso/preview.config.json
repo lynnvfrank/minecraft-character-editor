@@ -1,0 +1,7 @@
+{
+  "visibleLayers": ["body", "arms"],
+  "cameraPosition": { "x": 0, "y": 1.2, "z": 2.35 },
+  "cameraTarget": { "x": 0, "y": 0.98, "z": 0 },
+  "fov": 30,
+  "viewport": { "width": 400, "height": 450 }
+}

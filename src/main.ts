@@ -69,7 +69,14 @@ import { subscribe, CREATOR_EVENTS } from './events/appEvents';
 import { logger, easeOutCubic } from './lib';
 import { createSocketManager, createCharacterAI } from './services';
 import { preprocessSkinTexture } from './skin';
-import { SKIN_LAYER_BOUNDS, LAYER_KEYS, TEXTURE_LAYER_KEYS, isLayerWithParts, type LayerKey } from './skin';
+import {
+  SKIN_LAYER_BOUNDS,
+  LAYER_KEYS,
+  TEXTURE_LAYER_KEYS,
+  isLayerWithParts,
+  getPartBounds,
+  type LayerKey,
+} from './skin';
 import {
   ensurePreviewCameraPanel,
   removePreviewCameraPanel,
@@ -662,7 +669,7 @@ function composePreviewSkinCanvas(
   sourceCtx.imageSmoothingEnabled = false;
   sourceCtx.drawImage(skinImage, 0, 0, skinSize, skinSize, 0, 0, 64, 64);
 
-  const bounds = SKIN_LAYER_BOUNDS[part] ?? [];
+  const bounds = getPartBounds(part);
   bounds.forEach((rect) => {
     const partImageData = sourceCtx.getImageData(rect.x, rect.y, rect.w, rect.h);
     ctx.putImageData(partImageData, rect.x, rect.y);
