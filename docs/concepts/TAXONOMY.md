@@ -11,7 +11,7 @@ This document defines the canonical structure of the `src/` directory. Use it wh
 | **domain** | Types, constants, schemas | Catalog types, EditMode, skin bounds, preview types |
 | **lib** | Pure functions, shared utilities | Logger, color, math, URL helpers |
 | **config** | Static configuration | Defaults, feature flags, preview configs |
-| **state** | Shared runtime state (optional) | Session catalogs, creator state |
+| **state** | Shared runtime state (optional) | Session catalogs, creator state, [creatorSlices](../../src/state/creatorSlices.ts) (in-process subscribe/notify) |
 | **services** | External I/O and integrations | Socket manager, character AI, API wrappers |
 | **controllers** | Flow and orchestration | Mode machine, routes, bootstrap |
 | **ui** | Shared visual components | Panels, overlays, chrome |
@@ -30,7 +30,7 @@ This document defines the canonical structure of the `src/` directory. Use it wh
 | **domain** | Types, constants, schemas. Single source of truth for data shapes and domain rules. |
 | **lib** | Pure helpers and shared utilities. No feature logic, minimal side effects. |
 | **config** | Static configuration. Defaults, feature flags, preset options. |
-| **state** | Shared runtime state used across features. |
+| **state** | Shared runtime state used across features; creator slice notifications ([MODELS-AND-SUBSCRIBERS.md](./MODELS-AND-SUBSCRIBERS.md)). |
 | **services** | External I/O and integrations. Socket, AI, API. |
 | **controllers** | Application flow. Bootstrap, routes, mode machine, character lifecycle. |
 | **ui** | Shared visual components: panels, overlays, chrome (nav, electron status). |

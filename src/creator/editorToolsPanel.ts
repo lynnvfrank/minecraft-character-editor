@@ -1,4 +1,4 @@
-import { subscribe, CREATOR_EVENTS } from './events';
+import { creatorModeSlice, creatorToolsSlice } from '../state/creatorSlices';
 import { createEl } from './dom';
 import type { EditorToolsContext } from './api';
 import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE, isDrawingTool, isToggleType } from './api';
@@ -138,11 +138,13 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
     ctx.updateUndoRedoButtons();
   });
 
-  subscribe(CREATOR_EVENTS.TOOLS_CHANGE, () => {
+  creatorToolsSlice.subscribe(() => {
+    if (document.body.dataset.route !== 'creator') return;
     updateToolActive();
     ctx.updateCanvasCursor();
   });
-  subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, () => {
+  creatorModeSlice.subscribe(() => {
+    if (document.body.dataset.route !== 'creator') return;
     updateEditModeButtons();
     updateViewToggleButtons();
   });

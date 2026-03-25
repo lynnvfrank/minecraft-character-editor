@@ -65,7 +65,12 @@ import { createViewerUIController } from './controllers/viewerUI';
 import { setupTestControls, setFacingLogContextProvider } from './debug';
 import type { SkinEntry, AnimationEntry } from './domain';
 import { getPrimaryCharacterId } from './domain';
-import { subscribe, CREATOR_EVENTS } from './events/appEvents';
+import {
+  creatorCanvasSlice,
+  creatorLayerSlice,
+  creatorModeSlice,
+  creatorSkinLoadSlice,
+} from './state/creatorSlices';
 import { logger, easeOutCubic } from './lib';
 import { createSocketManager, createCharacterAI } from './services';
 import { preprocessSkinTexture } from './skin';
@@ -157,12 +162,6 @@ type PreviewCaptureRuntimeApi = {
 };
 /** Composite sequences loaded from /sequences/index.json */
 type Sequence = { id: string; label: string; steps: SequenceStep[] };
-type EventHandlerEntry = {
-  event: string;
-  handler: (e: CustomEvent) => void;
-  guard?: () => boolean;
-};
-
 // -----------------------------------------------------------------------------
 // Module state (mutable refs resolved during init)
 // -----------------------------------------------------------------------------
@@ -888,36 +887,23 @@ function updateCreatorPreviewTexture() {
 function setupCreatorPreviewDirtySubscription(): void {
   const markDirty = () => { creatorPreviewDirty = true; };
 
-  const EVENT_HANDLERS: EventHandlerEntry[] = [
-    { event: CREATOR_EVENTS.CANVAS_CHANGE, handler: () => markDirty() },
-    { event: CREATOR_EVENTS.LAYER3D_CHANGE, handler: () => markDirty() },
-    {
-      event: CREATOR_EVENTS.EDIT_MODE_CHANGE,
-      handler: (e) => creatorPoseController.applyCreatorCharacterPose(e.detail),
-      guard: () => getRoute() === 'creator',
-    },
-    {
-      event: CREATOR_EVENTS.SKIN_LOAD_CHANGE,
-      handler: (e) => {
-        markDirty();
-        const path = (e.detail as { path?: string })?.path;
-        if (typeof path === 'string') {
-          const char = getCharacter(getPrimaryCharacterId());
-          if (char) {
-            char.currentSkin = path;
-            lastCreatorLoadedPath = path;
-            viewerUIController.highlightActiveSkin(getPrimaryCharacterId(), path);
-          }
-        }
-      },
-    },
-  ];
-
-  EVENT_HANDLERS.forEach(({ event, handler, guard }) => {
-    subscribe(event, (e) => {
-      if (guard && !guard()) return;
-      handler(e as CustomEvent);
-    });
+  creatorCanvasSlice.subscribe(() => markDirty());
+  creatorLayerSlice.subscribe(() => markDirty());
+  creatorModeSlice.subscribe((detail) => {
+    if (getRoute() !== 'creator') return;
+    creatorPoseController.applyCreatorCharacterPose(detail);
+  });
+  creatorSkinLoadSlice.subscribe((detail) => {
+    markDirty();
+    const path = detail.path;
+    if (typeof path === 'string') {
+      const char = getCharacter(getPrimaryCharacterId());
+      if (char) {
+        char.currentSkin = path;
+        lastCreatorLoadedPath = path;
+        viewerUIController.highlightActiveSkin(getPrimaryCharacterId(), path);
+      }
+    }
   });
 }
 

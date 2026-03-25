@@ -7,7 +7,11 @@ import { SKIN_SIZE, SKIN_LAYER_BOUNDS, SKIN_DEAD_ZONES, LAYER_KEYS, isLayerWithP
 import { rgbToHex } from '../lib/color';
 import * as brush from './brush';
 import type { CreatorState } from '../state/creatorState';
-import { subscribe, publish, CREATOR_EVENTS } from './events';
+import {
+  creator2dPaintSlice,
+  creatorLayerSlice,
+  creatorLockFeedbackSlice,
+} from '../state/creatorSlices';
 
 const ZOOM = 4;
 const DISPLAY_SIZE = WORK_SIZE * ZOOM;
@@ -38,7 +42,7 @@ const TEMPLATE_LABEL_TEXT_VISIBLE = 'rgba(241, 245, 249, 0.96)';
 const TEMPLATE_LABEL_TEXT_HIDDEN = 'rgba(226, 232, 240, 0.82)';
 
 let activeBlockyContext: BlockyEditorContext | null = null;
-let unbindLayerVisibilityListener: (() => void) | null = null;
+let unbindBlockyLayerSubs: (() => void) | null = null;
 let overlayPointerPx: { x: number; y: number } | null = null;
 const flippedTemplateLabelKeys = new Set<string>();
 const hoveredTemplateLabelKeys = new Set<string>();
@@ -183,7 +187,7 @@ function triggerLockFeedbackIfNeeded(ctx: BlockyEditorContext, workingX: number,
   if (!isInSelectedLayer(ctx, workingX, workingY)) return;
   const layer = getLayerAtCoords(ctx, workingX, workingY);
   if (layer != null && ctx.state.layer3DLocked[layer]) {
-    publish(CREATOR_EVENTS.LOCK_FEEDBACK, { layer });
+    creatorLockFeedbackSlice.notify({ layer });
   }
 }
 
@@ -475,11 +479,17 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
   const gridEl: HTMLElement = grid;
   const drawCtx: CanvasRenderingContext2D = skinCtx;
   activeBlockyContext = ctx;
-  if (!unbindLayerVisibilityListener) {
-    unbindLayerVisibilityListener = subscribe(CREATOR_EVENTS.LAYER3D_CHANGE, () => {
+  if (!unbindBlockyLayerSubs) {
+    const refresh = () => {
       if (!activeBlockyContext) return;
       renderRulersAndGrid(activeBlockyContext);
-    });
+    };
+    const u1 = creatorLayerSlice.subscribe(refresh);
+    const u2 = creator2dPaintSlice.subscribe(refresh);
+    unbindBlockyLayerSubs = () => {
+      u1();
+      u2();
+    };
   }
 
   const canPaintAtBound = (wx: number, wy: number) => canPaintAt(ctx, wx, wy);

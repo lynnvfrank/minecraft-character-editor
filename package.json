@@ -15,6 +15,7 @@
     "build": "npm run assets:generate && vite build",
     "start": "node server/index.js",
     "preview": "vite preview",
+    "test": "node --import tsx --test src/lib/subscribable.test.ts",
     "wardrobe:generate": "node scripts/generate-skins-manifest.js && npx tsx scripts/generate-wardrobe-parts.ts && node scripts/generate-skin-previews.js",
     "wardrobe:clean": "node scripts/clear-previews.js wardrobe",
     "animations:generate": "node scripts/generate-animations-manifest.js",

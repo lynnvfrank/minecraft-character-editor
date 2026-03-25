@@ -3,7 +3,7 @@
  * Shows/hides creator panels based on edit mode (wardrobe, 2d, 3d).
  */
 
-import { subscribe, CREATOR_EVENTS } from '../events/appEvents';
+import { creatorModeSlice } from '../state/creatorSlices';
 import type { EditMode } from './api';
 
 export type PanelDirection = 'left' | 'right' | 'top' | 'bottom';
@@ -168,8 +168,8 @@ export function createModePanelTransitions(): ModePanelTransitions {
   function bindModePanelTransitions(getEditMode: () => EditMode): void {
     if (modePanelsBound) return;
     modePanelsBound = true;
-    subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, (e: CustomEvent<{ mode?: EditMode }>) => {
-      const nextMode = (e.detail?.mode ?? getEditMode()) as EditMode;
+    creatorModeSlice.subscribe((detail) => {
+      const nextMode = (detail.mode ?? getEditMode()) as EditMode;
       transitionModePanels(nextMode);
     });
   }

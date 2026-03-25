@@ -105,7 +105,7 @@ flowchart LR
 
 ## Creator submodes (`EditMode`)
 
-Submodes share **`route: creator`** and differ by `state.editMode` in `src/creator/creatorState.ts`, mirrored on `document.body.dataset.editMode`. Changes publish `CREATOR_EVENTS.EDIT_MODE_CHANGE` (`src/creatorEvents.ts`).
+Submodes share **`route: creator`** and differ by `state.editMode` in `src/creator/creatorState.ts`, mirrored on `document.body.dataset.editMode`. Changes notify `creatorModeSlice` ([`src/state/creatorSlices.ts`](../../src/state/creatorSlices.ts)); see [MODELS-AND-SUBSCRIBERS.md](./MODELS-AND-SUBSCRIBERS.md).
 
 ### Creator.Wardrobe (`wardrobe`)
 
@@ -220,7 +220,7 @@ flowchart TB
 | Submode constants / types | `EDIT_MODE_*`, `EditMode` in `src/creator/api.ts` |
 | Creator state default (`editMode`) | `createCreatorState()` in `src/creator/creatorState.ts` |
 | URL sync when submode changes | `syncCreatorModeUrl()` in `src/creator.ts` (only when `data-route="creator"`) |
-| Mode change event | `CREATOR_EVENTS.EDIT_MODE_CHANGE` in `src/creatorEvents.ts` |
+| Mode change notification | `creatorModeSlice.notify` in `src/state/creatorSlices.ts` |
 | Mode toggle UI | `src/creator/editorToolsPanel.ts` (Wardrobe / 3D / 2D buttons, keys 1–3) |
 | Layout: where the WebGL canvas lives | `updateCreator3DViewPlacement()` in `src/main.ts` |
 | Design/Home transitions | `createCreatorTransitionHandler()` in `src/controllers/transitions/creatorTransitionHandler.ts` |

@@ -1,34 +1,25 @@
-# Event System
-
-Unified app event bus for domain state changes. All app-level events flow through [src/events/appEvents.ts](../../src/events/appEvents.ts).
+# Event System (document bus)
 
 **Audience:** humans and coding agents working in this repo.
 
+The **document `CustomEvent` bus** in [src/events/appEvents.ts](../../src/events/appEvents.ts) is used for **cross-boundary commands** only.
+
+**Creator editor state** (color, layers, mode, canvas, etc.) uses **in-process slices** instead—see [MODELS-AND-SUBSCRIBERS.md](./MODELS-AND-SUBSCRIBERS.md) and [src/state/creatorSlices.ts](../../src/state/creatorSlices.ts).
+
 ---
 
-## Convention
+## Convention (document bus)
 
 - **Naming:** `app:<domain>:<action>`
-- **Detail objects:** Include `characterId?` for future multi-character support when relevant
-- **Publish:** `publish(event, detail)` — call when state changes
+- **Publish:** `publish(event, detail)`
 - **Subscribe:** `subscribe(event, handler)` — returns unsubscribe function
 
 ---
 
-## Event Registry
+## Event registry (remaining bus events)
 
 | Event | Domain | Publishers | Subscribers | Payload |
 |-------|--------|------------|-------------|---------|
-| `app:creator:current-color-change` | creator | creator.ts | colorPicker | `{ color: string }` |
-| `app:creator:texture-position-change` | creator | creator.ts, controls | texturePositionPanel, skinLayersPanel | `{ part, layer, skinX, skinY, tool?, currentColor?, hoverColor? }` |
-| `app:creator:swatch-history-change` | creator | creator.ts | swatches | (none) |
-| `app:creator:skin-load-change` | creator | creator.ts | main, swatches | `{ path: string }` |
-| `app:creator:swatch-palette-change` | creator | creator.ts | swatches | (none) |
-| `app:creator:edit-mode-change` | creator | creator.ts | main, creator (bindModePanels), wardrobePartsPanel | `{ mode, previousMode? }` |
-| `app:creator:tools-change` | creator | creator.ts | (UI sync) | (none) |
-| `app:creator:layer3d-change` | creator | creator.ts, controls | main, skinLayersPanel, blockyEditor | `{ layer?, property?, ... }` |
-| `app:creator:canvas-change` | creator | creator.ts, blockyEditor | main | (none) |
-| `app:creator:lock-feedback` | creator | controls, blockyEditor | skinLayersPanel | `{ layer: string }` |
 | `app:creator:camera-yaw-left` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
 | `app:creator:camera-yaw-right` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
 | `app:creator:camera-pitch-up` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
@@ -38,67 +29,40 @@ Unified app event bus for domain state changes. All app-level events flow throug
 | `app:creator:camera-recenter` | creator | CameraControls | creatorCameraController | (none) |
 | `app:creator:camera-move-start` | creator | creatorCameraController | CameraControls | (none) |
 | `app:creator:camera-move-end` | creator | creatorCameraController | CameraControls | (none) |
-| `app:character:skin-change` | character | main (UI + socket) | main | `{ characterId?, path }` |
-| `app:character:animation-play` | character | main (UI + socket) | main | `{ characterId?, name }` |
+| `app:character:skin-change` | character | viewerUI, socket | characterEvents | `{ characterId?, path }` |
+| `app:character:animation-play` | character | viewerUI, socket | characterEvents | `{ characterId?, name }` |
 
 ---
 
-## Event Flow Diagram
+## Diagram
 
 ```mermaid
-flowchart TB
-  subgraph publishers [Publishers]
-    creator[creator.ts]
-    controls[viewer/controls]
-    blocky[blockyEditor]
-    mainPub[main.ts UI/socket]
+flowchart LR
+  subgraph cam [Camera DOM]
+    CC[CameraControls]
   end
-
-  subgraph bus [Event Bus]
-    AE[appEvents publish/subscribe]
+  subgraph bus [document bus]
+    AE[publish subscribe]
   end
-
-  subgraph subscribers [Subscribers]
-    mainSub[main.ts]
-    colorPicker[colorPicker]
-    texturePanel[texturePositionPanel]
-    skinLayers[skinLayersPanel]
-    swatches[swatches]
+  subgraph three [Three.js]
+    CCC[creatorCameraController]
   end
-
-  creator --> AE
-  controls --> AE
-  blocky --> AE
-  mainPub --> AE
-
-  AE --> mainSub
-  AE --> colorPicker
-  AE --> texturePanel
-  AE --> skinLayers
-  AE --> swatches
+  subgraph char [Character]
+    CE[characterEvents]
+  end
+  CC --> AE
+  AE --> CCC
+  AE --> CE
 ```
 
 ---
 
-## Event Handling Conventions
+## Handler patterns
 
-Use data-driven patterns instead of switch/case so new handlers can be added without editing branches.
-
-| Pattern | Use | Example |
-|---------|-----|---------|
-| **Handler map** | Key → handler lookup | `KEY_BINDINGS: Record<string, () => void>` for shortcuts |
-| **Event registry** | Central subscribe array | `EVENT_HANDLERS: Array<{ event, handler, guard? }>` |
-| **Command map** | Action name → handler | `ANIMATION_COMMANDS: Record<string, (char) => void>` |
-| **Label map** | Value → display string | `TOOL_LABELS: Record<DrawingTool, string>` |
-| **Component bindings** | Declare events; bootstrap wires | `ComponentEventBinding` with `scope` (creator/viewer/global) |
-| **Strategy map** | Event type → handler | `POINTER_STRATEGIES: Record<string, (e, ctx) => void>` |
-
-Add new handlers by extending the map or registry; avoid adding case branches.
+Use maps and registries instead of large switch statements where it helps. Creator UI panels that sync to shared state should use **creator slices**, not new `app:creator:*` strings.
 
 ---
 
 ## External skin and animation commands
 
-**Intended behavior:** External skin and animation commands (POST `/api/skin`, `/api/animation`, or socket) apply to the primary character in **home (viewer) mode**. In **creator mode**, animation commands are ignored (character is under creator control). Skin commands from external sources apply regardless of route—the character model updates; updating the creator canvas from external skin commands could be added in future.
-
-Both UI (skin/animation selector clicks) and external (API/socket) sources publish the same events (`app:character:skin-change`, `app:character:animation-play`). The subscriber checks route and acts accordingly; external commands work in home mode.
+External skin and animation commands (API/socket) publish `app:character:skin-change` and `app:character:animation-play`. The subscriber applies them in viewer context; see existing [characterEvents](../../src/controllers/characterEvents.ts) behavior.

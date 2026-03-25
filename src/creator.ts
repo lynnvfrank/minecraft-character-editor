@@ -42,8 +42,14 @@ import { createColorActions, extractColorsFromSkin } from './creator/swatches';
 import { createSkinGalleryApi } from './creator/skinGallery';
 
 // --- Imports: events, state, lib, viewer ---
-import { subscribe, publish, CREATOR_EVENTS } from './events/appEvents';
 import { createCreatorState } from './state';
+import {
+  creatorCanvasSlice,
+  creatorModeSlice,
+  creatorSwatchPaletteSlice,
+  creatorTexturePositionSlice,
+  creatorToolsSlice,
+} from './state/creatorSlices';
 import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode, type PartSide } from './creator/api';
 import { rgbToHex } from './lib/color';
 import { getCapture3DThumbnail, getCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
@@ -70,8 +76,8 @@ const LAYER_GROUPS: readonly (readonly string[])[] = [
 const state = createCreatorState();
 
 const modePanelTransitions = createModePanelTransitions();
-const layerVisibilityApi = createLayerVisibilityApi(state, publish);
-const colorActions = createColorActions(state, publish, SWATCH_MAX);
+const layerVisibilityApi = createLayerVisibilityApi(state);
+const colorActions = createColorActions(state, SWATCH_MAX);
 const { addToSwatch, applyColorToUI, setSwatchAt } = colorActions;
 
 let blockyCtx: blockyEditor.BlockyEditorContext | null = null;
@@ -95,7 +101,7 @@ const wardrobeApi = createWardrobeApi({
     }
     if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
     updateAllUndoRedoButtons();
-    publish(CREATOR_EVENTS.CANVAS_CHANGE);
+    creatorCanvasSlice.notify();
   },
   onLoadSkin: (path) => loadSkinFromPathFn(path),
   getCapture3DThumbnail,
@@ -115,7 +121,6 @@ const skinGalleryApi = createSkinGalleryApi({
   setCreatorCanvasPopulated: (v) => { creatorCanvasPopulated = v; },
   setCreatorCurrentSkinPath: (path) => { creatorCurrentSkinPath = path; },
   wardrobeApi,
-  publish,
   applyColorToUI,
   updateAllUndoRedoButtons,
   renderToDisplay: () => { if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx); },
@@ -188,7 +193,7 @@ function performUndo(): void {
     getSkinCanvas,
     renderToDisplay: () => blockyEditor.renderToDisplay(blockyCtx!),
   });
-  publish(CREATOR_EVENTS.CANVAS_CHANGE);
+  creatorCanvasSlice.notify();
 }
 
 function updateAllUndoRedoButtons(): void {
@@ -203,7 +208,7 @@ function performRedo(): void {
     getSkinCanvas,
     renderToDisplay: () => blockyEditor.renderToDisplay(blockyCtx!),
   });
-  publish(CREATOR_EVENTS.CANVAS_CHANGE);
+  creatorCanvasSlice.notify();
 }
 
 function reportTexturePosition(part: string | null, skinX: number, skinY: number, hoverColorHint: string | null = null): void {
@@ -212,7 +217,7 @@ function reportTexturePosition(part: string | null, skinX: number, skinY: number
   let hoverColor: string | null = hoverColorHint;
   if (tool === 'eyedropper' && skinX >= 0 && skinY >= 0) {
     if (hoverColor != null) {
-      publish(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, {
+      creatorTexturePositionSlice.notify({
         part, layer, skinX, skinY, tool,
         currentColor: state.currentColor,
         hoverColor,
@@ -228,14 +233,14 @@ function reportTexturePosition(part: string | null, skinX: number, skinY: number
       hoverColor = null;
     }
   }
-  publish(CREATOR_EVENTS.TEXTURE_POSITION_CHANGE, {
+  creatorTexturePositionSlice.notify({
     part, layer, skinX, skinY, tool,
     currentColor: state.currentColor,
     hoverColor,
   });
 }
 
-/** Update hover info and publish texture position; used by 2D/3D editors. */
+/** Update hover info and notify texture-position slice; used by 2D/3D editors. */
 export function updateHoverInfo(part: string | null, skinX: number, skinY: number, hoverColor: string | null = null): void {
   reportTexturePosition(part, skinX, skinY, hoverColor);
 }
@@ -259,7 +264,7 @@ function buildCreatorPanels(): void {
     getActivePalette: () => state.activeSwatchPalette,
     setActivePalette: (paletteId: 'history' | 'skin') => {
       state.activeSwatchPalette = paletteId;
-      publish(CREATOR_EVENTS.SWATCH_PALETTE_CHANGE);
+      creatorSwatchPaletteSlice.notify();
     },
     applyColor: applyColorToUI,
     setSwatchColor: setSwatchAt,
@@ -331,8 +336,8 @@ function setupCanvasAreaResize(): void {
   updateCanvasCursor();
   new ResizeObserver(update).observe(area);
   requestAnimationFrame(update);
-  subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, (e: CustomEvent<{ mode?: EditMode }>) => {
-    if ((e.detail?.mode ?? state.editMode) === EDIT_MODE_2D) {
+  creatorModeSlice.subscribe((detail) => {
+    if ((detail.mode ?? state.editMode) === EDIT_MODE_2D) {
       requestAnimationFrame(() => requestAnimationFrame(update));
     }
   });
@@ -393,7 +398,7 @@ export function initCreator(): void {
       state.undoStack.push({ type: 'fill', pixels, fillColor });
       if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
     },
-    onCanvasChange: () => publish(CREATOR_EVENTS.CANVAS_CHANGE),
+    onCanvasChange: () => creatorCanvasSlice.notify(),
     updateUndoRedoButtons: updateAllUndoRedoButtons,
     undoLimit: UNDO_LIMIT,
   };
@@ -495,7 +500,7 @@ export function setEditMode(mode: EditMode, options: { syncUrl?: boolean } = {})
   }
   state.editMode = mode;
   document.body.dataset.editMode = mode;
-  publish(CREATOR_EVENTS.EDIT_MODE_CHANGE, { mode: state.editMode, previousMode });
+  creatorModeSlice.notify({ mode: state.editMode, previousMode });
 
   if (mode === 'wardrobe') {
     wardrobeApi.resetWardrobeSelections();
@@ -561,7 +566,7 @@ export function getActiveTool(): DrawingTool {
 
 export function setActiveTool(tool: DrawingTool): void {
   state.activeTool = tool;
-  publish(CREATOR_EVENTS.TOOLS_CHANGE);
+  creatorToolsSlice.notify();
 }
 
 export function getBrushSize(): number {
@@ -587,7 +592,7 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
       state.redoStack = [];
       state.undoStack.push({ type: 'fill', pixels: changed, fillColor: state.currentColor });
       if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
-      publish(CREATOR_EVENTS.CANVAS_CHANGE);
+      creatorCanvasSlice.notify();
     }
     if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
     return changed.length > 0;
@@ -601,7 +606,7 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
   const baseY = Math.floor(workingY / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
   brush.brushAt(ctx, baseX, baseY, isEraser, canPaintAt, getCurrentColor, state.currentStroke, RESOLUTION_MULTIPLIER, true);
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
-  publish(CREATOR_EVENTS.CANVAS_CHANGE);
+  creatorCanvasSlice.notify();
   return true;
 }
 
@@ -629,7 +634,7 @@ export function paintMoveFrom3D(workingX: number, workingY: number): void {
   state.lastSkinX = workingX;
   state.lastSkinY = workingY;
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
-  publish(CREATOR_EVENTS.CANVAS_CHANGE);
+  creatorCanvasSlice.notify();
 }
 
 export function paintEndFrom3D(): void {

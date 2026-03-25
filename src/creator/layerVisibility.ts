@@ -4,7 +4,7 @@
  * solo visibility/lock modes, drag-to-toggle, and save/restore for non-edit mode.
  */
 
-import { publish, CREATOR_EVENTS } from '../events/appEvents';
+import { creatorLayerSlice } from '../state/creatorSlices';
 import { LAYER_KEYS, isLayerKey, isLayerWithParts } from '../skin';
 import type { CreatorState } from '../state';
 import type { PartSide } from './api';
@@ -48,10 +48,7 @@ function getLayerUnderPoint(clientX: number, clientY: number): string | null {
   return row instanceof HTMLElement ? row.dataset.layer ?? null : null;
 }
 
-export function createLayerVisibilityApi(
-  state: CreatorState,
-  publishEvent: typeof publish
-): LayerVisibilityApi {
+export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityApi {
   let savedLayerStateBeforeNonEditMode: SavedLayerState | null = null;
 
   function setLayer3DVisibleAll(visible: Record<string, boolean>): void {
@@ -63,11 +60,7 @@ export function createLayerVisibilityApi(
       }
     }
     if (changed) {
-      publishEvent(CREATOR_EVENTS.LAYER3D_CHANGE, {
-        property: 'visibility',
-        all: true,
-        visibleMap: { ...state.layer3DVisible },
-      });
+      creatorLayerSlice.notify();
     }
   }
 
@@ -75,7 +68,7 @@ export function createLayerVisibilityApi(
     for (const k of LAYER_KEYS) {
       if (locked[k] !== undefined) state.layer3DLocked[k] = locked[k];
     }
-    publishEvent(CREATOR_EVENTS.LAYER3D_CHANGE);
+    creatorLayerSlice.notify();
   }
 
   function setLayer3DVisible(layer: string, visible: boolean): void {
@@ -83,11 +76,7 @@ export function createLayerVisibilityApi(
       const previous = state.layer3DVisible[layer];
       state.layer3DVisible[layer] = visible;
       if (previous !== visible) {
-        publishEvent(CREATOR_EVENTS.LAYER3D_CHANGE, {
-          layer,
-          property: 'visibility',
-          visible,
-        });
+        creatorLayerSlice.notify();
       }
     }
   }
@@ -103,19 +92,14 @@ export function createLayerVisibilityApi(
     const prev = state.layer3DPartVisible[layer]![side];
     state.layer3DPartVisible[layer]![side] = visible;
     if (prev !== visible) {
-      publishEvent(CREATOR_EVENTS.LAYER3D_CHANGE, {
-        layer,
-        property: 'partVisibility',
-        side,
-        visible,
-      });
+      creatorLayerSlice.notify();
     }
   }
 
   function setLayer3DLocked(layer: string, locked: boolean): void {
     if (isLayerKey(layer)) {
       state.layer3DLocked[layer] = locked;
-      publishEvent(CREATOR_EVENTS.LAYER3D_CHANGE);
+      creatorLayerSlice.notify();
     }
   }
 
@@ -285,7 +269,7 @@ export function createLayerVisibilityApi(
       Object.fromEntries(LAYER_KEYS.map((k) => [k, true]))
     );
     state.layer3DPartVisible = {};
-    publishEvent(CREATOR_EVENTS.LAYER3D_CHANGE);
+    creatorLayerSlice.notify();
     setLayer3DLockedAll(
       Object.fromEntries(LAYER_KEYS.map((k) => [k, false]))
     );

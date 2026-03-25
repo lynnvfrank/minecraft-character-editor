@@ -23,7 +23,11 @@ import {
   updateHoverInfo,
   getPartDisplayNameAtCoords
 } from '../creator';
-import { subscribe, publish, CREATOR_EVENTS } from '../events/appEvents';
+import {
+  creatorLockFeedbackSlice,
+  creatorModeSlice,
+  creatorToolsSlice,
+} from '../state/creatorSlices';
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -239,7 +243,7 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     if (!uv) {
       const visibleHit = raycastToVisibleLayer(deps, e.clientX, e.clientY);
       if (visibleHit?.isLocked) {
-        publish(CREATOR_EVENTS.LOCK_FEEDBACK, { layer: visibleHit.layer });
+        creatorLockFeedbackSlice.notify({ layer: visibleHit.layer });
       }
       releasePaintControl();
       return;
@@ -302,10 +306,10 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     updateCreator3DCanvasCursor(renderer, deps.getRoute);
   });
 
-  subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, () => {
+  creatorModeSlice.subscribe(() => {
     refreshControls();
   });
-  subscribe(CREATOR_EVENTS.TOOLS_CHANGE, () => {
+  creatorToolsSlice.subscribe(() => {
     refreshControls();
   });
   document.addEventListener('keydown', () => {

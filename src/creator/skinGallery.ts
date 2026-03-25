@@ -8,7 +8,7 @@ import type { SkinEntry } from '../domain';
 import type { CreatorState } from '../state';
 import type { WardrobeApi } from './wardrobe';
 import { extractColorsFromSkin } from './swatches';
-import { CREATOR_EVENTS } from '../events/appEvents';
+import { creatorCanvasSlice, creatorSkinLoadSlice } from '../state/creatorSlices';
 
 export type SkinGalleryDeps = {
   getSkinCanvas: () => HTMLCanvasElement;
@@ -16,7 +16,6 @@ export type SkinGalleryDeps = {
   setCreatorCanvasPopulated: (v: boolean) => void;
   setCreatorCurrentSkinPath: (path: string | null) => void;
   wardrobeApi: WardrobeApi;
-  publish: (event: string, detail?: unknown) => void;
   applyColorToUI: (hex: string, addToSwatchList?: boolean, markAsUserSelected?: boolean) => void;
   updateAllUndoRedoButtons: () => void;
   renderToDisplay: () => void;
@@ -52,7 +51,6 @@ export function createSkinGalleryApi(deps: SkinGalleryDeps): SkinGalleryApi {
     setCreatorCanvasPopulated,
     setCreatorCurrentSkinPath,
     wardrobeApi,
-    publish,
     applyColorToUI,
     updateAllUndoRedoButtons,
     renderToDisplay,
@@ -78,8 +76,8 @@ export function createSkinGalleryApi(deps: SkinGalleryDeps): SkinGalleryApi {
     if (!state.userHasSelectedColor && state.skinSwatchColors.length > 0) {
       applyColorToUI(state.skinSwatchColors[0]!, false, false);
     }
-    publish(CREATOR_EVENTS.SKIN_LOAD_CHANGE, { path });
-    publish(CREATOR_EVENTS.CANVAS_CHANGE);
+    creatorSkinLoadSlice.notify({ path });
+    creatorCanvasSlice.notify();
     renderToDisplay();
     updateAllUndoRedoButtons();
 

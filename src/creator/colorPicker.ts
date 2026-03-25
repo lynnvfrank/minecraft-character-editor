@@ -1,4 +1,4 @@
-import { subscribe, CREATOR_EVENTS } from './events';
+import { creatorColorSlice } from '../state/creatorSlices';
 import { hexToHsva, hsvaToHex, adjustHexBrightness, isValidHex } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { ColorPickerContext } from './api';
@@ -344,8 +344,9 @@ export function buildColorPickerPanel(ctx: ColorPickerContext): void {
   fiveSwatchKeyHandler = handleFiveSwatchKeys;
   document.addEventListener('keydown', handleFiveSwatchKeys);
 
-  subscribe(CREATOR_EVENTS.CURRENT_COLOR_CHANGE, (e: CustomEvent<{ color: string }>) => {
-    const color = (e.detail?.color ?? ctx.getCurrentColor()).slice(0, 7).toLowerCase();
+  creatorColorSlice.subscribe((detail) => {
+    if (document.body.dataset.route !== 'creator') return;
+    const color = (detail.color ?? ctx.getCurrentColor()).slice(0, 7).toLowerCase();
     const picker = document.getElementById('creator-color-picker-panel') as HTMLElement | null;
     if (!picker) return;
     updateColorPickerFromHex(picker, color);

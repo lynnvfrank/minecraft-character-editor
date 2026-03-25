@@ -1,6 +1,4 @@
-import { subscribe, CREATOR_EVENTS } from './events';
-import { createEl } from './dom';
-import type { CreatorEditModeDetail } from './events';
+import { creatorModeSlice, creatorWardrobeFocusSlice } from '../state/creatorSlices';
 import {
   LAYER_KEYS,
   LAYER_DISPLAY_LABELS,
@@ -171,16 +169,16 @@ function expandAncestorsOf(key: WardrobeLayerKey, tree: WardrobeLayerTreeNode): 
 }
 
 let shortcutHandler: ((e: KeyboardEvent) => void) | null = null;
-let unbindModeChange: (() => void) | null = null;
+let unbindWardrobePanelSubs: (() => void) | null = null;
 
 export function unregisterWardrobeShortcuts(): void {
   if (shortcutHandler) {
     document.removeEventListener('keydown', shortcutHandler);
     shortcutHandler = null;
   }
-  if (unbindModeChange) {
-    unbindModeChange();
-    unbindModeChange = null;
+  if (unbindWardrobePanelSubs) {
+    unbindWardrobePanelSubs();
+    unbindWardrobePanelSubs = null;
   }
 }
 
@@ -377,10 +375,19 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
   };
   document.addEventListener('keydown', shortcutHandler);
 
-  unbindModeChange = subscribe(CREATOR_EVENTS.EDIT_MODE_CHANGE, (e: CustomEvent<CreatorEditModeDetail>) => {
-    if (e.detail?.mode !== 'wardrobe') return;
+  const uMode = creatorModeSlice.subscribe((detail) => {
+    if (detail.mode !== 'wardrobe') return;
     expandAncestorsOf(ctx.getSelectedLayer(), WARDROBE_LAYER_TREE);
     rebuildTree(panel, ctx, onClick, ctx.getSelectedLayer());
   });
+  const uFocus = creatorWardrobeFocusSlice.subscribe(() => {
+    if (ctx.getEditMode() !== 'wardrobe') return;
+    expandAncestorsOf(ctx.getSelectedLayer(), WARDROBE_LAYER_TREE);
+    rebuildTree(panel, ctx, onClick, ctx.getSelectedLayer());
+  });
+  unbindWardrobePanelSubs = () => {
+    uMode();
+    uFocus();
+  };
 }
 

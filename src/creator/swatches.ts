@@ -1,4 +1,9 @@
-import { registerComponentBindings, CREATOR_EVENTS } from '../events/appEvents';
+import {
+  creatorColorSlice,
+  creatorSkinLoadSlice,
+  creatorSwatchHistorySlice,
+  creatorSwatchPaletteSlice,
+} from '../state/creatorSlices';
 import { isValidHex, normalizeHex, rgbToHex, hexToRgb } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { SwatchesContext, SwatchPaletteId } from './api';
@@ -61,18 +66,14 @@ export type ColorActions = {
   setSwatchAt: (index: number, hex: string) => void;
 };
 
-/** Create color actions that modify state and publish events. */
-export function createColorActions(
-  state: CreatorState,
-  publish: (event: string, detail?: unknown) => void,
-  swatchMax: number
-): ColorActions {
+/** Create color actions that modify state and notify creator slices. */
+export function createColorActions(state: CreatorState, swatchMax: number): ColorActions {
   function addToSwatch(hex: string): void {
     const normalized = hex.toLowerCase();
     state.swatchColors = state.swatchColors.filter((c) => c.toLowerCase() !== normalized);
     state.swatchColors.unshift(normalized);
     if (state.swatchColors.length > swatchMax) state.swatchColors.pop();
-    publish(CREATOR_EVENTS.SWATCH_HISTORY_CHANGE);
+    creatorSwatchHistorySlice.notify();
   }
 
   function applyColorToUI(hex: string, addToSwatchList = true, markAsUserSelected = true): void {
@@ -81,7 +82,7 @@ export function createColorActions(
     if (markAsUserSelected) state.userHasSelectedColor = true;
     state.currentColor = normalized;
     if (addToSwatchList) addToSwatch(normalized);
-    publish(CREATOR_EVENTS.CURRENT_COLOR_CHANGE, { color: normalized });
+    creatorColorSlice.notify({ color: normalized });
   }
 
   function setSwatchAt(index: number, hex: string): void {
@@ -90,7 +91,7 @@ export function createColorActions(
     if (!normalized) return;
     while (state.swatchColors.length <= index) state.swatchColors.push('');
     state.swatchColors[index] = normalized;
-    publish(CREATOR_EVENTS.SWATCH_HISTORY_CHANGE);
+    creatorSwatchHistorySlice.notify();
   }
 
   return { addToSwatch, applyColorToUI, setSwatchAt };
@@ -265,18 +266,19 @@ export function buildSwatchesPanel(ctx: SwatchesContext): void {
     if (swatchesMinimized) updateHeaderCollapsedDisplay();
   };
 
-  registerComponentBindings([
-    { event: CREATOR_EVENTS.SWATCH_HISTORY_CHANGE, scope: 'creator', handler: () => refreshSlots() },
-    {
-      event: CREATOR_EVENTS.SWATCH_PALETTE_CHANGE,
-      scope: 'creator',
-      handler: () => {
-        updateTabsActive();
-        refreshSlots();
-      },
-    },
-    { event: CREATOR_EVENTS.SKIN_LOAD_CHANGE, scope: 'creator', handler: () => refreshSlots() },
-  ]);
+  creatorSwatchHistorySlice.subscribe(() => {
+    if (document.body.dataset.route !== 'creator') return;
+    refreshSlots();
+  });
+  creatorSwatchPaletteSlice.subscribe(() => {
+    if (document.body.dataset.route !== 'creator') return;
+    updateTabsActive();
+    refreshSlots();
+  });
+  creatorSkinLoadSlice.subscribe(() => {
+    if (document.body.dataset.route !== 'creator') return;
+    refreshSlots();
+  });
 
   container.appendChild(panel);
   updateTabsActive();

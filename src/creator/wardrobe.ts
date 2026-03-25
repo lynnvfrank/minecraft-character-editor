@@ -25,6 +25,7 @@ import {
   WARDROBE_PART_PANEL_CONFIGS,
   getWardrobePanelIdForLayer,
 } from './wardrobeLibraryPanels';
+import { creatorWardrobeFocusSlice } from '../state/creatorSlices';
 
 /** Sentinel for "use base skin" on overlay parts. Base parts use null. */
 export const WARDROBE_ORIGINAL = '__original__' as const;
@@ -187,6 +188,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
   function setWardrobeSelectedLayer(layer: WardrobeLayerKey): void {
     wardrobeSelectedLayer = layer;
+    creatorWardrobeFocusSlice.notify();
     const isBasePart = layer === 'head' || layer === 'body' || layer === 'arms' || layer === 'legs';
     if (isBasePart && wardrobeSelections[layer] !== null) {
       wardrobeSelections[layer] = null;

@@ -1,5 +1,5 @@
-import { registerComponentBindings, CREATOR_EVENTS } from '../events/appEvents';
 import type { CreatorTexturePositionDetail } from '../events/appEvents';
+import { creatorTexturePositionSlice } from '../state/creatorSlices';
 import { TOOL_LABELS, type DrawingTool } from './api';
 import { getCreatorPanelsContainer } from './container';
 
@@ -47,48 +47,37 @@ export function buildTexturePositionPanel(): void {
     textSpan.textContent = '—';
   };
 
-  registerComponentBindings([
-    {
-      event: CREATOR_EVENTS.TEXTURE_POSITION_CHANGE,
-      scope: 'creator',
-      handler: (e: CustomEvent<CreatorTexturePositionDetail>) => {
-        const { skinX, skinY, tool, currentColor, hoverColor } = e.detail ?? {
-          skinX: -1,
-          skinY: -1,
-          tool: 'navigate',
-          currentColor: null,
-          hoverColor: null
-        };
+  creatorTexturePositionSlice.subscribe((detail: CreatorTexturePositionDetail) => {
+    if (document.body.dataset.route !== 'creator') return;
+    const { skinX, skinY, tool, currentColor, hoverColor } = detail;
 
-        if (skinX < 0 || skinY < 0) {
-          setEmpty();
-          return;
-        }
+    if (skinX < 0 || skinY < 0) {
+      setEmpty();
+      return;
+    }
 
-        if (!textSpan.contains(toolSpan)) {
-          textSpan.replaceChildren(toolSpan, colorSpan, coordsSpan);
-        }
+    if (!textSpan.contains(toolSpan)) {
+      textSpan.replaceChildren(toolSpan, colorSpan, coordsSpan);
+    }
 
-        toolSpan.textContent = `${formatToolName(tool)}`;
+    toolSpan.textContent = `${formatToolName(tool)}`;
 
-        const showCurrentColorSwatch = tool === 'brush' || tool === 'fill';
-        const showHoverColorSwatch = tool === 'eyedropper' || tool === 'eraser';
-        colorSpan.style.display = showCurrentColorSwatch || showHoverColorSwatch ? 'inline-flex' : 'none';
-        if (showCurrentColorSwatch) {
-          colorLabelSpan.textContent = '';
-          const normalizedColor = currentColor ?? '#000000';
-          colorSwatch.style.backgroundColor = normalizedColor;
-        }
-        if (showHoverColorSwatch) {
-          colorLabelSpan.textContent = '';
-          const eyedropColor = hoverColor ?? null;
-          colorSwatch.style.backgroundColor = eyedropColor ?? 'transparent';
-        }
+    const showCurrentColorSwatch = tool === 'brush' || tool === 'fill';
+    const showHoverColorSwatch = tool === 'eyedropper' || tool === 'eraser';
+    colorSpan.style.display = showCurrentColorSwatch || showHoverColorSwatch ? 'inline-flex' : 'none';
+    if (showCurrentColorSwatch) {
+      colorLabelSpan.textContent = '';
+      const normalizedColor = currentColor ?? '#000000';
+      colorSwatch.style.backgroundColor = normalizedColor;
+    }
+    if (showHoverColorSwatch) {
+      colorLabelSpan.textContent = '';
+      const eyedropColor = hoverColor ?? null;
+      colorSwatch.style.backgroundColor = eyedropColor ?? 'transparent';
+    }
 
-        coordsSpan.textContent = `(${skinX},${skinY})`;
-      },
-    },
-  ]);
+    coordsSpan.textContent = `(${skinX},${skinY})`;
+  });
 
   container.appendChild(panel);
 }
