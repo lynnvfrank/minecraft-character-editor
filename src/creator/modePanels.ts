@@ -28,7 +28,8 @@ export const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
   { id: 'creator-top-center-panels', modes: ['wardrobe', '3d'], enterFrom: 'top', exitTo: 'top' },
 ];
 
-export const MODE_TRANSITION_MS = 450;
+/** Must match mode panel exit duration in `_animations.scss` (`$creator-mode-panel-enter-duration`). */
+export const MODE_TRANSITION_MS = 360;
 
 function getAnimClass(prefix: 'in' | 'out', dir: PanelDirection): string {
   return `creator-mode-anim-${prefix}-${dir}`;

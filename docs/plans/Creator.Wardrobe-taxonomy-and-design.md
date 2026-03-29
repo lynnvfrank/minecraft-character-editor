@@ -59,7 +59,7 @@ In the layer panel, display the layers in this hierarchical structure.
     - body.pants
     - body.legs
 
-- Display each with a placeholder image "src/creator/mode.placeholder.svg
+- Display each with a placeholder image "src/creator/creator/mode.placeholder.svg
 - Display next to the image the label text
 - Use indenting to indicate the hierarchy
 - Each layer is expandable and collapsible

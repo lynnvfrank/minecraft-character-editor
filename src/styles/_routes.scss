@@ -51,8 +51,11 @@ body[data-route="creator"][data-edit-mode="2d"] .creator-canvas-area {
   flex: 1 1 auto;
   padding-bottom: 5rem;
 }
-body[data-route="creator"][data-edit-mode="2d"] .creator-blocky-grid {
+body[data-route="creator"][data-edit-mode="2d"] .creator-blocky-grid:not(.creator-blocky-grid--multi) {
   display: grid !important;
+}
+body[data-route="creator"][data-edit-mode="2d"] .creator-blocky-grid.creator-blocky-grid--multi {
+  display: block !important;
 }
 body[data-route="creator"][data-edit-mode="wardrobe"] .creator-canvas-area {
   display: none !important;

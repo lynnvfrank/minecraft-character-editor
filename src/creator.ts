@@ -7,14 +7,14 @@
  */
 
 // --- Imports: skin & domain ---
-import { partToLayer, WORK_SIZE, RESOLUTION_MULTIPLIER } from './skin';
+import { partToLayer, WORK_SIZE, RESOLUTION_MULTIPLIER, snapWorkingToSkinCellCenter } from './skin';
 import type { SkinEntry } from './domain';
 
 // --- Imports: creator modules ---
 import {
   getSkinCanvas,
   getLayerAndPartAtCoords,
-  getPartDisplayNameAtCoords,
+  getPartDisplayNameAtCoordsRespectingLayerVisibility,
   captureCanvasImageData,
 } from './creator/canvasCoords';
 import {
@@ -33,11 +33,21 @@ import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
+import {
+  paintBrushStampAt,
+  listPaintBrushStampPixels,
+  paintBrushWorkingDimensions,
+} from './creator/paintBrushStamp';
 import * as blockyEditor from './creator/blockyEditor';
 import { createEditorToolKeyBindings } from './creator/shortcuts';
-import { createModePanelTransitions } from './creator/modePanels';
+import { createModePanelTransitions, MODE_TRANSITION_MS } from './creator/modePanels';
 import { createLayerVisibilityApi } from './creator/layerVisibility';
 import { createWardrobeApi, WARDROBE_ORIGINAL } from './creator/wardrobe';
+import {
+  getWardrobeHoverPreviewLayer,
+  setWardrobeLayerPanelHoverPreviewLayer,
+} from './creator/wardrobeHoverPreview';
+import type { WardrobeLayerKey } from './creator/wardrobeLayers';
 import { createColorActions, extractColorsFromSkin } from './creator/swatches';
 import { createSkinGalleryApi } from './creator/skinGallery';
 
@@ -45,14 +55,20 @@ import { createSkinGalleryApi } from './creator/skinGallery';
 import { createCreatorState } from './state';
 import {
   creatorCanvasSlice,
+  creatorFocusedCreationSlice,
   creatorModeSlice,
   creatorSwatchPaletteSlice,
   creatorTexturePositionSlice,
   creatorToolsSlice,
 } from './state/creatorSlices';
 import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode, type PartSide } from './creator/api';
+import {
+  PAINT_BRUSH_SCHEMA_VERSION,
+  PAINT_BRUSH_TOOL_CONFIG,
+  type PaintBrushSize,
+} from './config/paintBrushTool';
 import { rgbToHex } from './lib/color';
-import { getCapture3DThumbnail, getCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
+import { getCapture3DThumbnail } from './viewer/capture3DThumbnail';
 import { buildCameraControls } from './viewer/CameraControls';
 
 // --- Constants ---
@@ -72,8 +88,36 @@ const LAYER_GROUPS: readonly (readonly string[])[] = [
   ['pants', 'legs'],
 ];
 
+const FOCUSED_CREATION_STORAGE_KEY = 'creator:focusedCreation';
+const PAINT_BRUSH_SCHEMA_STORAGE_KEY = 'creator:paintBrushSchema';
+
+/** One-time reset so HMR / long-lived tabs pick up new brush semantics and defaults. */
+function applyPaintBrushSchemaIfStale(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (localStorage.getItem(PAINT_BRUSH_SCHEMA_STORAGE_KEY) === PAINT_BRUSH_SCHEMA_VERSION) return;
+    state.paintBrushSize = { ...PAINT_BRUSH_TOOL_CONFIG.defaultSize };
+    localStorage.setItem(PAINT_BRUSH_SCHEMA_STORAGE_KEY, PAINT_BRUSH_SCHEMA_VERSION);
+  } catch {
+    state.paintBrushSize = { ...PAINT_BRUSH_TOOL_CONFIG.defaultSize };
+  }
+}
+
+function readFocusedCreationEnabledFromStorage(): boolean {
+  try {
+    const v = localStorage.getItem(FOCUSED_CREATION_STORAGE_KEY);
+    if (v === 'false') return false;
+    if (v === 'true') return true;
+  } catch {
+    // ignore
+  }
+  return true;
+}
+
 // --- Module state ---
 const state = createCreatorState();
+applyPaintBrushSchemaIfStale();
+state.focusedCreationEnabled = readFocusedCreationEnabledFromStorage();
 
 const modePanelTransitions = createModePanelTransitions();
 const layerVisibilityApi = createLayerVisibilityApi(state);
@@ -105,7 +149,6 @@ const wardrobeApi = createWardrobeApi({
   },
   onLoadSkin: (path) => loadSkinFromPathFn(path),
   getCapture3DThumbnail,
-  getCapture3DPartThumbnail,
   getCreatorCanvasPopulated: () => creatorCanvasPopulated,
   getCreatorCurrentSkinPath: () => creatorCurrentSkinPath,
   getEditMode: () => state.editMode,
@@ -113,6 +156,7 @@ const wardrobeApi = createWardrobeApi({
   renderToDisplay: () => { if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx); },
   animateModePanelIn: modePanelTransitions.animateModePanelIn,
   animateModePanelOut: modePanelTransitions.animateModePanelOut,
+  getFocusedCreationEnabled: () => state.focusedCreationEnabled,
 });
 
 const skinGalleryApi = createSkinGalleryApi({
@@ -141,8 +185,14 @@ loadSkinFromPathFn = skinGalleryApi.loadSkinFromPath;
 
 // --- Re-exports ---
 export { WARDROBE_ORIGINAL };
-export { getLayerAtCoords, getLayerAndPartAtCoords, getPartDisplayNameAtCoords } from './creator/canvasCoords';
-export { getBrushCursorStyleFor3D } from './creator/brush';
+export type { WardrobeLayerKey } from './creator/wardrobeLayers';
+export {
+  getLayerAtCoords,
+  getLayerAndPartAtCoords,
+  getPartDisplayNameAtCoords,
+  getPartDisplayNameAtCoordsRespectingLayerVisibility,
+} from './creator/canvasCoords';
+export { getBrushCursorStyleFor3D, getPaintBrushCursorStyleFor3D } from './creator/brush';
 export { uvToWorkingCoords } from './skin';
 
 // --- Private helpers ---
@@ -182,7 +232,10 @@ function updateCanvasCursor(): void {
   if (state.activeTool === 'navigate') grid.style.cursor = 'default';
   else if (state.activeTool === 'eyedropper') grid.style.cursor = 'crosshair';
   else if (state.activeTool === 'fill') grid.style.cursor = 'default';
-  else grid.style.cursor = blockyEditor.getBrushCursorStyle2D();
+  else if (state.activeTool === 'paintBrush') {
+    const { w, h } = paintBrushWorkingDimensions(state.paintBrushSize);
+    grid.style.cursor = blockyEditor.getPaintBrushCursorStyle2D(w, h);
+  } else grid.style.cursor = blockyEditor.getBrushCursorStyle2D();
 }
 
 function performUndo(): void {
@@ -271,6 +324,7 @@ function buildCreatorPanels(): void {
   };
   const skinLayersCtx = {
     layerVisibility: state.layer3DVisible,
+    isLayer3DVisible: (layer: string) => state.layer3DVisible[layer] === true,
     layerPartVisible: state.layer3DPartVisible,
     layerLocked: state.layer3DLocked,
     isLayersPanelCollapsed: () => state.layersPanel3DCollapsed,
@@ -286,6 +340,10 @@ function buildCreatorPanels(): void {
     clearSoloIndicator: layerVisibilityApi.clearSoloIndicator,
     setupDragToToggle: layerVisibilityApi.setupDragToToggle,
     layerGroups: LAYER_GROUPS,
+    getEditMode: () => state.editMode,
+    getFocusedCreationEnabled: () => state.focusedCreationEnabled,
+    getLayersPanelFocusedListExpanded: () => state.layersPanelFocusedListExpanded,
+    setLayersPanelFocusedListExpanded,
   };
   const editorToolsCtx = {
     getActiveTool: () => state.activeTool,
@@ -321,7 +379,12 @@ function buildCreatorPanels(): void {
     onDownload: skinGalleryApi.downloadCurrentSkin,
   });
   buildTexturePositionPanel();
-  buildCameraControls();
+  buildCameraControls({
+    getFocusedCreationEnabled: () => state.focusedCreationEnabled,
+    setFocusedCreationEnabled,
+    subscribeFocusedCreationChanged: (cb) =>
+      creatorFocusedCreationSlice.subscribe(() => cb()),
+  });
   modePanelTransitions.applyModePanelsImmediate(state.editMode);
 }
 
@@ -335,10 +398,18 @@ function setupCanvasAreaResize(): void {
   blockyEditor.fitCanvasAreaScale();
   updateCanvasCursor();
   new ResizeObserver(update).observe(area);
+  const bottomPanels = document.getElementById('creator-bottom-center-panels');
+  if (bottomPanels) {
+    new ResizeObserver(update).observe(bottomPanels);
+  }
+  window.addEventListener('resize', update);
   requestAnimationFrame(update);
   creatorModeSlice.subscribe((detail) => {
     if ((detail.mode ?? state.editMode) === EDIT_MODE_2D) {
       requestAnimationFrame(() => requestAnimationFrame(update));
+      // Bottom toolbar slides in over MODE_TRANSITION_MS; early fit uses a stale `panelsRect.top`
+      // and scales the canvas too large until something refits (e.g. mousemove → renderRulersAndGrid).
+      window.setTimeout(update, MODE_TRANSITION_MS + 50);
     }
   });
 }
@@ -384,13 +455,20 @@ export function initCreator(): void {
     getSkinCanvas,
     getOverlayCanvas,
     updateHoverInfo,
-    getPartDisplayNameAtCoords,
+    getPartDisplayNameAtCoords: (wx, wy) =>
+      getPartDisplayNameAtCoordsRespectingLayerVisibility(wx, wy, state.layer3DVisible, state.layer3DPartVisible),
     applyColorToUI: (hex: string) => applyColorToUI(hex),
     sampleColorAtWithAlpha,
     eyedropperAlphaThreshold: EYEDROPPER_ALPHA_THRESHOLD,
-    pushUndoStroke: (pixels, isEraser, newColor) => {
+    pushUndoStroke: (pixels, isEraser, newColor, afterPixels) => {
       state.redoStack = [];
-      state.undoStack.push({ type: 'stroke', pixels, isEraser, newColor });
+      state.undoStack.push({
+        type: 'stroke',
+        pixels,
+        isEraser,
+        newColor,
+        ...(afterPixels && afterPixels.length > 0 ? { afterPixels } : {}),
+      });
       if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
     },
     pushUndoFill: (pixels, fillColor) => {
@@ -401,13 +479,16 @@ export function initCreator(): void {
     onCanvasChange: () => creatorCanvasSlice.notify(),
     updateUndoRedoButtons: updateAllUndoRedoButtons,
     undoLimit: UNDO_LIMIT,
+    getFocusedCreationEnabled: () => state.focusedCreationEnabled,
+    clearSkinHoverPreview,
+    updateSkinHoverPreview,
   };
   buildCreatorPanels();
   if (state.editMode === 'wardrobe') {
     wardrobeApi.captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
   }
   wardrobeApi.showWardrobeLibraryPanel(state.editMode === 'wardrobe' ? wardrobeApi.getWardrobeSelectedLayer() : null);
-  blockyEditor.buildBlockyGrid();
+  blockyEditor.rebuildBlockyGrid(blockyCtx);
   blockyEditor.buildRulers();
   blockyEditor.setupBlockyGridEvents(blockyCtx);
   blockyEditor.renderToDisplay(blockyCtx);
@@ -473,6 +554,44 @@ export function getCreatorSkinCanvas(): HTMLCanvasElement {
 }
 
 // --- Public API: mode & routing ---
+export function getWardrobeSelectedLayer(): WardrobeLayerKey {
+  return wardrobeApi.getWardrobeSelectedLayer();
+}
+
+export function flushDeferredWardrobeLibraryPanelsAfterCamera(): void {
+  wardrobeApi.flushDeferredWardrobeLibraryPanelsAfterCamera();
+}
+
+export { getWardrobeHoverPreviewLayer };
+
+export function applyFocusedSoloForWardrobeLayer(layer: WardrobeLayerKey): void {
+  layerVisibilityApi.applyFocusedSoloForWardrobeLayer(layer);
+}
+
+export function getFocusedCreationEnabled(): boolean {
+  return state.focusedCreationEnabled;
+}
+
+export function setFocusedCreationEnabled(enabled: boolean): void {
+  if (state.focusedCreationEnabled === enabled) return;
+  state.focusedCreationEnabled = enabled;
+  try {
+    localStorage.setItem(FOCUSED_CREATION_STORAGE_KEY, enabled ? 'true' : 'false');
+  } catch {
+    // ignore
+  }
+  creatorFocusedCreationSlice.notify({ enabled });
+}
+
+export function getLayersPanelFocusedListExpanded(): boolean {
+  return state.layersPanelFocusedListExpanded;
+}
+
+export function setLayersPanelFocusedListExpanded(expanded: boolean): void {
+  state.layersPanelFocusedListExpanded = expanded;
+  creatorFocusedCreationSlice.notify({ enabled: state.focusedCreationEnabled });
+}
+
 export function getEditMode(): EditMode {
   return state.editMode;
 }
@@ -489,7 +608,10 @@ export function getEditMode3D(): boolean {
 }
 
 /** Set edit mode (wardrobe, 2d, 3d). Optionally sync URL hash. */
-export function setEditMode(mode: EditMode, options: { syncUrl?: boolean } = {}): void {
+export function setEditMode(
+  mode: EditMode,
+  options: { syncUrl?: boolean; fromUserModeNavigation?: boolean } = {}
+): void {
   const previousMode = state.editMode;
   const wasEditMode = isCreatorEditMode(previousMode);
   const willBeEditMode = isCreatorEditMode(mode);
@@ -500,7 +622,17 @@ export function setEditMode(mode: EditMode, options: { syncUrl?: boolean } = {})
   }
   state.editMode = mode;
   document.body.dataset.editMode = mode;
-  creatorModeSlice.notify({ mode: state.editMode, previousMode });
+  if (previousMode !== mode && (previousMode === EDIT_MODE_2D || previousMode === EDIT_MODE_3D)) {
+    clearSkinHoverPreview();
+  }
+  if (mode !== 'wardrobe') {
+    setWardrobeLayerPanelHoverPreviewLayer(null);
+  }
+  creatorModeSlice.notify({
+    mode: state.editMode,
+    previousMode,
+    fromUserModeNavigation: options.fromUserModeNavigation === true,
+  });
 
   if (mode === 'wardrobe') {
     wardrobeApi.resetWardrobeSelections();
@@ -522,7 +654,7 @@ export function normalizeLayerStateForNonEditMode(): void {
 }
 
 export function setEditMode3D(is3D: boolean): void {
-  setEditMode(is3D ? EDIT_MODE_3D : EDIT_MODE_2D);
+  setEditMode(is3D ? EDIT_MODE_3D : EDIT_MODE_2D, { fromUserModeNavigation: true });
 }
 
 export function unregisterCreatorShortcuts(): void {
@@ -565,6 +697,10 @@ export function getActiveTool(): DrawingTool {
 }
 
 export function setActiveTool(tool: DrawingTool): void {
+  /** Paint brush is not exposed in the toolbar; reject selection (API / stale state). */
+  if (tool === 'paintBrush') {
+    tool = 'pencil';
+  }
   state.activeTool = tool;
   creatorToolsSlice.notify();
 }
@@ -577,16 +713,131 @@ export function getCreatorWorkSize(): number {
   return WORK_SIZE;
 }
 
+/** Backs up texels while showing a temporary paint preview on the shared skin canvas (2D or 3D). */
+let skinHoverPreviewBackup: { x: number; y: number; r: number; g: number; b: number; a: number }[] = [];
+
+/** Restores skin canvas pixels after hover preview; no-op if nothing backed up. */
+export function clearSkinHoverPreview(): void {
+  if (skinHoverPreviewBackup.length === 0) return;
+  const skin = getSkinCanvas();
+  const ctx = skin.getContext('2d', { willReadFrequently: true });
+  if (!ctx) {
+    skinHoverPreviewBackup = [];
+    return;
+  }
+  for (const p of skinHoverPreviewBackup) {
+    const img = new ImageData(1, 1);
+    img.data[0] = p.r;
+    img.data[1] = p.g;
+    img.data[2] = p.b;
+    img.data[3] = p.a;
+    ctx.putImageData(img, p.x, p.y);
+  }
+  skinHoverPreviewBackup = [];
+  creatorCanvasSlice.notify();
+}
+
+/**
+ * Temporary preview of pencil, eraser, or paint brush on the skin canvas.
+ * `canPaintAt` must match the active editor (2D layer mask vs 3D visibility).
+ */
+export function updateSkinHoverPreview(
+  workingX: number,
+  workingY: number,
+  canPaintAt: (wx: number, wy: number) => boolean
+): void {
+  clearSkinHoverPreview();
+  const tool = state.activeTool;
+  if (tool !== 'pencil' && tool !== 'eraser' && tool !== 'paintBrush') return;
+  if (tool !== 'paintBrush' && !canPaintAt(workingX, workingY)) return;
+
+  const skin = getSkinCanvas();
+  const ctx = skin.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return;
+
+  if (tool === 'paintBrush') {
+    const { x: cx, y: cy } = snapWorkingToSkinCellCenter(workingX, workingY);
+    if (!canPaintAt(cx, cy)) return;
+    const coords = listPaintBrushStampPixels(cx, cy, state.paintBrushSize, false);
+    const backup: typeof skinHoverPreviewBackup = [];
+    for (const { px, py } of coords) {
+      if (!canPaintAt(px, py)) continue;
+      const d = ctx.getImageData(px, py, 1, 1).data;
+      backup.push({ x: px, y: py, r: d[0], g: d[1], b: d[2], a: d[3] });
+    }
+    if (backup.length === 0) return;
+    skinHoverPreviewBackup = backup;
+    paintBrushStampAt(
+      ctx,
+      cx,
+      cy,
+      state.paintBrushSize,
+      state.paintBrushSoftness,
+      state.currentColor,
+      canPaintAt,
+      null,
+      false
+    );
+    creatorCanvasSlice.notify();
+    return;
+  }
+
+  const baseX = Math.floor(workingX / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
+  const baseY = Math.floor(workingY / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
+
+  const size = RESOLUTION_MULTIPLIER;
+  const backup: typeof skinHoverPreviewBackup = [];
+
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) {
+      const px = baseX + dx;
+      const py = baseY + dy;
+      if (px < 0 || px >= WORK_SIZE || py < 0 || py >= WORK_SIZE) continue;
+      if (!canPaintAt(px, py)) continue;
+      const d = ctx.getImageData(px, py, 1, 1).data;
+      backup.push({ x: px, y: py, r: d[0], g: d[1], b: d[2], a: d[3] });
+    }
+  }
+  if (backup.length === 0) return;
+
+  skinHoverPreviewBackup = backup;
+  const isEraser = tool === 'eraser';
+  for (const p of backup) {
+    if (isEraser) {
+      ctx.clearRect(p.x, p.y, 1, 1);
+    } else {
+      ctx.fillStyle = state.currentColor;
+      ctx.fillRect(p.x, p.y, 1, 1);
+    }
+  }
+  creatorCanvasSlice.notify();
+}
+
+/** Creator.3D: hover preview using 3D layer visibility rules. */
+export function update3DSkinHoverPreview(workingX: number, workingY: number): void {
+  updateSkinHoverPreview(workingX, workingY, (wx, wy) => isInPaintable3DLayer(wx, wy));
+}
+
+export function getPaintBrushSize(): PaintBrushSize {
+  return state.paintBrushSize;
+}
+
+/** Working-texel stamp size for cursors; `paintBrushSize` is in skin pixels (×2 → working). */
+export function getPaintBrushWorkingDimensions(): { w: number; h: number } {
+  return paintBrushWorkingDimensions(state.paintBrushSize);
+}
+
 // --- Public API: 3D painting ---
 export function paintStartFrom3D(workingX: number, workingY: number): boolean {
+  clearSkinHoverPreview();
   if (state.activeTool === 'navigate' || state.activeTool === 'eyedropper') return false;
-  if (!isInPaintable3DLayer(workingX, workingY)) return false;
   const skin = getSkinCanvas();
   const ctx = skin.getContext('2d', { willReadFrequently: true });
   if (!ctx) return false;
   const canPaintAt = (x: number, y: number) => isInPaintable3DLayer(x, y);
   const getCurrentColor = () => state.currentColor;
   if (state.activeTool === 'fill') {
+    if (!isInPaintable3DLayer(workingX, workingY)) return false;
     const changed = brush.floodFill(ctx, workingX, workingY, canPaintAt, getCurrentColor);
     if (changed.length > 0) {
       state.redoStack = [];
@@ -597,14 +848,41 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
     if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
     return changed.length > 0;
   }
+
+  const wx =
+    state.activeTool === 'paintBrush'
+      ? snapWorkingToSkinCellCenter(workingX, workingY).x
+      : workingX;
+  const wy =
+    state.activeTool === 'paintBrush'
+      ? snapWorkingToSkinCellCenter(workingX, workingY).y
+      : workingY;
+  if (!isInPaintable3DLayer(wx, wy)) return false;
+
   state.isDrawing = true;
-  state.lastSkinX = workingX;
-  state.lastSkinY = workingY;
-  const isEraser = state.activeTool === 'eraser';
-  state.currentStroke = { pixels: [], isEraser, newColor: state.currentColor, recorded: new Set<string>() };
-  const baseX = Math.floor(workingX / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
-  const baseY = Math.floor(workingY / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
-  brush.brushAt(ctx, baseX, baseY, isEraser, canPaintAt, getCurrentColor, state.currentStroke, RESOLUTION_MULTIPLIER, true);
+  state.lastSkinX = wx;
+  state.lastSkinY = wy;
+
+  if (state.activeTool === 'paintBrush') {
+    state.currentStroke = { pixels: [], isEraser: false, newColor: state.currentColor, recorded: new Set<string>() };
+    paintBrushStampAt(
+      ctx,
+      wx,
+      wy,
+      state.paintBrushSize,
+      state.paintBrushSoftness,
+      state.currentColor,
+      canPaintAt,
+      state.currentStroke,
+      false
+    );
+  } else {
+    const baseX = Math.floor(workingX / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
+    const baseY = Math.floor(workingY / RESOLUTION_MULTIPLIER) * RESOLUTION_MULTIPLIER;
+    const isEraser = state.activeTool === 'eraser';
+    state.currentStroke = { pixels: [], isEraser, newColor: state.currentColor, recorded: new Set<string>() };
+    brush.brushAt(ctx, baseX, baseY, isEraser, canPaintAt, getCurrentColor, state.currentStroke, RESOLUTION_MULTIPLIER, true);
+  }
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
   creatorCanvasSlice.notify();
   return true;
@@ -612,39 +890,67 @@ export function paintStartFrom3D(workingX: number, workingY: number): boolean {
 
 export function paintMoveFrom3D(workingX: number, workingY: number): void {
   if (!state.currentStroke || !state.isDrawing) return;
-  if (!isInPaintable3DLayer(workingX, workingY)) return;
   const skin = getSkinCanvas();
   const ctx = skin.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;
   const canPaintAt = (x: number, y: number) => isInPaintable3DLayer(x, y);
   const getCurrentColor = () => state.currentColor;
-  brush.drawLine(
-    ctx,
-    state.lastSkinX,
-    state.lastSkinY,
-    workingX,
-    workingY,
-    state.currentStroke.isEraser,
-    canPaintAt,
-    getCurrentColor,
-    state.currentStroke,
-    RESOLUTION_MULTIPLIER,
-    true
-  );
-  state.lastSkinX = workingX;
-  state.lastSkinY = workingY;
+  if (state.activeTool === 'paintBrush') {
+    const { x: wx, y: wy } = snapWorkingToSkinCellCenter(workingX, workingY);
+    if (!isInPaintable3DLayer(wx, wy)) return;
+    brush.drawLineWithStamp(state.lastSkinX, state.lastSkinY, wx, wy, false, (bx, by) => {
+      const s = snapWorkingToSkinCellCenter(bx, by);
+      paintBrushStampAt(
+        ctx,
+        s.x,
+        s.y,
+        state.paintBrushSize,
+        state.paintBrushSoftness,
+        state.currentColor,
+        canPaintAt,
+        state.currentStroke,
+        false
+      );
+    });
+    state.lastSkinX = wx;
+    state.lastSkinY = wy;
+  } else {
+    if (!isInPaintable3DLayer(workingX, workingY)) return;
+    brush.drawLine(
+      ctx,
+      state.lastSkinX,
+      state.lastSkinY,
+      workingX,
+      workingY,
+      state.currentStroke.isEraser,
+      canPaintAt,
+      getCurrentColor,
+      state.currentStroke,
+      RESOLUTION_MULTIPLIER,
+      true
+    );
+    state.lastSkinX = workingX;
+    state.lastSkinY = workingY;
+  }
   if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
   creatorCanvasSlice.notify();
 }
 
 export function paintEndFrom3D(): void {
   if (state.currentStroke && state.currentStroke.pixels.length > 0) {
+    const skin = getSkinCanvas();
+    const ctx = skin.getContext('2d', { willReadFrequently: true });
+    const afterPixels =
+      state.activeTool === 'paintBrush' && ctx
+        ? undo.buildAfterPixelsForStroke(ctx, state.currentStroke.pixels)
+        : undefined;
     state.redoStack = [];
     state.undoStack.push({
       type: 'stroke',
       pixels: state.currentStroke.pixels,
       isEraser: state.currentStroke.isEraser,
-      newColor: state.currentStroke.newColor
+      newColor: state.currentStroke.newColor,
+      ...(afterPixels && afterPixels.length > 0 ? { afterPixels } : {}),
     });
     if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
   }

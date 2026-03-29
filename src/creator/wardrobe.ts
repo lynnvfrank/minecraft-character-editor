@@ -2,30 +2,41 @@
  * Wardrobe logic: composite outfit from base skin + library parts.
  * Handles wardrobeSelections, wardrobeLibraries, resolveWardrobeComposite,
  * captureWardrobeBaseFromCurrentCanvas, applyWardrobePartSelection, selectWardrobeOutfit,
- * loadWardrobeImage, clearPartBoundsToTransparent, captureWardrobeOriginalPreviews,
+ * loadWardrobeImage, clearPartBoundsToTransparent,
  * ensureWardrobeLibrariesLoaded, renderWardrobeLibraries, syncWardrobeLibraryActiveStates,
  * showWardrobeLibraryPanel, hideAllWardrobeLibraryPanels.
  */
 
 import {
-  SKIN_LAYER_BOUNDS,
   WORK_SIZE,
   RESOLUTION_MULTIPLIER,
   getPartBounds,
   WARDROBE_COMPOSITE_KEYS,
+  isLayerKey,
 } from '../skin';
 import { cloneImageData } from './canvasCoords';
-import { clearModeAnimClasses, setModePanelHidden, MODE_TRANSITION_MS } from './modePanels';
+import { CREATOR_WARDROBE_LIBRARY_PANEL_TRANSITION_MS } from '../config/creatorWardrobeMotion';
+import { clearModeAnimClasses, setModePanelHidden } from './modePanels';
 import type { SkinEntry } from '../domain';
-import type { WardrobeLayerKey, WardrobePartKey } from './wardrobePartsPanel';
-import { WARDROBE_PART_KEYS } from './wardrobePartsPanel';
+import {
+  areWardrobeLayersSameDualLibraryPair,
+  isWardrobeDualLibrarySplitLayer,
+  type WardrobeLayerKey,
+  type WardrobePartKey,
+  WARDROBE_PART_KEYS,
+} from './wardrobeLayers';
 import {
   buildWardrobeLibraryPanels,
+  ensureWardrobeLibraryHoverPreviewBound,
+  getWardrobeLibraryPanelIdsForLayer,
   renderWardrobeLibraryPanel,
   WARDROBE_PART_PANEL_CONFIGS,
-  getWardrobePanelIdForLayer,
 } from './wardrobeLibraryPanels';
 import { creatorWardrobeFocusSlice } from '../state/creatorSlices';
+import {
+  clearWardrobeHoverPreviewSilently,
+  subscribeWardrobeHoverPreview,
+} from './wardrobeHoverPreview';
 
 /** Sentinel for "use base skin" on overlay parts. Base parts use null. */
 export const WARDROBE_ORIGINAL = '__original__' as const;
@@ -40,7 +51,6 @@ export type WardrobeDeps = {
   applyProgrammaticCanvasImage: (data: ImageData) => void;
   onLoadSkin: (path: string) => Promise<void>;
   getCapture3DThumbnail: () => ((size: number) => Promise<string | null>) | null;
-  getCapture3DPartThumbnail: () => ((part: WardrobePartKey, size: number) => Promise<string | null>) | null;
   getCreatorCanvasPopulated: () => boolean;
   getCreatorCurrentSkinPath: () => string | null;
   getEditMode: () => 'wardrobe' | '2d' | '3d';
@@ -48,6 +58,7 @@ export type WardrobeDeps = {
   renderToDisplay: () => void;
   animateModePanelIn: (el: HTMLElement, dir: 'left' | 'right' | 'top' | 'bottom') => void;
   animateModePanelOut: (el: HTMLElement, dir: 'left' | 'right' | 'top' | 'bottom') => void;
+  getFocusedCreationEnabled: () => boolean;
 };
 
 export type WardrobeApi = {
@@ -67,6 +78,7 @@ export type WardrobeApi = {
   showWardrobeLibraryPanel: (layer: WardrobeLayerKey | null) => void;
   hideAllWardrobeLibraryPanels: () => void;
   getWardrobeBaseSkinPath: () => string | null;
+  flushDeferredWardrobeLibraryPanelsAfterCamera: () => void;
 };
 
 export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
@@ -75,8 +87,6 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     captureCanvasImageData,
     applyProgrammaticCanvasImage,
     onLoadSkin,
-    getCapture3DThumbnail,
-    getCapture3DPartThumbnail,
     getCreatorCanvasPopulated,
     getCreatorCurrentSkinPath,
     getEditMode,
@@ -84,6 +94,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     renderToDisplay,
     animateModePanelIn,
     animateModePanelOut,
+    getFocusedCreationEnabled,
   } = deps;
 
   let wardrobeSelectedLayer: WardrobeLayerKey = 'fullOutfit';
@@ -109,6 +120,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     top: null,
     all: null,
   };
+  let wardrobePreviewSelections: WardrobeSelectionState | null = null;
   const wardrobeLibraries: WardrobeLibraryState = {
     hat: [],
     head: [],
@@ -125,68 +137,128 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     top: [],
     all: [],
   };
-  const wardrobeOriginalPreviews: Record<WardrobePartKey, string | null> = {
-    hat: null,
-    head: null,
-    jacket: null,
-    body: null,
-    arms: null,
-    sleeves: null,
-    pants: null,
-    legs: null,
-    torso: null,
-    jacketGroup: null,
-    bottom: null,
-    center: null,
-    top: null,
-    all: null,
-  };
-  let wardrobeOriginalPreviewSignature = '';
-  let wardrobeOriginalCaptureToken = 0;
   let wardrobePanelTransitionToken = 0;
+  let outfitsHoverPreviewBound = false;
+  let prevWardrobeHoverLayer: WardrobeLayerKey | null = null;
+  let prevWardrobeHoverSource: 'layerPanel' | 'selectorPanel' | null = null;
+  /** When true, `showWardrobeLibraryPanel` for the selection is deferred until camera restore finishes (focused mode). */
+  let deferLibraryPanelRevealUntilCamera = false;
 
   function clearWardrobePanelAnim(el: HTMLElement): void {
     clearModeAnimClasses(el);
   }
 
   function hideAllWardrobeLibraryPanels(): void {
-    const panels = document.querySelectorAll<HTMLElement>('.creator-wardrobe-library-panel');
-    panels.forEach((panel) => {
-      clearWardrobePanelAnim(panel);
-      setModePanelHidden(panel, true);
-    });
-  }
+    const root = document.getElementById('creator-upper-right-panels-root');
+    const currentIds = getVisibleWardrobeLibraryPanelIds();
 
-  function showWardrobeLibraryPanel(layer: WardrobeLayerKey | null): void {
-    const targetPanelId = layer ? getWardrobePanelIdForLayer(layer) : null;
-    const targetPanel = targetPanelId ? (document.getElementById(targetPanelId) as HTMLElement | null) : null;
-    const currentPanel = document.querySelector<HTMLElement>(
-      '.creator-wardrobe-library-panel:not(.creator-mode-panel-hidden)'
-    );
-
-    if (!targetPanel) {
-      hideAllWardrobeLibraryPanels();
+    if (currentIds.length === 0) {
+      root?.classList.remove('creator-upper-right-panels-root--wardrobe-dual-libraries');
       return;
     }
 
-    if (!currentPanel || currentPanel === targetPanel) {
-      clearWardrobePanelAnim(targetPanel);
-      setModePanelHidden(targetPanel, false);
+    // Moving across non-selected tree rows fires hide repeatedly; restarting exit anim each time wiggles the panels.
+    const outRightClass = 'creator-mode-anim-out-right';
+    const allAlreadyExiting = currentIds.every((id) => {
+      const el = document.getElementById(id) as HTMLElement | null;
+      return el != null && el.classList.contains(outRightClass);
+    });
+    if (allAlreadyExiting) {
       return;
     }
 
     const token = ++wardrobePanelTransitionToken;
-    animateModePanelOut(currentPanel, 'right');
 
+    for (const id of currentIds) {
+      const el = document.getElementById(id) as HTMLElement | null;
+      if (el) animateModePanelOut(el, 'right');
+    }
+
+    const delayMs = currentIds.length > 0 ? CREATOR_WARDROBE_LIBRARY_PANEL_TRANSITION_MS : 0;
     window.setTimeout(() => {
       if (token !== wardrobePanelTransitionToken) return;
-      clearModeAnimClasses(currentPanel);
-      setModePanelHidden(currentPanel, true);
-      animateModePanelIn(targetPanel, 'right');
-    }, MODE_TRANSITION_MS);
+      document.querySelectorAll<HTMLElement>('.creator-wardrobe-library-panel').forEach((panel) => {
+        clearWardrobePanelAnim(panel);
+        setModePanelHidden(panel, true);
+      });
+      root?.classList.remove('creator-upper-right-panels-root--wardrobe-dual-libraries');
+    }, delayMs);
+  }
+
+  function getVisibleWardrobeLibraryPanelIds(): string[] {
+    const panels = document.querySelectorAll<HTMLElement>('.creator-wardrobe-library-panel');
+    return Array.from(panels)
+      .filter((el) => !el.classList.contains('creator-mode-panel-hidden'))
+      .map((el) => el.id)
+      .filter(Boolean);
+  }
+
+  function panelSetsEqual(a: readonly string[], b: readonly string[]): boolean {
+    if (a.length !== b.length) return false;
+    const sa = new Set(a);
+    return b.every((id) => sa.has(id));
+  }
+
+  function showWardrobeLibraryPanel(layer: WardrobeLayerKey | null): void {
+    const root = document.getElementById('creator-upper-right-panels-root');
+    const targetIds = getWardrobeLibraryPanelIdsForLayer(layer);
+    const currentIds = getVisibleWardrobeLibraryPanelIds();
+
+    if (targetIds.length === 0) {
+      hideAllWardrobeLibraryPanels();
+      return;
+    }
+
+    // Invalidate any in-flight hide-all or cross-fade (e.g. fast hover away then back to selection).
+    const token = ++wardrobePanelTransitionToken;
+    const isDualLibraries = layer != null && isWardrobeDualLibrarySplitLayer(layer);
+    root?.classList.toggle('creator-upper-right-panels-root--wardrobe-dual-libraries', isDualLibraries);
+
+    if (panelSetsEqual(currentIds, targetIds)) {
+      for (const id of targetIds) {
+        const el = document.getElementById(id) as HTMLElement | null;
+        if (el) {
+          clearWardrobePanelAnim(el);
+          setModePanelHidden(el, false);
+        }
+      }
+      return;
+    }
+
+    const targetSet = new Set(targetIds);
+    const toHide = currentIds.filter((id) => !targetSet.has(id));
+
+    const outRightClass = 'creator-mode-anim-out-right';
+    for (const id of toHide) {
+      const el = document.getElementById(id) as HTMLElement | null;
+      if (!el) continue;
+      if (el.classList.contains(outRightClass)) continue;
+      animateModePanelOut(el, 'right');
+    }
+
+    const delayMs = toHide.length > 0 ? CREATOR_WARDROBE_LIBRARY_PANEL_TRANSITION_MS : 0;
+    window.setTimeout(() => {
+      if (token !== wardrobePanelTransitionToken) return;
+      for (const id of toHide) {
+        const el = document.getElementById(id) as HTMLElement | null;
+        if (el) {
+          clearModeAnimClasses(el);
+          setModePanelHidden(el, true);
+        }
+      }
+      for (const id of targetIds) {
+        const el = document.getElementById(id) as HTMLElement | null;
+        if (!el) continue;
+        clearWardrobePanelAnim(el);
+        animateModePanelIn(el, 'right');
+      }
+    }, delayMs);
   }
 
   function setWardrobeSelectedLayer(layer: WardrobeLayerKey): void {
+    clearWardrobeHoverPreviewSilently();
+    deferLibraryPanelRevealUntilCamera = false;
+    wardrobePreviewSelections = null;
     wardrobeSelectedLayer = layer;
     creatorWardrobeFocusSlice.notify();
     const isBasePart = layer === 'head' || layer === 'body' || layer === 'arms' || layer === 'legs';
@@ -200,6 +272,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
   function resetWardrobeSelections(): void {
     wardrobeCompositeToken += 1;
+    wardrobePreviewSelections = null;
     for (const part of WARDROBE_PART_KEYS) {
       wardrobeSelections[part] = WARDROBE_OVERLAY_KEYS.includes(part as (typeof WARDROBE_OVERLAY_KEYS)[number])
         ? WARDROBE_ORIGINAL
@@ -213,16 +286,41 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     if (!snapshot) return;
     wardrobeBaseSkinData = snapshot;
     wardrobeBaseSkinPath = path;
-    wardrobeOriginalPreviewSignature = '';
-    if (getEditMode() === 'wardrobe') {
-      ensureWardrobeOriginalPreviewsScheduled();
-    }
   }
 
   function hasWardrobeLibrarySelection(): boolean {
     return WARDROBE_PART_KEYS.some(
       (part) => wardrobeSelections[part] != null && wardrobeSelections[part] !== WARDROBE_ORIGINAL
     );
+  }
+
+  function getEffectiveSelections(): WardrobeSelectionState {
+    return wardrobePreviewSelections ?? wardrobeSelections;
+  }
+
+  function bindOutfitsHoverPreview(): void {
+    if (outfitsHoverPreviewBound) return;
+    const container = document.getElementById('creator-skin-selector');
+    if (!container) return;
+    outfitsHoverPreviewBound = true;
+    container.addEventListener('mouseover', (e) => {
+      const target = e.target as HTMLElement | null;
+      const item = target?.closest('.creator-skin-preview') as HTMLElement | null;
+      if (!item) return;
+      if (getEditMode() !== 'wardrobe') return;
+      const path = item.dataset.path;
+      if (!path) return;
+      wardrobePreviewSelections = { ...wardrobeSelections, all: path };
+      void resolveWardrobeComposite(wardrobePreviewSelections);
+      syncWardrobeLibraryActiveStates();
+    });
+    container.addEventListener('mouseleave', () => {
+      if (getEditMode() !== 'wardrobe') return;
+      if (!wardrobePreviewSelections) return;
+      wardrobePreviewSelections = null;
+      void resolveWardrobeComposite(wardrobeSelections);
+      syncWardrobeLibraryActiveStates();
+    });
   }
 
   function loadWardrobeImage(path: string): Promise<HTMLImageElement> {
@@ -252,8 +350,31 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     });
   }
 
-  async function resolveWardrobeComposite(): Promise<void> {
-    if (!wardrobeBaseSkinData) return;
+  /**
+   * Default order paints upper atomics before `torso` / `center`, so composite images would
+   * overwrite atomic previews. Committed state clears overlapping composites when atomics win.
+   * For hover preview we keep composites + atomics — draw `center` before jacket/body/sleeves/arms
+   * and `torso` before body/arms so library hovers only replace matching UVs.
+   */
+  function getWardrobeResolvePartOrder(): readonly WardrobePartKey[] {
+    const keys = [...WARDROBE_PART_KEYS];
+    const torsoIdx = keys.indexOf('torso');
+    if (torsoIdx !== -1) keys.splice(torsoIdx, 1);
+    const centerIdx = keys.indexOf('center');
+    if (centerIdx !== -1) keys.splice(centerIdx, 1);
+    const jacketIdx = keys.indexOf('jacket');
+    if (jacketIdx !== -1) keys.splice(jacketIdx, 0, 'center');
+    const bodyIdx = keys.indexOf('body');
+    if (bodyIdx !== -1) keys.splice(bodyIdx, 0, 'torso');
+    return keys;
+  }
+
+  async function resolveWardrobeComposite(
+    selections: WardrobeSelectionState = getEffectiveSelections()
+  ): Promise<void> {
+    if (!wardrobeBaseSkinData) {
+      return;
+    }
     const token = ++wardrobeCompositeToken;
     const result = cloneImageData(wardrobeBaseSkinData);
     const destCanvas = document.createElement('canvas');
@@ -268,8 +389,8 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     destCtx.putImageData(result, 0, 0);
     srcCtx.imageSmoothingEnabled = false;
 
-    for (const part of WARDROBE_PART_KEYS) {
-      const selected = wardrobeSelections[part];
+    for (const part of getWardrobeResolvePartOrder()) {
+      const selected = selections[part];
       const isOverlay =
         (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(part) &&
         !WARDROBE_COMPOSITE_KEYS.includes(part as (typeof WARDROBE_COMPOSITE_KEYS)[number]);
@@ -307,15 +428,86 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
     if (token !== wardrobeCompositeToken) return;
     const composed = destCtx.getImageData(0, 0, WORK_SIZE, WORK_SIZE);
+    // Persist base only for committed resolves — not for `wardrobePreviewSelections` hover passes.
+    // Otherwise ORIGINAL/skipped layers keep pixels from the last hover after mouseleave.
+    const isHoverPreviewPass =
+      wardrobePreviewSelections != null && selections === wardrobePreviewSelections;
+    if (!isHoverPreviewPass) {
+      wardrobeBaseSkinData = cloneImageData(composed);
+    }
     applyProgrammaticCanvasImage(composed);
     renderToDisplay();
     updateAllUndoRedoButtons();
+  }
+
+  /**
+   * Composites are painted after atomics in resolve order; a stale composite path would
+   * overwrite valid atomics (e.g. top after user picks a head library item).
+   * Composite rows (`torso`, `center`, `jacketGroup`) exclude each other when picking another composite;
+   * atomic chest/arms/jacket/sleeves selections clear `torso` and `jacketGroup` but keep `center` so the
+   * composite still supplies regions the atomics do not paint.
+   * Atomic body/arms/jacket/sleeves commits keep `center` as well — {@link getWardrobeResolvePartOrder}
+   * paints `center` before atomics so e.g. chest can switch to an atomic body while arms stay from Upper Body.
+   * Hover previews also keep `torso` / `jacketGroup` until commit where applicable.
+   */
+  function applyMutuallyExclusiveCompositeClears(
+    selections: WardrobeSelectionState,
+    partBeingSet: WardrobePartKey,
+    options?: { hoverPreview?: boolean }
+  ): void {
+    const hoverPreview = options?.hoverPreview === true;
+    selections.all = null;
+
+    if (
+      partBeingSet === 'torso' ||
+      partBeingSet === 'center' ||
+      partBeingSet === 'jacketGroup'
+    ) {
+      if (partBeingSet !== 'torso') selections.torso = null;
+      if (partBeingSet !== 'center') {
+        // Hovering the Jacket composite strip (`jacketGroup`) must not drop a committed Upper
+        // Body (`center`) until the user commits — same idea as atomic hover preserving composites.
+        if (!(hoverPreview && partBeingSet === 'jacketGroup')) {
+          selections.center = null;
+        }
+      }
+      if (partBeingSet !== 'jacketGroup') selections.jacketGroup = null;
+    }
+
+    if (!isLayerKey(partBeingSet)) return;
+
+    if (partBeingSet === 'head' || partBeingSet === 'hat') {
+      selections.top = null;
+    }
+    if (
+      partBeingSet === 'body' ||
+      partBeingSet === 'arms' ||
+      partBeingSet === 'jacket' ||
+      partBeingSet === 'sleeves'
+    ) {
+      const preserveUpperCompositesOnAtomicHover =
+        hoverPreview &&
+        (partBeingSet === 'body' ||
+          partBeingSet === 'arms' ||
+          partBeingSet === 'jacket' ||
+          partBeingSet === 'sleeves');
+      if (!preserveUpperCompositesOnAtomicHover) {
+        selections.jacketGroup = null;
+        selections.torso = null;
+        // Do not clear selections.center — it underlays these atomics in resolve order.
+      }
+    }
+    if (partBeingSet === 'legs' || partBeingSet === 'pants') {
+      selections.bottom = null;
+    }
   }
 
   async function applyWardrobePartSelection(part: WardrobePartKey, path: string | null): Promise<void> {
     if (!wardrobeBaseSkinData) {
       captureWardrobeBaseFromCurrentCanvas(getCreatorCurrentSkinPath());
     }
+    wardrobePreviewSelections = null;
+    applyMutuallyExclusiveCompositeClears(wardrobeSelections, part);
     wardrobeSelections[part] = path;
     syncWardrobeLibraryActiveStates();
     await resolveWardrobeComposite();
@@ -329,85 +521,37 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     renderWardrobeLibraries();
   }
 
-  function getWardrobeOriginalPreviewSignature(): string {
-    return (wardrobeBaseSkinPath ?? 'default') + '_' + (wardrobeBaseSkinData ? '1' : '0');
-  }
-
-  const WARDROBE_ORIGINAL_CAPTURE_MAX_RETRIES = 20;
-
-  async function captureWardrobeOriginalPreviews(retryCount = 0): Promise<void> {
-    if (!wardrobeBaseSkinData) return;
-    const token = ++wardrobeOriginalCaptureToken;
-    await resolveWardrobeComposite();
-    if (token !== wardrobeOriginalCaptureToken) return;
-
-    const capturePart = getCapture3DPartThumbnail();
-    if (!capturePart) {
-      if (retryCount < WARDROBE_ORIGINAL_CAPTURE_MAX_RETRIES) {
-        window.setTimeout(() => void captureWardrobeOriginalPreviews(retryCount + 1), 150);
-      }
-      return;
-    }
-
-    const partKeys: WardrobePartKey[] = [
-      'hat',
-      'head',
-      'jacket',
-      'body',
-      'arms',
-      'sleeves',
-      'pants',
-      'legs',
-      ...WARDROBE_COMPOSITE_KEYS,
-    ];
-    let successCount = 0;
-    for (const part of partKeys) {
-      if (token !== wardrobeOriginalCaptureToken) return;
-      try {
-        const dataUrl = await capturePart(part, 128);
-        if (token !== wardrobeOriginalCaptureToken) return;
-        if (dataUrl) {
-          wardrobeOriginalPreviews[part] = dataUrl;
-          successCount++;
-        }
-      } catch {
-        // ignore per-part failures
-      }
-    }
-    if (token !== wardrobeOriginalCaptureToken) return;
-
-    if (successCount > 0) {
-      wardrobeOriginalPreviewSignature = getWardrobeOriginalPreviewSignature();
-      renderWardrobeLibraries();
-    } else if (retryCount < WARDROBE_ORIGINAL_CAPTURE_MAX_RETRIES) {
-      window.setTimeout(() => void captureWardrobeOriginalPreviews(retryCount + 1), 150);
-    }
-  }
-
-  function ensureWardrobeOriginalPreviewsScheduled(): void {
-    if (!wardrobeBaseSkinData) return;
-    const currentSig = getWardrobeOriginalPreviewSignature();
-    if (wardrobeOriginalPreviewSignature === currentSig) return;
-    void captureWardrobeOriginalPreviews();
-  }
-
   function renderWardrobeLibraries(): void {
-    ensureWardrobeOriginalPreviewsScheduled();
+    ensureWardrobeLibraryHoverPreviewBound();
+    bindOutfitsHoverPreview();
+    const effectiveSelections = getEffectiveSelections();
 
     WARDROBE_PART_PANEL_CONFIGS.forEach((config) => {
       const isOverlay = (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(config.key);
       renderWardrobeLibraryPanel({
+        partKey: config.key,
         selectorId: config.selectorId,
         items: wardrobeLibraries[config.key],
-        activeValue: wardrobeSelections[config.key],
+        activeValue: effectiveSelections[config.key],
         includeNone: isOverlay,
         noneLabel: config.noneLabel,
-        includeOriginal: true,
-        originalLabel: 'Original',
-        originalPreview: wardrobeOriginalPreviews[config.key],
-        originalSentinel: WARDROBE_ORIGINAL,
         onSelect: (value) => {
           void applyWardrobePartSelection(config.key, value);
+        },
+        onHoverStart: (value) => {
+          if (getEditMode() !== 'wardrobe') return;
+          const preview: WardrobeSelectionState = { ...wardrobeSelections };
+          applyMutuallyExclusiveCompositeClears(preview, config.key, { hoverPreview: true });
+          preview[config.key] = value;
+          wardrobePreviewSelections = preview;
+          void resolveWardrobeComposite(wardrobePreviewSelections);
+          syncWardrobeLibraryActiveStates();
+        },
+        onHoverEnd: () => {
+          if (!wardrobePreviewSelections) return;
+          wardrobePreviewSelections = null;
+          void resolveWardrobeComposite(wardrobeSelections);
+          syncWardrobeLibraryActiveStates();
         },
       });
     });
@@ -426,16 +570,12 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     WARDROBE_PART_PANEL_CONFIGS.forEach((config) => {
       const selector = document.getElementById(config.selectorId);
       if (!selector) return;
-      const activeValue = wardrobeSelections[config.key];
-      const isBasePanel = !(WARDROBE_OVERLAY_KEYS as readonly string[]).includes(config.key);
+      const activeValue = getEffectiveSelections()[config.key];
       selector.querySelectorAll<HTMLElement>('.creator-wardrobe-library-item').forEach((el) => {
         const isNone = el.dataset.none === '1';
-        const isOriginal = el.dataset.original === '1';
         const isActive = isNone
           ? activeValue === null
-          : isOriginal
-            ? activeValue === WARDROBE_ORIGINAL || (isBasePanel && activeValue === null)
-            : el.dataset.path === activeValue;
+          : el.dataset.path === activeValue;
         el.classList.toggle('active', isActive);
       });
     });
@@ -475,6 +615,57 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     }
   }
 
+  function flushDeferredWardrobeLibraryPanelsAfterCamera(): void {
+    if (!deferLibraryPanelRevealUntilCamera) return;
+    deferLibraryPanelRevealUntilCamera = false;
+    if (getEditMode() === 'wardrobe') {
+      showWardrobeLibraryPanel(wardrobeSelectedLayer);
+    }
+  }
+
+  subscribeWardrobeHoverPreview(({ source, layer }) => {
+    if (getEditMode() !== 'wardrobe') {
+      deferLibraryPanelRevealUntilCamera = false;
+      prevWardrobeHoverLayer = layer;
+      prevWardrobeHoverSource = source;
+      return;
+    }
+
+    const hadOffSelectionLayerTreeHover =
+      prevWardrobeHoverSource === 'layerPanel' &&
+      prevWardrobeHoverLayer != null &&
+      prevWardrobeHoverLayer !== wardrobeSelectedLayer &&
+      !areWardrobeLayersSameDualLibraryPair(prevWardrobeHoverLayer, wardrobeSelectedLayer);
+
+    if (source === 'layerPanel') {
+      if (
+        layer != null &&
+        (layer === wardrobeSelectedLayer ||
+          areWardrobeLayersSameDualLibraryPair(layer, wardrobeSelectedLayer))
+      ) {
+        deferLibraryPanelRevealUntilCamera = false;
+        showWardrobeLibraryPanel(wardrobeSelectedLayer);
+      } else {
+        hideAllWardrobeLibraryPanels();
+      }
+      prevWardrobeHoverLayer = layer;
+      prevWardrobeHoverSource = source;
+      return;
+    }
+
+    if (layer == null && source == null && hadOffSelectionLayerTreeHover && getFocusedCreationEnabled()) {
+      deferLibraryPanelRevealUntilCamera = true;
+      prevWardrobeHoverLayer = layer;
+      prevWardrobeHoverSource = source;
+      return;
+    }
+
+    deferLibraryPanelRevealUntilCamera = false;
+    showWardrobeLibraryPanel(wardrobeSelectedLayer);
+    prevWardrobeHoverLayer = layer;
+    prevWardrobeHoverSource = source;
+  });
+
   return {
     captureWardrobeBaseFromCurrentCanvas,
     applyWardrobePartSelection,
@@ -492,5 +683,6 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     showWardrobeLibraryPanel,
     hideAllWardrobeLibraryPanels,
     getWardrobeBaseSkinPath: () => wardrobeBaseSkinPath,
+    flushDeferredWardrobeLibraryPanelsAfterCamera,
   };
 }

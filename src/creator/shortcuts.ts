@@ -2,7 +2,7 @@
  * Creator keyboard shortcut bindings. Data-driven to avoid switch/case.
  * Add new shortcuts by extending KEY_BINDINGS or CTRL_KEY_BINDINGS.
  */
-import type { EditMode } from './api';
+import type { DrawingTool, EditMode } from './api';
 import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE } from './api';
 
 /** Fallback order when mode panel DOM is unavailable. */
@@ -18,8 +18,8 @@ function getOrderedEditModes(): EditMode[] {
 
 export type EditorToolShortcutDeps = {
   getEditMode: () => EditMode;
-  setEditMode: (mode: EditMode) => void;
-  setActiveTool: (tool: 'navigate' | 'brush' | 'eraser' | 'fill') => void;
+  setEditMode: (mode: EditMode, options?: { fromUserModeNavigation?: boolean }) => void;
+  setActiveTool: (tool: DrawingTool) => void;
   performUndo: () => void;
   performRedo: () => void;
   addToSwatch: (color: string) => void;
@@ -53,7 +53,7 @@ export function createEditorToolKeyBindings(
       const nextIdx = e.shiftKey
         ? (idx <= 0 ? modes.length - 1 : idx - 1)
         : (idx < 0 || idx >= modes.length - 1 ? 0 : idx + 1);
-      setEditMode(modes[nextIdx]);
+      setEditMode(modes[nextIdx], { fromUserModeNavigation: true });
     },
     h: (e) => {
       e.preventDefault();
@@ -63,13 +63,13 @@ export function createEditorToolKeyBindings(
       e.preventDefault();
       setActiveTool('navigate');
     },
-    b: (e) => {
+    p: (e) => {
       e.preventDefault();
-      setActiveTool('brush');
+      setActiveTool('pencil');
     },
-    B: (e) => {
+    P: (e) => {
       e.preventDefault();
-      setActiveTool('brush');
+      setActiveTool('pencil');
     },
     e: (e) => {
       e.preventDefault();
@@ -79,6 +79,15 @@ export function createEditorToolKeyBindings(
       e.preventDefault();
       setActiveTool('eraser');
     },
+    // Soft brush (paintBrush) disabled in release UI — no keyboard shortcut.
+    // b: (e) => {
+    //   e.preventDefault();
+    //   setActiveTool('paintBrush');
+    // },
+    // B: (e) => {
+    //   e.preventDefault();
+    //   setActiveTool('paintBrush');
+    // },
     g: (e) => {
       e.preventDefault();
       setActiveTool('fill');

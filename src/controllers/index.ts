@@ -27,3 +27,8 @@ export {
   type CreatorPoseController,
   type CameraPose,
 } from './creatorPose';
+export {
+  createFocusedCreationController,
+  type FocusedCreationController,
+  type FocusedCreationControllerDeps,
+} from './focusedCreationController';

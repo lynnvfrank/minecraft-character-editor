@@ -48,7 +48,26 @@
   transition: background 0.15s ease;
 }
 .creator-layers-panel-toggle {
-  display: none;
+  display: flex;
+}
+.creator-layers-panel-expand-list {
+  flex: 1;
+  min-width: 0;
+  margin: 0 0.25rem;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(147, 197, 253, 0.95);
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.creator-layers-panel-expand-list:hover {
+  background: rgba(59, 130, 246, 0.32);
+}
+.creator-layers-panel-expand-list[hidden] {
+  display: none !important;
 }
 .creator-layers-panel-toggle:hover {
   background: rgba(255, 255, 255, 0.12);
@@ -75,6 +94,21 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+/* Focused creation: wardrobe→3D/2D solo — one row until “Show all layers” */
+.creator-layers-panel-focused-compact {
+  max-width: 14.5rem;
+  padding: 0.35rem 0.55rem;
+}
+.creator-layers-panel-focused-compact .creator-layers-panel-header {
+  margin-bottom: 0.35rem;
+}
+.creator-layers-panel-focused-compact .creator-layers-panel-separator {
+  display: none;
+}
+/* Non-visible layers removed from layout while list is collapsed (overrides .creator-layers-panel-row flex). */
+.creator-layers-panel-row.creator-layers-panel-row--focus-collapsed-hidden {
+  display: none !important;
 }
 .creator-layers-panel-separator {
   height: 0;

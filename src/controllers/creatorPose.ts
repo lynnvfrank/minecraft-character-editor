@@ -7,8 +7,13 @@ import { logger } from '../lib';
 import type { CharacterStateLike } from '../animation';
 import type { CharacterState } from './characterTypes';
 import { EDIT_MODE_WARDROBE, type EditMode } from '../creator/api';
+import {
+  CREATOR_WARDROBE_CAMERA_DURATION_MAX_MS,
+  CREATOR_WARDROBE_CAMERA_DURATION_MIN_MS,
+  CREATOR_WARDROBE_CAMERA_TRAVEL_SPEED,
+} from '../config/creatorWardrobeMotion';
 
-export type CameraPose = { target: THREE.Vector3; position: THREE.Vector3 };
+export type CameraPose = { target: THREE.Vector3; position: THREE.Vector3; fov?: number };
 
 export type CreatorPoseDeps = {
   getCharacter: (id: string) => CharacterState | undefined;
@@ -25,10 +30,6 @@ export type CreatorPoseDeps = {
   easeOutCubic: (t: number) => number;
 };
 
-const CAMERA_TRAVEL_SPEED = 4;
-const CAMERA_TRANSITION_DURATION_MIN_MS = 400;
-const CAMERA_TRANSITION_DURATION_MAX_MS = 1500;
-
 export type CreatorPoseController = {
   lockCharacterToCreatorIdle: () => void;
   lockCharacterFrozenForPainting: () => void;
@@ -43,6 +44,8 @@ export type CreatorPoseController = {
 
 export function createCreatorPoseController(deps: CreatorPoseDeps): CreatorPoseController {
   let creatorIdleCompletingTransition = false;
+  /** Supersede in-flight `animateCameraToCreatorView` so only one tween updates the camera. */
+  let cameraTweenGeneration = 0;
 
   function lockCharacterToCreatorIdle() {
     deps.animationManager?.stop();
@@ -177,11 +180,16 @@ export function createCreatorPoseController(deps: CreatorPoseDeps): CreatorPoseC
   }
 
   function snapCameraToCreatorView(pose?: CameraPose) {
+    cameraTweenGeneration += 1;
     const p = pose ?? getCreatorCameraPose();
     const ctx = deps.getSceneContext();
     if (!ctx?.camera || !ctx?.controls) return;
     ctx.camera.position.copy(p.position);
     ctx.controls.target.copy(p.target);
+    if (p.fov != null) {
+      ctx.camera.fov = p.fov;
+      ctx.camera.updateProjectionMatrix();
+    }
     ctx.controls.update();
   }
 
@@ -190,37 +198,62 @@ export function createCreatorPoseController(deps: CreatorPoseDeps): CreatorPoseC
     const ctx = deps.getSceneContext();
     if (!ctx?.camera || !ctx?.controls) return Promise.resolve();
 
+    const myGen = ++cameraTweenGeneration;
+
     const startPosition = ctx.camera.position.clone();
     const endPosition = p.position.clone();
     const startTarget = ctx.controls.target.clone();
     const endTarget = p.target.clone();
+    const startFov = ctx.camera.fov;
+    const endFov = p.fov ?? startFov;
 
     const distance = startPosition.distanceTo(endPosition);
     const durationMs = THREE.MathUtils.clamp(
-      (distance / CAMERA_TRAVEL_SPEED) * 1000,
-      CAMERA_TRANSITION_DURATION_MIN_MS,
-      CAMERA_TRANSITION_DURATION_MAX_MS
+      (distance / CREATOR_WARDROBE_CAMERA_TRAVEL_SPEED) * 1000,
+      CREATOR_WARDROBE_CAMERA_DURATION_MIN_MS,
+      CREATOR_WARDROBE_CAMERA_DURATION_MAX_MS
     );
 
     const startTime = performance.now();
 
     return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
       const tick = () => {
+        if (myGen !== cameraTweenGeneration) {
+          finish();
+          return;
+        }
         const sc = deps.getSceneContext();
-        if (!sc) return;
+        if (!sc) {
+          finish();
+          return;
+        }
         const elapsed = performance.now() - startTime;
         const t = Math.min(elapsed / durationMs, 1);
         const eased = deps.easeOutCubic(t);
 
         sc.camera.position.copy(startPosition).lerp(endPosition, eased);
         sc.controls.target.copy(startTarget).lerp(endTarget, eased);
+        if (p.fov != null) {
+          sc.camera.fov = THREE.MathUtils.lerp(startFov, endFov, eased);
+          sc.camera.updateProjectionMatrix();
+        }
         sc.controls.update();
 
         if (t < 1) {
           requestAnimationFrame(tick);
         } else {
+          if (myGen !== cameraTweenGeneration) {
+            finish();
+            return;
+          }
           snapCameraToCreatorView(p);
-          resolve();
+          finish();
         }
       };
       requestAnimationFrame(tick);

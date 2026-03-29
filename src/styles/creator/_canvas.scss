@@ -164,6 +164,20 @@
   background: #1a1a2e;
   cursor: crosshair;
 }
+/* Focused mode: multiple UV parts packed (row/column/grid) for max cell size; regions positioned in TS */
+.creator-blocky-grid--multi {
+  grid-template-columns: none;
+  grid-template-rows: none;
+  width: auto;
+  height: auto;
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+}
+.creator-blocky-region {
+  display: grid;
+  background: #1a1a2e;
+}
 .creator-blocky-cell {
   min-width: 0;
   min-height: 0;

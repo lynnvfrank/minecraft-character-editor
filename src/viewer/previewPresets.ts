@@ -46,7 +46,7 @@ const PREVIEW_PRESET_LABELS: Record<PreviewPresetKey, string> = {
   pants: 'Pants',
   legs: 'Legs',
   torso: 'Torso',
-  jacketGroup: 'Jacket (vest + sleeves)',
+  jacketGroup: 'Jacket',
   bottom: 'Lower body',
   center: 'Upper body',
   top: 'Head (hat + head)',

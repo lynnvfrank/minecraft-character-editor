@@ -9,8 +9,10 @@ export {
   buildWardrobeLibraryPanels,
   renderWardrobeLibraryPanel,
   WARDROBE_PART_PANEL_CONFIGS,
+  getWardrobeLibraryPanelIdsForLayer,
   getWardrobePanelIdForLayer,
 } from './wardrobeLibraryPanels';
+export { isWardrobeDualLibrarySplitLayer } from './wardrobeLayers';
 export type {
   ColorToolbarContext,
   ColorPickerContext,

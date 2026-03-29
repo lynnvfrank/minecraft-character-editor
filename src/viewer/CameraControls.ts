@@ -32,7 +32,13 @@ function setButtonsDisabled(value: boolean): void {
   });
 }
 
-export function buildCameraControls(): void {
+export type BuildCameraControlsOptions = {
+  getFocusedCreationEnabled: () => boolean;
+  setFocusedCreationEnabled: (enabled: boolean) => void;
+  subscribeFocusedCreationChanged?: (cb: () => void) => () => void;
+};
+
+export function buildCameraControls(options?: BuildCameraControlsOptions): void {
   let container = document.getElementById('creator-top-center-panels');
   if (!container) {
     const wrapper = document.getElementById('creator-view-wrapper');
@@ -70,6 +76,29 @@ export function buildCameraControls(): void {
       publish(cfg.event, cfg.detail ?? {});
     });
     toolbar.appendChild(btn);
+  }
+
+  if (options) {
+    const focusedBtn = createEl('button', {
+      type: 'button',
+      id: 'camera-focused-toggle',
+      className: 'creator-camera-controls-btn creator-camera-controls-btn-focused',
+      title: 'Guided view: camera follows selection. Turn off for full control.',
+    });
+    const syncFocusedBtn = () => {
+      const on = options.getFocusedCreationEnabled();
+      focusedBtn.textContent = on ? 'Focused' : 'Free';
+      focusedBtn.setAttribute('aria-label', on ? 'Focused creation on' : 'Focused creation off');
+      focusedBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    };
+    syncFocusedBtn();
+    focusedBtn.addEventListener('click', () => {
+      if (disabled) return;
+      options.setFocusedCreationEnabled(!options.getFocusedCreationEnabled());
+      syncFocusedBtn();
+    });
+    options.subscribeFocusedCreationChanged?.(syncFocusedBtn);
+    toolbar.insertBefore(focusedBtn, toolbar.firstChild);
   }
 
   if (!moveStartEndBound) {

@@ -47,8 +47,10 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
     createEl('div', { className: 'creator-tools-panel-row creator-tools-panel-tools-row', role: 'group', 'aria-label': 'Drawing tools' },
       createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'navigate', title: 'Navigate: orbit/zoom, no paint (H, 1)', 'aria-label': 'Navigate' }, createIcon('modeCreatorToolsNavigate', iconOpts)),
       createEl('div', { className: 'creator-tools-panel-divider', 'aria-hidden': 'true' }),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'brush', title: 'Brush (B, 2)', 'aria-label': 'Brush' }, createIcon('modeCreatorToolsBrush', iconOpts)),
+      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'pencil', title: 'Pencil (P, 2)', 'aria-label': 'Pencil' }, createIcon('modeCreatorToolsPencil', iconOpts)),
       createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eraser', title: 'Eraser (E, 3)', 'aria-label': 'Eraser' }, createIcon('modeCreatorToolsErasor', iconOpts)),
+      // Soft paint brush hidden from release UI; tool code remains (see setActiveTool guard).
+      // createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'paintBrush', title: 'Soft brush (B, 4)', 'aria-label': 'Soft brush' }, createIcon('modeCreatorToolsBrush', iconOpts)),
       createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'fill', title: 'Fill (G, 4)', 'aria-label': 'Fill' }, createIcon('modeCreatorToolsFill', iconOpts)),
       createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eyedropper', title: 'Eyedropper: sample color from 2D or 3D (5)', 'aria-label': 'Eyedropper' }, createIcon('modeCreatorToolsDropper', iconOpts))
     )
@@ -82,7 +84,7 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   modePanel.querySelectorAll<HTMLButtonElement>('.creator-tools-panel-mode-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.mode as 'wardrobe' | '2d' | '3d';
-      if (mode) ctx.setEditMode(mode);
+      if (mode) ctx.setEditMode(mode, { fromUserModeNavigation: true });
       updateEditModeButtons();
     });
   });

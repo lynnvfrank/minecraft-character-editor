@@ -4,12 +4,14 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { uvToWorkingCoords } from '../skin';
+import { snapWorkingToSkinCellCenter, uvToWorkingCoords } from '../skin';
 import {
   getEditMode3D,
   getActiveTool,
   getBrushSize,
+  getPaintBrushWorkingDimensions,
   getBrushCursorStyleFor3D,
+  getPaintBrushCursorStyleFor3D,
   getLayer3DVisible,
   getLayer3DLocked,
   getLayerAndPartAtCoords,
@@ -21,7 +23,9 @@ import {
   EYEDROPPER_ALPHA_THRESHOLD,
   applySampledColor,
   updateHoverInfo,
-  getPartDisplayNameAtCoords
+  getPartDisplayNameAtCoords,
+  update3DSkinHoverPreview,
+  clearSkinHoverPreview,
 } from '../creator';
 import {
   creatorLockFeedbackSlice,
@@ -177,8 +181,11 @@ export function updateCreator3DCanvasCursor(
     return;
   }
   const tool = getActiveTool();
-  if (tool === 'brush' || tool === 'eraser' || tool === 'fill') {
+  if (tool === 'pencil' || tool === 'eraser' || tool === 'fill') {
     canvas.style.cursor = getBrushCursorStyleFor3D(getBrushSize());
+  } else if (tool === 'paintBrush') {
+    const { w, h } = getPaintBrushWorkingDimensions();
+    canvas.style.cursor = getPaintBrushCursorStyleFor3D(w, h);
   } else if (tool === 'eyedropper') {
     canvas.style.cursor = 'crosshair';
   } else {
@@ -188,11 +195,18 @@ export function updateCreator3DCanvasCursor(
 
 export function recreateOrbitControls(
   camera: THREE.PerspectiveCamera,
-  renderer: THREE.WebGLRenderer
+  renderer: THREE.WebGLRenderer,
+  /** When re-attaching the canvas (e.g. 2D → 3D), keep orbit target so wardrobe/focused presets aren’t lost. */
+  previousControls?: OrbitControls | null
 ): OrbitControls {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.target.set(0, 1, 0);
+  if (previousControls) {
+    controls.target.copy(previousControls.target);
+  } else {
+    controls.target.set(0, 1, 0);
+  }
+  controls.update();
   return controls;
 }
 
@@ -213,6 +227,7 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
 
   const refreshControls = () => {
     if (controlsTemporarilyDisabled) return;
+    clearSkinHoverPreview();
     updateOrbitControlsForEditMode(getControls(), deps.getRoute);
     deps.onUpdateViewPlacement();
     updateCreator3DCanvasCursor(renderer, deps.getRoute);
@@ -234,6 +249,7 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     controlsTemporarilyDisabled = true;
     getControls().enabled = false;
     if (activeTool === 'eyedropper' || e.altKey) {
+      clearSkinHoverPreview();
       const hex = sampleColorFromRaycast(deps, e.clientX, e.clientY);
       if (hex) applySampledColor(hex);
       releasePaintControl();
@@ -241,6 +257,7 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     }
     const uv = raycastToPaintableUV(deps, e.clientX, e.clientY);
     if (!uv) {
+      clearSkinHoverPreview();
       const visibleHit = raycastToVisibleLayer(deps, e.clientX, e.clientY);
       if (visibleHit?.isLocked) {
         creatorLockFeedbackSlice.notify({ layer: visibleHit.layer });
@@ -262,7 +279,12 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
       : null;
     const uv = raycastToPaintableUV(deps, e.clientX, e.clientY);
     if (uv) {
-      const { x, y } = uvToWorkingCoords(uv.u, uv.v);
+      let { x, y } = uvToWorkingCoords(uv.u, uv.v);
+      if (activeTool === 'paintBrush') {
+        const s = snapWorkingToSkinCellCenter(x, y);
+        x = s.x;
+        y = s.y;
+      }
       const part = getPartDisplayNameAtCoords(x, y);
       const skinX = Math.floor(x / 2);
       const skinY = Math.floor(y / 2);
@@ -270,6 +292,20 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     } else {
       updateHoverInfo(null, -1, -1, null);
     }
+
+    if (!is3DPainting) {
+      if (
+        (activeTool === 'pencil' || activeTool === 'eraser' || activeTool === 'paintBrush') &&
+        !e.altKey &&
+        uv
+      ) {
+        const { x, y } = uvToWorkingCoords(uv.u, uv.v);
+        update3DSkinHoverPreview(x, y);
+      } else {
+        clearSkinHoverPreview();
+      }
+    }
+
     if (!is3DPainting) return;
     const paintUv = raycastToPaintableUV(deps, e.clientX, e.clientY);
     if (!paintUv) return;
@@ -280,6 +316,7 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
 
   function handle3DCanvasLeave() {
     if (deps.getRoute() === 'creator' && getEditMode3D()) {
+      clearSkinHoverPreview();
       updateHoverInfo(null, -1, -1);
     }
   }
@@ -313,7 +350,7 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     refreshControls();
   });
   document.addEventListener('keydown', () => {
-    // Keyboard tool shortcuts (B/E/G/H) update creator state; sync controls/cursor immediately.
+    // Keyboard tool shortcuts (B/P/E/G/H) update creator state; sync controls/cursor immediately.
     refreshControls();
   });
   refreshControls();

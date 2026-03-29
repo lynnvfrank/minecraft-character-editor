@@ -1,7 +1,9 @@
 import type { CreatorTexturePositionDetail, CreatorLockFeedbackDetail } from '../events/appEvents';
 import {
+  creatorFocusedCreationSlice,
   creatorLayerSlice,
   creatorLockFeedbackSlice,
+  creatorModeSlice,
   creatorTexturePositionSlice,
 } from '../state/creatorSlices';
 import type { SkinLayersContext, PartSide } from './api';
@@ -26,6 +28,12 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   const titleSpan = document.createElement('span');
   titleSpan.className = 'creator-layers-panel-title';
   titleSpan.textContent = 'Layers';
+  const expandListBtn = document.createElement('button');
+  expandListBtn.type = 'button';
+  expandListBtn.className = 'creator-layers-panel-expand-list';
+  expandListBtn.textContent = 'Show all layers';
+  expandListBtn.setAttribute('aria-label', 'Show all layers');
+  expandListBtn.hidden = true;
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
   toggleBtn.className = 'creator-layers-panel-toggle';
@@ -38,7 +46,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   expandIcon.className = 'creator-layers-panel-icon creator-layers-panel-icon-expand';
   expandIcon.textContent = '▲';
   toggleBtn.append(minimizeIcon, expandIcon);
-  header.append(titleSpan, toggleBtn);
+  header.append(titleSpan, expandListBtn, toggleBtn);
 
   const list = document.createElement('div');
   list.className = 'creator-layers-panel-list';
@@ -124,7 +132,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
 
       const lockLabel = document.createElement('label');
       lockLabel.className = 'creator-layers-panel-lock';
-      lockLabel.title = `${layerName} lock: ignore brush/eraser/fill. Alt+click: solo this layer (unlock only this)`;
+      lockLabel.title = `${layerName} lock: ignore pencil/eraser/fill. Alt+click: solo this layer (unlock only this)`;
       const lockInput = document.createElement('input');
       lockInput.type = 'checkbox';
       lockInput.className = 'creator-layer-3d-lock';
@@ -236,6 +244,47 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     (e) => !(e instanceof MouseEvent && e.altKey)
   );
 
+  const applyFocusedListFilter = (panelEl: HTMLElement) => {
+    const mode = ctx.getEditMode();
+    const inEdit = mode === '3d' || mode === '2d';
+    /** Wardrobe→3D/2D sets expanded false when solo applies; do not require focused toggle. */
+    const compact = !ctx.getLayersPanelFocusedListExpanded() && inEdit;
+    panelEl.classList.toggle('creator-layers-panel-focused-compact', compact);
+    const showExpand = compact;
+    expandListBtn.hidden = !showExpand;
+    expandListBtn.setAttribute('aria-expanded', showExpand ? 'false' : 'true');
+    panelEl.querySelectorAll<HTMLElement>('.creator-layers-panel-row').forEach((rowEl) => {
+      const layer = rowEl.dataset.layer;
+      if (!layer) return;
+      if (!compact) {
+        rowEl.removeAttribute('hidden');
+        rowEl.removeAttribute('aria-hidden');
+        rowEl.classList.remove('creator-layers-panel-row--focus-collapsed-hidden');
+        return;
+      }
+      const vis = ctx.isLayer3DVisible(layer);
+      const hideRow = !vis;
+      rowEl.classList.toggle('creator-layers-panel-row--focus-collapsed-hidden', hideRow);
+      if (hideRow) {
+        rowEl.setAttribute('hidden', '');
+        rowEl.setAttribute('aria-hidden', 'true');
+      } else {
+        rowEl.removeAttribute('hidden');
+        rowEl.removeAttribute('aria-hidden');
+      }
+    });
+  };
+
+  expandListBtn.addEventListener('click', () => {
+    ctx.setLayersPanelFocusedListExpanded(true);
+    if (panel) {
+      applyFocusedListFilter(panel);
+      ctx.syncVisibilityCheckboxes(panel);
+      ctx.syncLockCheckboxes(panel);
+      updateLayerButtonUI(panel);
+    }
+  });
+
   const updateCollapsedUI = () => {
     if (!panel) return;
     const collapsed = ctx.isLayersPanelCollapsed();
@@ -256,6 +305,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     updateCollapsedUI();
   });
   updateCollapsedUI();
+  applyFocusedListFilter(panel);
   updateLayerButtonUI(panel);
 
   const LOCK_FEEDBACK_DURATION_MS = 400;
@@ -270,10 +320,23 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       row.classList.toggle('creator-layers-panel-row-highlight', !!shouldHighlight);
     });
   });
-  creatorLayerSlice.subscribe(() => {
+  const syncLayersPanelFromState = () => {
     if (document.body.dataset.route !== 'creator') return;
-    if (panel) updateLayerButtonUI(panel);
+    if (!panel) return;
+    ctx.syncVisibilityCheckboxes(panel);
+    ctx.syncLockCheckboxes(panel);
+    applyFocusedListFilter(panel);
+    updateLayerButtonUI(panel);
+  };
+
+  creatorLayerSlice.subscribe(syncLayersPanelFromState);
+  // Defer so focusedCreationController can apply wardrobe→3D/2D solo first (same notify tick).
+  creatorModeSlice.subscribe(() => {
+    queueMicrotask(() => {
+      syncLayersPanelFromState();
+    });
   });
+  creatorFocusedCreationSlice.subscribe(syncLayersPanelFromState);
   creatorLockFeedbackSlice.subscribe((detail: CreatorLockFeedbackDetail) => {
     if (document.body.dataset.route !== 'creator') return;
     const layer = detail.layer;

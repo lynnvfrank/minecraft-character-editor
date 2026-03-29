@@ -62,7 +62,7 @@ export function buildTexturePositionPanel(): void {
 
     toolSpan.textContent = `${formatToolName(tool)}`;
 
-    const showCurrentColorSwatch = tool === 'brush' || tool === 'fill';
+    const showCurrentColorSwatch = tool === 'pencil' || tool === 'paintBrush' || tool === 'fill';
     const showHoverColorSwatch = tool === 'eyedropper' || tool === 'eraser';
     colorSpan.style.display = showCurrentColorSwatch || showHoverColorSwatch ? 'inline-flex' : 'none';
     if (showCurrentColorSwatch) {

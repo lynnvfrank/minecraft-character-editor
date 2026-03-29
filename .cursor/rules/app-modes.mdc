@@ -1,5 +1,5 @@
 ---
-description: Map user terms (home/world view/mode) to app routes and Creator submodes
+description: Map user terms (home/world view/mode) to routes and Creator submodes; wardrobe vs skin vs model “layers”; wardrobe UI left/right panels
 alwaysApply: true
 ---
 
@@ -20,3 +20,28 @@ When the user says **home**, **home view**, **world view**, or **viewer**, they 
 **Preview** = **`route: preview`** (`#/preview`) — separate from Home/Creator; see `MODES.md`.
 
 **Code:** `getRouteInfo` / `applyRoute` in `src/main.ts`; `setEditMode` in `src/creator.ts`; `document.body.dataset.route` and `dataset.editMode`.
+
+---
+
+## “Layers” — use a qualifier (the word is overloaded)
+
+| Say this | Meaning | Code / UI |
+|----------|---------|-----------|
+| **Wardrobe layer** | A row in the Creator.Wardrobe **tree** (including composites like `top`, `jacketGroup`, and atomics like `head`). Drives camera presets, which **library** is shown, and (with focused creation) solo mapping into skin layers. | `WardrobeLayerKey`, tree in `src/creator/wardrobeLayers.ts`; selection + hover in wardrobe UI |
+| **Skin layer** / **paint layer** | One of the **eight** Minecraft skin regions (visibility, lock, 2D mask): `hat`, `head`, `body`, `arms`, `jacket`, `sleeves`, `pants`, `legs`. | `LayerKey` / `layer3DVisible` in `src/skin`, **`#creator-layers-panel`** (Creator.2D / Creator.3D only) |
+| **Model layer** / **mesh part** | The corresponding **3D mesh** on the character (show/hide with skin-layer visibility). | `applyCreatorLayerVisibility` and mesh naming in `src/skin` / viewer — same part names as skin layers |
+
+When discussing behavior, prefer **wardrobe layer** vs **skin layer** (or **paint layer**) vs **model part** so agents don’t mix solo/camera/UI (wardrobe) with the 8-region panel (skin) with Three.js meshes (model).
+
+---
+
+## Creator.Wardrobe — left vs right panels
+
+In **`editMode: wardrobe`** only:
+
+| Area | DOM (ids / classes) | Role |
+|------|---------------------|------|
+| **Left** | `#creator-wardrobe-parts-panel` | **Wardrobe layer tree** — pick which **wardrobe layer** is active (hierarchy, labels). |
+| **Right** | `#creator-upper-right-panels-root` | **Outfits** (`#creator-wardrobe-outfits-panel`, `#creator-skin-selector`) plus **wardrobe library panels** — `.creator-wardrobe-library-panel` grids (thumbnails / part choices) for the **selected wardrobe layer**. Which libraries are visible updates when the selection changes. |
+
+Say **wardrobe library panels** (or **right-hand wardrobe panels**) for the dynamic `.creator-wardrobe-library-panel` content on the right. Say **wardrobe parts panel** for the **left** tree. Do not call the left tree “layers panel” — **`#creator-layers-panel`** is the skin/paint layer panel in 2D/3D only (`src/creator/modePanels.ts`, `src/creator/skinLayersPanel.ts`).

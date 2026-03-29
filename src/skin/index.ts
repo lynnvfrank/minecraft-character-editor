@@ -9,6 +9,7 @@ export {
   WORK_SIZE,
   workingToSkin,
   skinToWorking,
+  snapWorkingToSkinCellCenter,
   uvToWorkingCoords,
   type SkinCoord,
   type WorkingCoord,

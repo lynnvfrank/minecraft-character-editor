@@ -1,6 +1,6 @@
 ---
 name: Focused Creation Mode
-overview: "Implement Focused Creation: a toggleable guided mode that (1) animates the camera to the selected wardrobe layer in Wardrobe, (2) applies focused visibility/lock when entering Creator.3D or Creator.2D, (3) shows a partially collapsed layers panel listing only visible layers until the user expands it, and (4) in Creator.2D restructures the blocky editor layout to the focused skin bounding regions only—not merely hiding the rest of the map. Default ON; toggle OFF for free control."
+overview: "Implement Focused Creation: a toggleable guided mode that (1) animates the camera to the selected wardrobe layer in Wardrobe, (2) applies focused visibility/lock when entering Creator.3D or Creator.2D, (3) shows a partially collapsed layers panel listing only visible layers until the user expands it, and (4) in Creator.2D restructures the blocky editor layout to the focused skin bounding regions only—not merely hiding the rest of the map. Default ON; toggle OFF for free control. Controller and UI sync use creator slices (creatorWardrobeFocusSlice, creatorModeSlice, creatorLayerSlice, new focused slice)—not document-bus editor events; see MODELS-AND-SUBSCRIBERS.md."
 todos: []
 isProject: false
 ---
@@ -12,14 +12,11 @@ isProject: false
 Focused Creation is a toggleable feature that guides the user by:
 
 - **Initial wardrobe entry:** When first entering Creator.Wardrobe, the camera uses the full outfit preview preset (same as Preview when viewing the full skin) instead of the current creator default.
-- **Wardrobe mode:** When the user selects a layer (hat, head, jacket, etc.), the camera animates to that part's preset view.
-- **Mode transition (wardrobe to 3D/2D):** The camera stays put; focused visibility/lock is applied from the wardrobe selection (see [Outline: Wardrobe, 3D, and 2D behavior](#outline-wardrobe-3d-and-2d-behavior) below).
-- **Layers panel (3D/2D):** In focused mode, the panel opens in a **partially collapsed** state: only layers that are **currently visible** are listed. The user can **expand** to see every layer row; expanded UI shows **true** visibility/lock/part state for all layers.
-- **Blocky editor (2D):** In focused mode, the editor **restructures** so only the skin regions for the focused wardrobe selection occupy the layout (bounding boxes from [SKIN_LAYER_BOUNDS](src/skin/)); the rest of the 64×64 map is not merely dimmed—it is **out of the structured view** until the user expands layers in 2D or changes wardrobe selection and re-enters 2D (see [Blocky editor: focused layout](#blocky-editor-focused-layout)).
+- **Wardrobe mode:** When the user selects a layer (hat, head, jacket, etc.), the camera animates to that part's preset view. In focused creation mode, the selection of a layer hides the Creator.2D.layer and Creator.3D.layer by modifying the underlying model.
+- **Layers panel (3D/2D):** In focused mode, the layer displays in a **partially collapsed** state: only layers that are **currently visible** are listed. The user can **expand** to see every layer row; rows maintain the same order when closed and expanded.
+- **Blocky editor (2D):** In focused mode, the editor stays in sync via **`creatorLayerSlice`** (and related slices such as **`creator2dPaintSlice`** where paint mask matters); it **restructures** so only the visible layer regions occupy the layout (bounding boxes from [SKIN_LAYER_BOUNDS](src/skin/)); the rest of the 64×64 map is not merely dimmed—it is **out of the structured view** until layer visibility in the shared model changes (see [Blocky editor: focused layout](#blocky-editor-focused-layout)).
 
 Default: **ON**. Toggle OFF for experienced users who want full manual control.
-
-**Unresolved product choices** are captured in **Open decisions** tables throughout this document (see [Open decisions index](#open-decisions-index)). Each table has an **Answer** column to fill in as decisions are made.
 
 ---
 
@@ -31,29 +28,29 @@ There is a **WIP implementation** on git branch **`creative-wardrobe-focused-cam
 
 | Area | Files (on branch) | Maps to this plan |
 |------|-------------------|-------------------|
-| **Focused Creation controller** | [`src/controllers/focusedCreationController.ts`](src/controllers/focusedCreationController.ts) (new) | §5 — subscribes to `WARDROBE_LAYER_CHANGE` (camera → preset in Wardrobe) and `EDIT_MODE_CHANGE` (Wardrobe → 3D/2D → solo). **Reuse** the module; extend deps when adding compact panel / blocky layout triggers. |
-| **Events** | [`src/events/appEvents.ts`](src/events/appEvents.ts) | §1 — `wardrobe-layer-change`, `focused-creation-change`. **Reuse**; add more event types only if you prefer bus over direct calls for compact/blocky UI. |
-| **Creator state + API** | [`src/state/creatorState.ts`](src/state/creatorState.ts), [`src/creator.ts`](src/creator.ts) | §2–3 — `focusedCreationEnabled`, localStorage, `getFocusedCreationEnabled` / `setFocusedCreationEnabled`, `getWardrobeSelectedLayer`, publish on wardrobe `setSelectedLayer`. **Reuse**; may add flags (e.g. layers panel compact) next to `focusedCreationEnabled`. |
-| **Solo helper** | [`src/creator/layerVisibility.ts`](src/creator/layerVisibility.ts) | §4 — `applyFocusedSoloForLayer(layer)` clears solo modes, sets one **`LayerKey`** visible/unlocked, clears part visibility. **Replace or wrap** with `WardrobeLayerKey` → member `LayerKey` set (composites); keep `clearLayerSoloModes` + publish pattern. |
+| **Focused Creation controller** | [`src/controllers/focusedCreationController.ts`](src/controllers/focusedCreationController.ts) (new) | §5 — subscribes to **`creatorWardrobeFocusSlice`** (camera → preset in Wardrobe) and **`creatorModeSlice`** (Wardrobe → 3D/2D → solo). **Reuse** the module; extend deps when adding compact panel / blocky layout triggers. |
+| **State sync** | [`src/state/creatorSlices.ts`](src/state/creatorSlices.ts), [`docs/concepts/MODELS-AND-SUBSCRIBERS.md`](docs/concepts/MODELS-AND-SUBSCRIBERS.md) | §1 — Creator editor fan-out uses **in-process slices** (`notify` / `subscribe`), not new `app:creator:*` document events. Wardrobe selection already notifies **`creatorWardrobeFocusSlice`** from [`wardrobe.ts`](src/creator/wardrobe.ts). |
+| **Creator state + API** | [`src/state/creatorState.ts`](src/state/creatorState.ts), [`src/creator.ts`](src/creator.ts) | §2–3 — `focusedCreationEnabled`, localStorage, `getFocusedCreationEnabled` / `setFocusedCreationEnabled`; wardrobe selection via `wardrobeApi` (already calls `creatorWardrobeFocusSlice.notify()`). **Reuse**; may add flags (e.g. layers panel compact) next to `focusedCreationEnabled`. |
+| **Solo helper** | [`src/creator/layerVisibility.ts`](src/creator/layerVisibility.ts) | §4 — `applyFocusedSoloForLayer(layer)` clears solo modes, sets one **`LayerKey`** visible/unlocked, clears part visibility. **Replace or wrap** with `WardrobeLayerKey` → member `LayerKey` set (composites); keep `clearLayerSoloModes` + **`creatorLayerSlice.notify()`** after mutations. |
 | **Initial Wardrobe camera + FOV** | [`src/main.ts`](src/main.ts) | §6 — `getCreatorEntryCameraPose()`, first-entry snap uses `fullOutfit` preset when Focused ON. **Reuse**; reconcile with any `main` changes in `applyRoute`. |
 | **Enter/exit Creator camera** | [`src/controllers/transitions/creatorTransitionHandler.ts`](src/controllers/transitions/creatorTransitionHandler.ts), [`src/main.ts`](src/main.ts) | Saves Home camera on enter Creator; restores (or default) on exit; `getCreatorEntryCameraPose` / `animateCameraToPose` naming. **Reuse** if still desired alongside Preview-style wardrobe entry. |
 | **Toggle UI** | [`src/viewer/CameraControls.ts`](src/viewer/CameraControls.ts), [`src/styles/creator/_camera-controls.scss`](src/styles/creator/_camera-controls.scss) | §7 — Focused / Free toggle via optional `buildCameraControls(deps)`. **Reuse** as-is. |
 | **Exports** | [`src/controllers/index.ts`](src/controllers/index.ts) | §8 — export focused creation factory. **Reuse**. |
-| **Docs** | [`docs/concepts/EVENT-SYSTEM.md`](docs/concepts/EVENT-SYSTEM.md) | §9 — register new events. **Update** when events or publishers/subscribers grow. |
+| **Docs** | [`docs/concepts/MODELS-AND-SUBSCRIBERS.md`](docs/concepts/MODELS-AND-SUBSCRIBERS.md), [`docs/concepts/EVENT-SYSTEM.md`](docs/concepts/EVENT-SYSTEM.md) | §9 — document new **slices** / subscribers on the models doc; **EVENT-SYSTEM** stays for document bus only (camera + character commands). |
 
 ### Gaps vs this plan (implement on top of the branch or `main`)
 
 - **Composite `WardrobeLayerKey`:** Branch solo only treats a single `isLayerKey` layer; composites no-op. Plan §4 / edge cases require a **shared map** from wardrobe tree → `LayerKey[]` for solo, presets, and blocky bounds.
-- **Layers panel:** Branch does **not** implement compact vs expanded list or **checkbox sync** on programmatic `LAYER3D_CHANGE` — that caused 3D UI drift relative to state. Plan [Layers panel: focused compact and expanded](#layers-panel-focused-compact-and-expanded).
+- **Layers panel:** Branch does **not** implement compact vs expanded list or **checkbox sync** when layer state changes programmatically — today that means subscribing to **`creatorLayerSlice`** and re-reading visibility/lock state (same fix as on `main`). Plan [Layers panel: focused compact and expanded](#layers-panel-focused-compact-and-expanded).
 - **Blocky editor:** No focused **layout restructure** on the branch. Plan [Blocky editor: focused layout](#blocky-editor-focused-layout).
-- **`main` divergence:** Current `main` may have more `LAYER_KEYS` / wardrobe taxonomy than the branch base; resolve conflicts in `layerVisibility.ts`, `creator.ts`, and `main.ts` while keeping the branch’s **event + controller + toggle** structure.
+- **`main` divergence:** Current `main` may have more `LAYER_KEYS` / wardrobe taxonomy than the branch base; resolve conflicts in `layerVisibility.ts`, `creator.ts`, and `main.ts` while porting the branch to **`creatorSlices`** (replace any legacy `publish`/`subscribe` for editor state with slice `notify` / `subscribe`).
 
 ### How to use this branch in an implementation pass
 
 1. **Rebase or cherry-pick** `creative-wardrobe-focused-camera` onto latest `main` (expect conflicts in shared files).
-2. **Land unchanged first** where possible: `focusedCreationController` shape, events, creator getters/setter, `buildCameraControls` deps, transition handler + `getCreatorEntryCameraPose` if those match product intent.
+2. **Land unchanged first** where possible: `focusedCreationController` **behavior**, creator getters/setter, `buildCameraControls` deps, transition handler + `getCreatorEntryCameraPose` if those match product intent — but **rewire** the controller to **`creatorWardrobeFocusSlice`** / **`creatorModeSlice`** (and focused toggle slice from §2) instead of document-bus editor events.
 3. **Extend** `applyFocusedSolo*` with wardrobe-aware mapping; wire controller (or creator) to set **compact panel** + **blocky focused mode** on the same transitions that call solo.
-4. **Implement** `skinLayersPanel` and `blockyEditor` per this plan; subscribe to `LAYER3D_CHANGE` / `EDIT_MODE_CHANGE` / `FOCUSED_CREATION_CHANGE` as needed.
+4. **Implement** `skinLayersPanel` and `blockyEditor` per this plan; subscribe to **`creatorLayerSlice`**, **`creatorModeSlice`**, and the **focused-creation** slice (§2) as needed — not removed bus events like `LAYER3D_CHANGE` / `EDIT_MODE_CHANGE`.
 5. **Drop or revise** any branch behavior that conflicts with updated `main` (e.g. duplicate camera snaps).
 
 ---
@@ -72,15 +69,13 @@ This section is the **product spec** for what the user should see when Focused C
 
 | Question | Answer |
 |----------|--------|
-| Should **3D visibility/lock** update **while still in Wardrobe** (pre-solo) so the character matches the focused selection before switching modes, or only **on transition** to Creator.3D / Creator.2D? | |
-| Wardrobe composite key **`all`** vs **`fullOutfit`:** Same solo/camera/panel behavior, or different (e.g. `all` = every leaf visible; `fullOutfit` = preset + no solo)? | |
-
-The 3D visibility/lock should update in all modes. So the new modes that are transitioned to are up-to-date with the state of the system. I want the layer changes to fire events. The events to be handled by controllers. The controllers modify the models. The models update their visual representation. I don't want to have to constantly manage the state of view when the model represents it. Using Model-View-Controller strategies. 
+| Should **3D visibility/lock** update **while still in Wardrobe** (pre-solo) so the character matches the focused selection before switching modes, or only **on transition** to Creator.3D / Creator.2D? | The 3D visibility/lock should update in all modes. That should be taken care of now by the underlying mode for layer visibility that has up this point controlled only the Creator.3D/Creator.2D layers.  |
+| Wardrobe composite key **`all`** vs **`fullOutfit`:** Same solo/camera/panel behavior, or different (e.g. `all` = every leaf visible; `fullOutfit` = preset + no solo)? | same solo camera |
 
 ### B. User switches from Wardrobe → Creator.3D
 
 - **Camera:** Does not snap away from the pose established in Wardrobe; same rule as existing plan (no `applyRoute` re-snap on in-creator mode change).
-- **3D visibility/lock:** Apply **focused solo** for the current wardrobe selection: only the relevant layer(s) are visible and paintable (unlocked); others hidden and locked. Mapping must handle **composite** wardrobe keys (expand to member `LayerKey` set), not only single `LayerKey` rows.
+- **3D visibility/lock:** Apply **focused solo** for the current wardrobe selection: only the relevant layer(s) are visible. Mapping must handle **composite** wardrobe keys (expand to member `LayerKey` set), not only single `LayerKey` rows.
 - **Layers panel:** Enters **partially collapsed (focused) layout**:
   - **Shown:** Only rows for layers that are **currently visible** (the focused set).
   - **Hidden until expand:** Rows for layers that are hidden in this focused state.
@@ -114,9 +109,8 @@ The 3D visibility/lock should update in all modes. So the new modes that are tra
 
 | Question | Answer |
 |----------|--------|
-| User turns **Focused OFF** while in Creator.3D or Creator.2D: restore **previous** visibility/lock (undo solo), **leave state as-is**, or **normalize** (e.g. all layers visible and unlocked)? | |
-| User turns **Focused ON** while **already** in Creator.3D or Creator.2D (not coming from Wardrobe): **immediately** apply solo from current `WardrobeLayerKey`, **wait until next Wardrobe visit**, or **no auto-solo** until next Wardrobe → 3D/2D transition? | |
-| On **`focused-creation-change`:** What must **subscribers** do (compact panel, blocky layout, camera, solo)? List concrete handlers after implementation. | |
+| User turns **Focused OFF** while in Creator.3D or Creator.2D: restore **previous** visibility/lock (undo solo), **leave state as-is**, or **normalize** (e.g. all layers visible and unlocked)? | store the previous, define a normalized, but have it "leave state as-is". I want to make this decision later on which one I prefer. |
+| User turns **Focused ON** while **already** in Creator.3D or Creator.2D (not coming from Wardrobe): **immediately** apply solo from current `WardrobeLayerKey`, **wait until next Wardrobe visit**, or **no auto-solo** until next Wardrobe → 3D/2D transition? | Wait until next wardrobe visit |
 
 ---
 
@@ -128,13 +122,13 @@ The 3D visibility/lock should update in all modes. So the new modes that are tra
 
 - **Partially collapsed (focused) state**
   - Trigger when: Focused Creation is ON and user has just entered Creator.3D or Creator.2D **from** a transition that applied focused solo (typically from Wardrobe, or same focused session when switching 3d ↔ 2d).
-  - **List content:** Render **only** layer rows whose **current visibility is true** (the visible subset). Layers that are hidden by focused solo **do not appear** in the list until expansion.
+  - **List content:** Render **only** layer rows whose **current visibility is true** (the visible subset). Layers that are hidden by focused solo **do not appear** in the list until expansion. Items are listed in the same order they always appear.
   - **State:** Underlying state is still the full per-layer map; the panel is a **view filter**, not a second truth.
 
 - **Expanded state**
   - User explicitly expands the panel.
   - **List content:** **All** layer rows (same grouping/separators as today).
-  - **Controls:** Every row shows **correct** visibility, lock, and part (L/R) state—requires **syncing DOM from state** on `LAYER3D_CHANGE` (including programmatic solo), not only updating row chrome from stale checkboxes.
+  - **Controls:** Every row shows **correct** visibility, lock, and part (L/R) state—requires **syncing DOM from state** whenever **`creatorLayerSlice`** fires (including programmatic solo), not only updating row chrome from stale checkboxes.
 
 - **Returning to compact**
   - Optional product choice: collapse back to focused-only list when re-entering from Wardrobe with a new selection, or when toggling Focused ON again. Document chosen behavior in implementation.
@@ -143,15 +137,15 @@ The 3D visibility/lock should update in all modes. So the new modes that are tra
 
 | Question | Answer |
 |----------|--------|
-| **Returning to compact:** When does the panel switch back to focused-only rows—only when **re-entering from Wardrobe** with a new selection, when toggling **Focused ON**, **never** after user expanded, or another rule? | |
-| User is **expanded**, then **hides** more layers so the visible set shrinks: switch back to **compact** automatically, or **stay expanded** with fewer rows? | |
-| Interaction with **panel minimize** (existing collapse of the whole layers panel): does minimize **stack with** compact list mode, **override** it, or **independent** state? | |
-| **Creator.3D ↔ Creator.2D** without visiting Wardrobe: preserve **expanded vs compact** across the switch, **always reset to compact**, or **reset only when** transitioning from Wardrobe? | |
+| **Returning to compact:** When does the panel switch back to focused-only rows—only when **re-entering from Wardrobe** with a new selection, when toggling **Focused ON**, **never** after user expanded, or another rule? | only when re-entering wardrobe |
+| User has **expanded**, then **hides** more layers so the visible set shrinks: switch back to **compact** automatically, or **stay expanded** with fewer rows? | stay expanded |
+| Interaction with **panel minimize** (existing collapse of the whole layers panel): does minimize **stack with** compact list mode, **override** it, or **independent** state? | the panel minimize button is currently hidden. Make that one visible. When closed it shrinks to the compact list. When expanded it shows all the layers (both hidden and visible) |
+| **Creator.3D ↔ Creator.2D** without visiting Wardrobe: preserve **expanded vs compact** across the switch, **always reset to compact**, or **reset only when** transitioning from Wardrobe? | preserve across the switch |
 
 ### Implementation notes
 
 - **Files:** Likely [src/creator/skinLayersPanel.ts](src/creator/skinLayersPanel.ts), creator state or panel-local flag (e.g. `layersPanelFocusedCompact: boolean`), and styles under `src/styles/creator/`.
-- **Events:** `EDIT_MODE_CHANGE`, `FOCUSED_CREATION_CHANGE`, `LAYER3D_CHANGE` may all need to coordinate compact vs expanded and which rows to mount.
+- **Slices:** **`creatorModeSlice`** (mode / `previousMode`), **`creatorLayerSlice`** (visibility/lock/part changes), and the **focused-creation** slice from §2 may all need to coordinate compact vs expanded and which rows to mount.
 - **Accessibility:** Expanded/collapsed state should be exposed to assistive tech (e.g. `aria-expanded` on the toggle).
 
 ---
@@ -183,11 +177,10 @@ The 3D visibility/lock should update in all modes. So the new modes that are tra
 
 | Question | Answer |
 |----------|--------|
-| **Layout:** Single outer bounding box vs **multiple** disjoint regions in one scroll area vs other—pick one primary UX. | |
-| **Exiting focused layout** when user shows more layers: **incrementally add** regions to the focused layout, or **switch to full 64×64** grid once any “extra” layer is shown? | |
-| **Arms/legs L/R:** When only one part side is visible, how does the restructured grid represent **half** a layer (one strip, two blocks, template overlay rules)? | |
-| User **expands** the layers panel but does **not** show additional layers: blocky stays **focused-only** until visibility changes—confirm or override? | |
-| **`selectedLayers` / restrictToLayers (2D):** Should focused mode **narrow** `selectedLayers` to match the wardrobe-focused `LayerKey` set so painting eligibility matches the overlay, or **only** use `layer3DVisible` / lock? | |
+| **Layout:** Single outer bounding box vs **multiple** disjoint regions in one scroll area vs other—pick one primary UX. | Single outer bounding box. Moving the visible bounding boxes together in the most square like shape that is possible |
+| **Exiting focused layout** when user shows more layers: **incrementally add** regions to the focused layout, or **switch to full 64×64** grid once any “extra” layer is shown? | When a layer becomes visible, recalculate the layout and insert the layer in the layout. |
+| **Arms/legs L/R:** When only one part side is visible, how does the restructured grid represent **half** a layer (one strip, two blocks, template overlay rules)? | The grid shows only the visible layers to take into account half a layer |
+| User **expands** the layers panel but does **not** show additional layers: blocky stays **focused-only** until visibility changes—confirm or override? | expanding does not show all the layers, the layers are only shown when they are visible |
 
 ### Implementation notes
 
@@ -199,6 +192,8 @@ The 3D visibility/lock should update in all modes. So the new modes that are tra
 
 ## Architecture
 
+Creator editor state flows through **in-process slices** ([`creatorSlices.ts`](src/state/creatorSlices.ts)); the **document bus** ([`appEvents.ts`](src/events/appEvents.ts)) stays limited to camera commands and character skin/animation — see [MODELS-AND-SUBSCRIBERS.md](docs/concepts/MODELS-AND-SUBSCRIBERS.md) and [EVENT-SYSTEM.md](docs/concepts/EVENT-SYSTEM.md).
+
 ```mermaid
 flowchart TB
   subgraph UserActions [User Actions]
@@ -207,10 +202,11 @@ flowchart TB
     ModeChange[Switch Wardrobe to 3D/2D]
   end
 
-  subgraph Events [Event Bus]
-    WardrobeLayerChange[wardrobe-layer-change]
-    FocusedChange[focused-creation-change]
-    EditModeChange[edit-mode-change]
+  subgraph Slices [Creator slices notify or subscribe]
+    WardrobeFocus[creatorWardrobeFocusSlice]
+    ModeSlice[creatorModeSlice]
+    LayerSlice[creatorLayerSlice]
+    FocusedSlice[creatorFocusedCreationSlice new]
   end
 
   subgraph Controller [Focused Creation Controller]
@@ -219,15 +215,18 @@ flowchart TB
     Solo[Apply solo visibility + lock]
   end
 
-  SelectLayer --> WardrobeLayerChange
-  ToggleMode --> FocusedChange
-  ModeChange --> EditModeChange
+  SelectLayer --> WardrobeFocus
+  ToggleMode --> FocusedSlice
+  ModeChange --> ModeSlice
 
-  WardrobeLayerChange --> Guard
-  EditModeChange --> Guard
-  Guard -->|wardrobe layer change| Camera
+  WardrobeFocus --> Guard
+  ModeSlice --> Guard
+  FocusedSlice --> Guard
+  Guard -->|wardrobe selection| Camera
   Guard -->|wardrobe to 3d/2d| Solo
-  Solo --> LayersPanel[Compact layers panel]
+  Solo --> LayerSlice
+  LayerSlice --> LayersPanel[Layers panel + blocky refresh]
+  Solo --> LayersPanel
   Solo --> Blocky[2D blocky focused layout]
 ```
 
@@ -235,14 +234,18 @@ flowchart TB
 
 ---
 
-## 1. Events
+## 1. State sync: slices vs document bus
 
-**File:** [src/events/appEvents.ts](src/events/appEvents.ts)
+**Policy:** Do **not** add `app:creator:*` document events for wardrobe selection, focused toggle, or layer visibility sync. Those belong on **creator slices** ([`src/state/creatorSlices.ts`](src/state/creatorSlices.ts)); the document bus remains camera + character commands only ([`docs/concepts/EVENT-SYSTEM.md`](docs/concepts/EVENT-SYSTEM.md)).
 
-- Add `app:creator:wardrobe-layer-change` — payload `{ layer: WardrobeLayerKey }`
-- Add `app:creator:focused-creation-change` — payload `{ enabled: boolean }`
-- Add to `APP_EVENTS` and `CREATOR_EVENTS`
-- Add `AppCreatorWardrobeLayerDetail` and `AppCreatorFocusedCreationDetail` types
+**Already in place on `main`:**
+
+- **`creatorWardrobeFocusSlice`** — `setWardrobeSelectedLayer` in [`src/creator/wardrobe.ts`](src/creator/wardrobe.ts) calls `creatorWardrobeFocusSlice.notify()` after updating selection.
+- **`creatorModeSlice`** — `setEditMode` in [`src/creator.ts`](src/creator.ts) calls `creatorModeSlice.notify({ mode, previousMode })` with [`CreatorEditModePayload`](src/state/creatorSlicePayloads.ts).
+- **`creatorLayerSlice`** — layer visibility API in [`src/creator/layerVisibility.ts`](src/creator/layerVisibility.ts) calls `creatorLayerSlice.notify()` after mutations.
+- **`creator2dPaintSlice`** — paint mask; [`blockyEditor.ts`](src/creator/blockyEditor.ts) already subscribes alongside `creatorLayerSlice`.
+
+**This feature adds:** a **focused-creation** notification path (§2) so toggles and any UI that must react do not use the document bus.
 
 ---
 
@@ -253,33 +256,28 @@ flowchart TB
 - Add `focusedCreationEnabled: boolean` to `CreatorState` interface (default `true`)
 - Initialize in `createCreatorState()`
 
+**File:** [src/state/creatorSlices.ts](src/state/creatorSlices.ts)
+
+- Add e.g. **`creatorFocusedCreationSlice`** as `createPayloadSubscribable<{ enabled: boolean }>()` (or `createSubscribable()` if subscribers only re-read state from getters). After every successful `setFocusedCreationEnabled`, call **`notify({ enabled })`** (or `notify()`).
+
 **File:** [src/creator.ts](src/creator.ts)
 
 - Add `getFocusedCreationEnabled(): boolean` and `setFocusedCreationEnabled(enabled: boolean)` to the public API
-- `setFocusedCreationEnabled` publishes `focused-creation-change`
+- `setFocusedCreationEnabled` updates state and **`creatorFocusedCreationSlice.notify(...)`** — not `publish` on the document bus
 - Optional: persist via `localStorage` key `creator:focusedCreation` on toggle (read on init, write on change)
 
 ---
 
-## 3. Wardrobe layer event
+## 3. Wardrobe layer selection
 
-**File:** [src/creator.ts](src/creator.ts)
+**No extra publish in `creator.ts`:** `wardrobeApi.setWardrobeSelectedLayer(layer)` already ends with **`creatorWardrobeFocusSlice.notify()`** in [`src/creator/wardrobe.ts`](src/creator/wardrobe.ts).
 
-In the `WardrobePartsPanelContext` / context passed to wardrobe parts panel, wrap `setSelectedLayer` so that after calling `wardrobeApi.setWardrobeSelectedLayer(layer)`, it publishes `CREATOR_EVENTS.WARDROBE_LAYER_CHANGE` with `{ layer }`.
+**Focused Creation controller (§5):** subscribe with **`creatorWardrobeFocusSlice.subscribe(() => { ... })`**, then read `getWardrobeSelectedLayer()` (or equivalent) and guard with `getEditMode() === 'wardrobe'`.
 
-Current wiring (around line 312):
+The `WardrobePartsPanelContext` can keep:
 
 ```ts
 setSelectedLayer: (layer) => wardrobeApi.setWardrobeSelectedLayer(layer),
-```
-
-Change to:
-
-```ts
-setSelectedLayer: (layer) => {
-  wardrobeApi.setWardrobeSelectedLayer(layer);
-  publish(CREATOR_EVENTS.WARDROBE_LAYER_CHANGE, { layer });
-},
 ```
 
 ---
@@ -298,7 +296,7 @@ Mechanics:
 
 - Clear solo-mode state (`clearLayerSoloModes`) to avoid conflicts with Alt-click solo.
 - Apply `setLayer3DVisibleAll` / `setLayer3DLockedAll` (and part visibility if spec requires) so state matches the focused set.
-- Publish `LAYER3D_CHANGE` after updates so the **layers panel** and **blocky editor** can refresh ([Layers panel](#layers-panel-focused-compact-and-expanded), [Blocky editor](#blocky-editor-focused-layout)).
+- Call **`creatorLayerSlice.notify()`** after updates (already the pattern in `layerVisibility.ts`) so the **layers panel** and **blocky editor** refresh ([Layers panel](#layers-panel-focused-compact-and-expanded), [Blocky editor](#blocky-editor-focused-layout)).
 
 **File:** [src/creator.ts](src/creator.ts)
 
@@ -308,8 +306,8 @@ Expose the solo API used by the Focused Creation controller. Single shared mappi
 
 | Question | Answer |
 |----------|--------|
-| When soloing a **single** `LayerKey` that has **L/R parts** (`arms`, `legs`): default **both sides visible**, or respect previous part toggles? | |
-| **Alt-click solo** (visibility/lock) while Focused is ON: **clear** “focused session” and behave like today, **temporarily override** until next Wardrobe transition, or **disable** Alt solo in focused mode? | |
+| When soloing a **single** `LayerKey` that has **L/R parts** (`arms`, `legs`): default **both sides visible**, or respect previous part toggles? | default to having both sides visible |
+| **Alt-click solo** (visibility/lock) while Focused is ON: **clear** “focused session” and behave like today, **temporarily override** until next Wardrobe transition, or **disable** Alt solo in focused mode? | temporarily override until next wardrobe transition |
 
 ---
 
@@ -317,7 +315,7 @@ Expose the solo API used by the Focused Creation controller. Single shared mappi
 
 **New file:** `src/controllers/focusedCreationController.ts`
 
-Pattern: mirror [src/controllers/creatorCameraController.ts](src/controllers/creatorCameraController.ts) — subscribe to events, guard, then act.
+**Pattern:** Like [creatorCameraController.ts](src/controllers/creatorCameraController.ts), return `{ dispose }` and register listeners in one place — but **subscribe to creator slices** (import from [`creatorSlices.ts`](src/state/creatorSlices.ts)), not document-bus editor events. Camera **commands** from DOM still use `publish`/`subscribe` via `CREATOR_EVENTS`; focused creation reacts to **model** notifications.
 
 **Dependencies:**
 
@@ -333,9 +331,9 @@ Pattern: mirror [src/controllers/creatorCameraController.ts](src/controllers/cre
 
 **Subscriptions:**
 
-- `WARDROBE_LAYER_CHANGE`: animate camera to preset for that layer (when enabled, route=creator, editMode=wardrobe)
-- `EDIT_MODE_CHANGE`: when `previousMode === 'wardrobe'` and `mode === '3d' | '2d'`, apply solo for selected wardrobe layer and skip any camera snap (when enabled); **also** signal UI to enter **compact layers panel** mode and, for `2d`, **blocky focused layout** (via shared state, event, or direct calls from creator bootstrap—pick one pattern consistent with the app).
-- Optionally `EDIT_MODE_CHANGE` when switching `3d` ↔ `2d` **without** passing through Wardrobe: keep focused layer state and compact/blocky behavior in sync.
+- **`creatorWardrobeFocusSlice`:** on `notify`, animate camera to preset for `getWardrobeSelectedLayer()` when enabled, `getRoute() === 'creator'`, and `getEditMode() === 'wardrobe'`.
+- **`creatorModeSlice`:** on `notify(detail)`, when `detail.previousMode === 'wardrobe'` and `detail.mode === '3d' | '2d'`, apply solo for current wardrobe layer (when enabled); **also** set **compact layers panel** + **blocky focused layout** via creator state or panel-local flags (same transaction as solo). Optionally handle `3d` ↔ `2d` without Wardrobe to keep compact/blocky in sync — read `detail.previousMode` / `detail.mode` from [`CreatorEditModePayload`](src/state/creatorSlicePayloads.ts).
+- **`creatorFocusedCreationSlice`** (§2): when the user toggles Focused ON/OFF, refresh guards / UI that depend on `getFocusedCreationEnabled()` without duplicating bus traffic.
 
 **Camera pose from preset:**
 
@@ -370,9 +368,7 @@ When transitioning **within creator** (e.g. wardrobe to 3D), `applyRoute` alread
 
 | Question | Answer |
 |----------|--------|
-| **First entry** directly to Creator.3D or Creator.2D (e.g. hash `#/creator/3d`): use **`getCreatorCameraPose()`** only, or also apply **focused solo** / compact UI from current wardrobe selection? | |
-| **Composite `WardrobeLayerKey` → `PreviewPresetKey`:** Table or rule per key (including fallbacks). Must align with [preview config](src/config/preview/skins/preview.config.json) / `getPreviewPreset`. | |
-| **Enter/exit Creator** (save/restore Home camera, animate on exit): keep branch behavior, simplify, or drop? | |
+| **First entry** directly to Creator.3D or Creator.2D (e.g. hash `#/creator/3d`): use **`getCreatorCameraPose()`** only, or also apply **focused solo** / compact UI from current wardrobe selection? | When entering directly into Creator.3D or Creator.2D shows all visible layers, the layer panel is expanded |
 
 ---
 
@@ -410,12 +406,16 @@ Add a Focused Creation toggle to the camera toolbar (e.g. before or after the Re
 
 ---
 
-## 9. Event documentation
+## 9. Documentation
+
+**File:** [docs/concepts/MODELS-AND-SUBSCRIBERS.md](docs/concepts/MODELS-AND-SUBSCRIBERS.md)
+
+- Extend the “Adding a new bucket” / narrative to list **Focused Creation** subscribers: `focusedCreationController`, layers panel compact mode, blocky focused layout — tied to **`creatorWardrobeFocusSlice`**, **`creatorModeSlice`**, **`creatorLayerSlice`**, **`creatorFocusedCreationSlice`** (and `creator2dPaintSlice` where 2D mask interacts).
+- Document who **publishes** (`notify`): wardrobe API, `setEditMode`, `setFocusedCreationEnabled`, `layerVisibility` mutations.
 
 **File:** [docs/concepts/EVENT-SYSTEM.md](docs/concepts/EVENT-SYSTEM.md)
 
-- Add `wardrobe-layer-change` and `focused-creation-change` to the event registry table
-- List publishers and subscribers for each
+- **No** new `app:creator:*` rows for wardrobe/focused/layer sync unless a future requirement is a true cross-boundary **command** (unlikely for this feature).
 
 ---
 
@@ -424,18 +424,18 @@ Add a Focused Creation toggle to the camera toolbar (e.g. before or after the Re
 
 | File                                           | Action                                                                                    |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `src/events/appEvents.ts`                      | Add 2 events + types (extend if panel compact / blocky layout need their own events)      |
+| `src/state/creatorSlices.ts`                   | Add `creatorFocusedCreationSlice` (or equivalent); **do not** add editor fan-out to `appEvents` |
 | `src/state/creatorState.ts`                    | Add `focusedCreationEnabled`; optional `layersPanelFocusedCompact`, blocky layout flags   |
-| `src/creator.ts`                               | Add getter/setter, publish on layer change, expose solo API, wardrobe→`LayerKey` mapping   |
-| `src/creator/layerVisibility.ts`               | Add focused solo for `WardrobeLayerKey` (including composites)                            |
-| `src/creator/skinLayersPanel.ts`               | Compact vs expanded list; sync checkboxes from state on `LAYER3D_CHANGE`                  |
-| `src/creator/blockyEditor.ts`                  | Focused layout mode: bounds from `SKIN_LAYER_BOUNDS`; rebuild on expand / wardrobe change  |
+| `src/creator.ts`                               | Add getter/setter, `creatorFocusedCreationSlice.notify` on toggle, expose solo API, wardrobe→`LayerKey` mapping |
+| `src/creator/layerVisibility.ts`               | Add focused solo for `WardrobeLayerKey` (including composites); keep `creatorLayerSlice.notify()` |
+| `src/creator/skinLayersPanel.ts`               | Compact vs expanded list; sync checkboxes from state on **`creatorLayerSlice`** (and mode/focused slices as needed) |
+| `src/creator/blockyEditor.ts`                  | Focused layout mode: bounds from `SKIN_LAYER_BOUNDS`; rebuild on **`creatorLayerSlice`** / related slices |
 | `src/styles/creator/*`                         | Styles for compact panel, blocky focused layout                                           |
-| `src/controllers/focusedCreationController.ts` | New controller (+ coordinate or emit UI focused modes)                                    |
+| `src/controllers/focusedCreationController.ts` | New controller: **slice** subscriptions + coordinate UI focused modes                   |
 | `src/viewer/CameraControls.ts`                 | Add toggle button                                                                         |
 | `src/main.ts`                                  | Instantiate controller, wire deps, pass getter/setter to CameraControls                   |
 | `src/controllers/index.ts`                     | Export controller                                                                         |
-| `docs/concepts/EVENT-SYSTEM.md`                | Document new events                                                                       |
+| `docs/concepts/MODELS-AND-SUBSCRIBERS.md`      | Document focused-creation publishers/subscribers                                          |
 
 
 ---
@@ -445,15 +445,15 @@ Add a Focused Creation toggle to the camera toolbar (e.g. before or after the Re
 - **fullOutfit:** When selected, use `getPreviewPreset('fullOutfit')` for camera. When transitioning to 3D/2D with fullOutfit selected, do *not* apply solo (all layers visible/unlocked). Layers panel can default to **expanded** full list (or compact showing “all visible”—same as all rows visible).
 - **Composite wardrobe keys:** Must map to multiple `LayerKey` entries for solo, blocky bounds, and any `selectedLayers` alignment; do not early-return solely on `!isLayerKey(layer)`.
 - **Layers panel truth:** Programmatic visibility/lock updates must refresh checkbox DOM (`syncVisibilityCheckboxes` / `syncLockCheckboxes`) so expanded view is always correct.
-- **Guard:** Only react to `wardrobe-layer-change` when `getEditMode() === 'wardrobe'`.
-- **Guard:** Only react to `edit-mode-change` when `previousMode === 'wardrobe'` and `mode === '3d' || mode === '2d'`.
+- **Guard:** Only run wardrobe camera logic on **`creatorWardrobeFocusSlice`** callbacks when `getEditMode() === 'wardrobe'`.
+- **Guard:** Only apply solo-on-enter-3d/2d when **`creatorModeSlice`** delivers `previousMode === 'wardrobe'` and `mode === '3d' || mode === '2d'`.
 - **Guard:** All reactions gated by `getFocusedCreationEnabled()` and `getRoute() === 'creator'`.
 
 #### Open decisions (edge cases)
 
 | Question | Answer |
 |----------|--------|
-| **`fullOutfit` + Focused ON + enter 3D/2D:** Layers panel defaults to **expanded** (every row) or **compact** (all visible rows—which is all layers, may look like expanded)? | |
+| **`fullOutfit` + Focused ON + enter 3D/2D:** Layers panel defaults to **expanded** (every row) or **compact** (all visible rows—which is all layers, may look like expanded)? | expanded |
 
 ---
 
@@ -465,9 +465,8 @@ Focused Creation behavior above applies **inside Creator**. Record decisions for
 
 | Question | Answer |
 |----------|--------|
-| **Preview route** (`#/preview`): Ignore focused state, or mirror any Creator visibility? | |
-| **Home / viewer** before entering Creator: no effect (confirm). | |
-| **External / API** skin load or `postMessage` flows: should they **reset** wardrobe selection, focused toggle, or compact UI? | |
+| **Preview route** (`#/preview`): Ignore focused state, or mirror any Creator visibility? | Ignore focused state |
+| **External / API** skin load or `postMessage` flows: should they **reset** wardrobe selection, focused toggle, or compact UI? | no it should not reset |
 
 ---
 
@@ -478,7 +477,7 @@ Quick reference to every **Open decisions** table in this plan (fill in answers 
 | Section | Topic |
 |---------|--------|
 | [Outline §A](#outline-wardrobe-3d-and-2d-behavior) | Wardrobe layer state (`all` vs `fullOutfit`, pre-solo) |
-| [Outline §E](#outline-wardrobe-3d-and-2d-behavior) | Toggling Focused ON/OFF mid-session, `focused-creation-change` |
+| [Outline §E](#outline-wardrobe-3d-and-2d-behavior) | Toggling Focused ON/OFF mid-session, **`creatorFocusedCreationSlice`** |
 | [Layers panel](#layers-panel-focused-compact-and-expanded) | Compact/expanded, minimize, 3D↔2D |
 | [Blocky editor](#blocky-editor-focused-layout) | Layout, exit rule, L/R, `selectedLayers` |
 | [§4 Layer visibility](#4-layer-visibility-api--solo-helper) | Part visibility on solo, Alt-click vs focused |
@@ -495,4 +494,3 @@ If persisting the toggle:
 - Read `localStorage.getItem('creator:focusedCreation')` on app init; parse and apply to state (default true if missing/invalid)
 - On `setFocusedCreationEnabled`, write to localStorage
 - Ensures returning users keep their preference
-

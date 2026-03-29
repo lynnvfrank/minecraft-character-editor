@@ -39,6 +39,115 @@ body[data-route="creator"] .creator-left-panels {
 }
 body[data-route="creator"] .creator-upper-right-panels-root {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+/* Creator.Wardrobe: paired part libraries stacked (hat/head, chest/arms, vest/sleeves, pants/legs). */
+body[data-route="creator"] .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries {
+  bottom: 0.75rem;
+}
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-head-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-hat-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-body-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-arms-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-jacket-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-sleeves-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-legs-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-pants-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* Less right inset so the vertical scrollbar sits nearer the card edge (was 0.75rem from .creator-wardrobe-library-panel). */
+  padding: 0.5rem 0.3rem 0.5rem 0.75rem;
+}
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-hat-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-body-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-jacket-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-pants-panel {
+  order: 1;
+}
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-head-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-arms-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-sleeves-panel,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-legs-panel {
+  order: 2;
+}
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-head-panel
+  .creator-wardrobe-library-selector,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-hat-panel
+  .creator-wardrobe-library-selector,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-body-panel
+  .creator-wardrobe-library-selector,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-arms-panel
+  .creator-wardrobe-library-selector,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-jacket-panel
+  .creator-wardrobe-library-selector,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-sleeves-panel
+  .creator-wardrobe-library-selector,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-legs-panel
+  .creator-wardrobe-library-selector,
+body[data-route="creator"]
+  .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries
+  #creator-wardrobe-pants-panel
+  .creator-wardrobe-library-selector {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  justify-items: center;
+  align-content: start;
+  gap: 0.5rem;
 }
 body[data-route="creator"] .creator-upper-left-panels {
   animation: creator-slide-in-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;

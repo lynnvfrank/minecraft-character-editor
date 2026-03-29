@@ -1,0 +1,91 @@
+---
+description: TypeScript architecture — layout, state/events, controllers, config, imports, testing
+alwaysApply: true
+---
+
+# TypeScript and architecture conventions
+
+Follow these when editing `src/**/*.ts` (and related config). Prefer extending existing patterns over new ad-hoc ones.
+
+## Compiler
+
+- Keep `tsconfig.json` strict settings as-is: `strict`, `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`.
+
+## Repository layout
+
+- Place code by role: `domain/`, `state/`, `controllers/`, `services/`, `events/`, `creator/`, `viewer/`, `skin/`, `config/`, `lib/`, `ui/`, `debug/`, `animation/`. See `docs/concepts/TAXONOMY.md`.
+- **Do not** merge unrelated concerns into one file for “consolidation.” Keep wardrobe UI, skin pipeline, URL parsing, and scene defaults in their natural modules (e.g. `creator/*`, `skin/*`, `config/urlParams.ts`, `config/scene.config.ts`).
+
+## Barrel exports (`index.ts`)
+
+- Re-export a **curated** public API with explicit named exports (`export { a, b }`, `export type { T }`).
+- Use **`export type { … }`** (or `export { value, type T }`) for types so value/type elision stays clear. Examples: `src/creator/index.ts`, `src/controllers/index.ts`, `src/skin/index.ts`.
+
+## Imports and Three.js
+
+- Use **`import type`** or inline **`import { x, type Y }`** for type-only dependencies; avoid importing types as values (reduces cycles and bundle noise). See `src/main.ts`.
+- For Three.js APIs use **`import * as THREE from 'three'`** (not default import).
+
+## Creator state — two channels (do not mix)
+
+| Channel | Use for | Where |
+|--------|---------|--------|
+| **In-process slices** | Creator editor sync, DOM coherency, marking preview dirty | `src/state/creatorSlices.ts` (built on `src/lib/subscribable.ts`) |
+| **Document `CustomEvent` bus** | Creator **camera** commands; **character** skin/animation commands | `src/events/appEvents.ts` (`publish` / `subscribe` on `document`) |
+
+- New creator UI state: add `createSubscribable()` or `createPayloadSubscribable<T>()` in `creatorSlices.ts`, hold data in `creatorState` or a small module, call `notify` / `notify(payload)` after mutations, `subscribe` in DOM builders (guard with `document.body.dataset.route === 'creator'` when needed). Details: `docs/concepts/MODELS-AND-SUBSCRIBERS.md`.
+- **Payload types** for slices live in **`src/state/creatorSlicePayloads.ts`**, not inlined in `creatorSlices.ts`.
+- Use **`createPayloadSubscribable`** when subscribers need a **typed detail** (e.g. `creatorModeSlice` + `CreatorEditModePayload`).
+
+## Subscribable primitives
+
+- Use `createSubscribable` / `createPayloadSubscribable` from `src/lib/subscribable.ts`: `Set`-backed listeners, `subscribe` returns `Unsubscribe`.
+
+## App event names
+
+- Define event name constants in a single **`as const` object** (e.g. `APP_EVENTS`), derive the string union type from it. Add **`CREATOR_EVENTS`** (or similar) aliases for readable call sites. Reference: `src/events/appEvents.ts`.
+
+## Routing and mode (state machine)
+
+- **Do not** implement route/mode transition rules only in DOM or scattered `if` chains. **App route + creator submode** belong in **`src/controllers/modes/appModeMachine.ts`** (XState). UI and `main` send events and read snapshots.
+
+## Controllers and services
+
+- Wire side effects with **`create…Controller(deps)`** or **`create…Manager()`**: explicit **`…Deps`** type, return handle with **`dispose`** or **`destroy`** for teardown (unsubscribe, timers, sockets). Examples: `src/controllers/focusedCreationController.ts`, `src/services/socketManager.ts`.
+
+## Creator UI boundary
+
+- Panel builders take **`…Context` interfaces** from **`src/creator/api.ts`** (facade from `creator.ts`) to **avoid circular imports** — do not reach from panel modules deep into `creator.ts` internals.
+- Edit modes: use **`EDIT_MODE_*` constants** and **`EditMode`** union from `api.ts`; keep them in sync.
+- For string unions exposed from DOM or URLs, add **`is…` type guards** (e.g. `isDrawingTool`, `isToggleType`) instead of unchecked casts.
+
+## Keyboard shortcuts
+
+- Add shortcuts by extending **data** (`KEY_BINDINGS`, `CTRL_KEY_BINDINGS` in `src/creator/shortcuts.ts`), not giant `switch` statements. File header states this intent.
+
+## Domain constants — single source of truth
+
+- Skin layout, UVs, layer keys, coordinates: import from **`src/skin/`** (`SKIN_LAYER_BOUNDS`, etc.) — do not duplicate rectangles or keys.
+- **Derived config:** compute from that source (e.g. preprocess regions from `SKIN_LAYER_BOUNDS` in `src/skin/preprocess.ts`); never copy the same geometry in two places.
+
+## Configuration types
+
+- **`public/**/*.json`** (animations index, wardrobe index, etc.): ship data without recompile; if TypeScript depends on shape, define **matching types** (and validate or assert at load) — do not assume untyped JSON.
+- Prefer **typed config objects** (`export type XConfig`, `export const X_CONFIG`) and **`readonly` arrays** of records where you loop (`MODE_PANEL_CONFIGS`, `WARDROBE_PART_PANEL_CONFIGS`). Defaults at boundaries: `parse…` with `||` / `??`, or default function parameters pointing at module `*_CONFIG`.
+
+## Documentation and module headers
+
+- Entry points and cross-cutting modules: short **file-level docblock** + link to **`docs/…`** where a spec exists (`src/main.ts`, `src/events/appEvents.ts`, `src/lib/logger.ts`, `src/skin/index.ts`).
+
+## Testing
+
+- Colocate **`*.test.ts`** next to the module; use **`node:test`** and **`node:assert/strict`** (`src/lib/subscribable.test.ts`).
+
+## Vite / env / assets
+
+- Global types: `src/vite-env.d.ts` (`vite/client`, `*.svg`, `*.svg?raw`).
+- Feature flags / build-time env: **`import.meta.env`** (e.g. `VITE_SOCKET_ENABLED` in `socketManager.ts`).
+
+## File naming
+
+- Default new TS files to **`camelCase.ts`**. **`PascalCase.ts`** only when matching a dominant exported class/component and the team agrees; otherwise stay camelCase for consistency.

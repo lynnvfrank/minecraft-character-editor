@@ -30,7 +30,12 @@
   }
 }
 
-/* Mode transition pop-ins: quick elastic-snap with slight overshoot and settle */
+/* Mode transition pop-ins: quick elastic-snap with slight overshoot and settle.
+   Exit uses the same duration; timing curve is the CSS reverse of the pop-in bezier:
+   cubic-bezier(1-x2, 1-y2, 1-x1, 1-y1) of cubic-bezier(0.34, 1.56, 0.64, 1). */
+$creator-mode-panel-enter-duration: 0.36s;
+$creator-mode-panel-enter-bezier: cubic-bezier(0.34, 1.56, 0.64, 1);
+$creator-mode-panel-exit-bezier: cubic-bezier(0.36, 0, 0.66, -0.56);
 @keyframes creator-pop-in-left {
   0% {
     opacity: 0;
@@ -153,34 +158,34 @@
 }
 
 .creator-mode-anim-in-left {
-  animation: creator-pop-in-left 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: creator-pop-in-left $creator-mode-panel-enter-duration $creator-mode-panel-enter-bezier forwards;
   transform-origin: center;
   will-change: transform, opacity;
 }
 .creator-mode-anim-in-right {
-  animation: creator-pop-in-right 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: creator-pop-in-right $creator-mode-panel-enter-duration $creator-mode-panel-enter-bezier forwards;
   transform-origin: center;
   will-change: transform, opacity;
 }
 .creator-mode-anim-in-top {
-  animation: creator-pop-in-top 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: creator-pop-in-top $creator-mode-panel-enter-duration $creator-mode-panel-enter-bezier forwards;
   transform-origin: center;
   will-change: transform, opacity;
 }
 .creator-mode-anim-out-left {
-  animation: creator-slide-out-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: creator-slide-out-left $creator-mode-panel-enter-duration $creator-mode-panel-exit-bezier forwards;
 }
 .creator-mode-anim-out-right {
-  animation: creator-slide-out-right 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: creator-slide-out-right $creator-mode-panel-enter-duration $creator-mode-panel-exit-bezier forwards;
 }
 .creator-mode-anim-out-top {
-  animation: creator-slide-out-top 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: creator-slide-out-top $creator-mode-panel-enter-duration $creator-mode-panel-exit-bezier forwards;
 }
 .creator-mode-anim-in-bottom {
-  animation: creator-pop-in-bottom 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: creator-pop-in-bottom $creator-mode-panel-enter-duration $creator-mode-panel-enter-bezier forwards;
   transform-origin: center;
   will-change: transform, opacity;
 }
 .creator-mode-anim-out-bottom {
-  animation: creator-slide-out-bottom 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: creator-slide-out-bottom $creator-mode-panel-enter-duration $creator-mode-panel-exit-bezier forwards;
 }

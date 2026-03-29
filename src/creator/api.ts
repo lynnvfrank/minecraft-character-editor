@@ -8,17 +8,18 @@ export const EDIT_MODE_3D = '3d';
 export const EDIT_MODE_WARDROBE = 'wardrobe';
 export type EditMode = typeof EDIT_MODE_2D | typeof EDIT_MODE_3D | typeof EDIT_MODE_WARDROBE;
 
-export type DrawingTool = 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'navigate';
+export type DrawingTool = 'pencil' | 'eraser' | 'paintBrush' | 'fill' | 'eyedropper' | 'navigate';
 
 export const TOOL_LABELS: Record<DrawingTool, string> = {
-  brush: 'Brush',
+  pencil: 'Pencil',
   eraser: 'Eraser',
+  paintBrush: 'Brush',
   fill: 'Fill',
   eyedropper: 'Dropper',
   navigate: 'Navigate',
 };
 
-const DRAWING_TOOLS: readonly DrawingTool[] = ['brush', 'eraser', 'fill', 'eyedropper', 'navigate'];
+const DRAWING_TOOLS: readonly DrawingTool[] = ['pencil', 'eraser', 'paintBrush', 'fill', 'eyedropper', 'navigate'];
 
 export function isDrawingTool(s: string | undefined): s is DrawingTool {
   return s != null && (DRAWING_TOOLS as readonly string[]).includes(s);
@@ -59,6 +60,8 @@ export type PartSide = 'L' | 'R';
 
 export interface SkinLayersContext {
   layerVisibility: Record<string, boolean>;
+  /** Live read from creator state (for compact list filtering). */
+  isLayer3DVisible: (layer: string) => boolean;
   layerPartVisible: Partial<Record<string, { L?: boolean; R?: boolean }>>;
   layerLocked: Record<string, boolean>;
   isLayersPanelCollapsed: () => boolean;
@@ -82,6 +85,10 @@ export interface SkinLayersContext {
     canStartDrag?: (e: Event) => boolean
   ) => void;
   layerGroups: readonly (readonly string[])[];
+  getEditMode: () => EditMode;
+  getFocusedCreationEnabled: () => boolean;
+  getLayersPanelFocusedListExpanded: () => boolean;
+  setLayersPanelFocusedListExpanded: (expanded: boolean) => void;
 }
 
 export interface EditorToolsContext {
@@ -91,7 +98,7 @@ export interface EditorToolsContext {
   isRulersShown: () => boolean;
   isTemplateShown: () => boolean;
   setActiveTool: (tool: DrawingTool) => void;
-  setEditMode: (mode: EditMode) => void;
+  setEditMode: (mode: EditMode, options?: { fromUserModeNavigation?: boolean }) => void;
   setEditMode3D: (is3D: boolean) => void;
   setRulersShown: (show: boolean) => void;
   setTemplateShown: (show: boolean) => void;

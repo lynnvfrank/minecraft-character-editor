@@ -19,6 +19,21 @@ function applyPixelChanges(
   const imageData = skinCtx.getImageData(0, 0, WORK_SIZE, WORK_SIZE);
   const data = imageData.data;
   const idx = (x: number, y: number) => (y * WORK_SIZE + x) * 4;
+
+  let afterByKey: Map<string, PixelChange> | null = null;
+  if (
+    cmd.type === 'stroke' &&
+    useNew &&
+    !cmd.isEraser &&
+    cmd.afterPixels &&
+    cmd.afterPixels.length > 0
+  ) {
+    afterByKey = new Map();
+    for (const q of cmd.afterPixels) {
+      afterByKey.set(`${q.x},${q.y}`, q);
+    }
+  }
+
   for (const p of pixels) {
     const i = idx(p.x, p.y);
     if (cmd.type === 'stroke') {
@@ -28,6 +43,20 @@ function applyPixelChanges(
           data[i + 1] = 0;
           data[i + 2] = 0;
           data[i + 3] = 0;
+        } else if (afterByKey) {
+          const ap = afterByKey.get(`${p.x},${p.y}`);
+          if (ap) {
+            data[i] = ap.r;
+            data[i + 1] = ap.g;
+            data[i + 2] = ap.b;
+            data[i + 3] = ap.a;
+          } else {
+            const [r, g, b] = hexToRgb(cmd.newColor);
+            data[i] = r;
+            data[i + 1] = g;
+            data[i + 2] = b;
+            data[i + 3] = 255;
+          }
         } else {
           const [r, g, b] = hexToRgb(cmd.newColor);
           data[i] = r;
@@ -109,4 +138,17 @@ export function updateUndoRedoButtons(undoStack: UndoCommand[], redoStack: UndoC
   const rb = document.getElementById('creator-tools-redo-btn') as HTMLButtonElement | null;
   if (ub) ub.disabled = undoStack.length === 0;
   if (rb) rb.disabled = redoStack.length === 0;
+}
+
+/** Snapshot current canvas values for texels touched by a stroke (for paint-brush redo). */
+export function buildAfterPixelsForStroke(
+  skinCtx: CanvasRenderingContext2D,
+  strokePixels: PixelChange[]
+): PixelChange[] {
+  const out: PixelChange[] = [];
+  for (const p of strokePixels) {
+    const d = skinCtx.getImageData(p.x, p.y, 1, 1).data;
+    out.push({ x: p.x, y: p.y, r: d[0]!, g: d[1]!, b: d[2]!, a: d[3]! });
+  }
+  return out;
 }

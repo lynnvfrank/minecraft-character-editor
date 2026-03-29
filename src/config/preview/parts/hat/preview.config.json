@@ -2,6 +2,6 @@
   "visibleLayers": ["head", "hat"],
   "cameraPosition": { "x": 0, "y": 1.8, "z": 2 },
   "cameraTarget": { "x": 0, "y": 1.6, "z": 0 },
-  "fov": 28,
+  "fov": 30,
   "viewport": { "width": 400, "height": 400 }
 }

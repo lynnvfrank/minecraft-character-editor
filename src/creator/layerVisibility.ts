@@ -8,6 +8,8 @@ import { creatorLayerSlice } from '../state/creatorSlices';
 import { LAYER_KEYS, isLayerKey, isLayerWithParts } from '../skin';
 import type { CreatorState } from '../state';
 import type { PartSide } from './api';
+import type { WardrobeLayerKey } from './wardrobeLayers';
+import { getMemberLayerKeysForWardrobeLayer } from './wardrobeLayers';
 
 const DRAG_THRESHOLD_PX = 4;
 
@@ -39,6 +41,7 @@ export type LayerVisibilityApi = {
   clearLayerSoloModes: () => void;
   saveLayerStateAndNormalizeForNonEditMode: () => void;
   restoreLayerStateForEditMode: () => void;
+  applyFocusedSoloForWardrobeLayer: (wardrobeLayer: WardrobeLayerKey) => void;
 };
 
 function getLayerUnderPoint(clientX: number, clientY: number): string | null {
@@ -288,6 +291,32 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
     savedLayerStateBeforeNonEditMode = null;
   }
 
+  function applyFocusedSoloForWardrobeLayer(wardrobeLayer: WardrobeLayerKey): void {
+    if (wardrobeLayer === 'fullOutfit' || wardrobeLayer === 'all') {
+      clearLayerSoloModes();
+      setLayer3DVisibleAll(Object.fromEntries(LAYER_KEYS.map((k) => [k, true])));
+      state.layer3DPartVisible = {};
+      setLayer3DLockedAll(Object.fromEntries(LAYER_KEYS.map((k) => [k, false])));
+      creatorLayerSlice.notify();
+      return;
+    }
+    const members = getMemberLayerKeysForWardrobeLayer(wardrobeLayer);
+    if (members.length === 0) return;
+    clearLayerSoloModes();
+    const memberSet = new Set<string>(members);
+    setLayer3DVisibleAll(
+      Object.fromEntries(LAYER_KEYS.map((k) => [k, memberSet.has(k)]))
+    );
+    const nextPart = { ...state.layer3DPartVisible };
+    for (const k of LAYER_KEYS) {
+      if (isLayerWithParts(k) && memberSet.has(k)) {
+        delete nextPart[k];
+      }
+    }
+    state.layer3DPartVisible = nextPart;
+    creatorLayerSlice.notify();
+  }
+
   return {
     setLayer3DVisible,
     setLayerPartVisible,
@@ -302,5 +331,6 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
     clearLayerSoloModes,
     saveLayerStateAndNormalizeForNonEditMode,
     restoreLayerStateForEditMode,
+    applyFocusedSoloForWardrobeLayer,
   };
 }

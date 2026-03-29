@@ -24,6 +24,7 @@ alwaysApply: true
 | `docs/concepts/TAXONOMY.md` | Source structure: domain, lib, config, state, services, controllers, ui |
 | `docs/minecraft-skin-layout-specification.md` | Skin layout, region bounds, UVs |
 | `server/api.js` | API handlers: `/api/skin`, `/api/animation`, `/api/events` |
+| `conversations/` | Optional: saved chat/agent exports (see `conversations/README.md`; Cursor’s live agent logs live under `~/.cursor/projects/…/agent-transcripts/`) |
 
 ## Doc Reference
 

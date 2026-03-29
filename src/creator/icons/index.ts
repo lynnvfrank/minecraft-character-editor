@@ -13,8 +13,9 @@ import modeCreatorHiddenRaw from './mode.creator.hidden.svg?raw';
 import modeCreatorLockRaw from './mode.creator.lock.svg?raw';
 import modeCreatorUnlockRaw from './mode.creator.unlock.svg?raw';
 import modeCreatorToolsNavigateRaw from './mode.creator.tools.navigate.svg?raw';
-import modeCreatorToolsBrushRaw from './mode.creator.tools.brush.svg?raw';
+import modeCreatorToolsPencilRaw from './mode.creator.tools.pencil.svg?raw';
 import modeCreatorToolsErasorRaw from './mode.creator.tools.erasor.svg?raw';
+import modeCreatorToolsBrushRaw from './mode.creator.tools.brush.svg?raw';
 import modeCreatorToolsFillRaw from './mode.creator.tools.fill.svg?raw';
 import modeCreatorToolsDropperRaw from './mode.creator.tools.dropper.svg?raw';
 import modeCreatorToolsUndoRaw from './mode.creator.tools.undo.svg?raw';
@@ -23,7 +24,7 @@ import modeCreatorWardrobeRaw from './mode.creator.wardrobe.svg?raw';
 import modeCreator2DRaw from './mode.creator.2D.svg?raw';
 import modeCreator3DRaw from './mode.creator.3D.svg?raw';
 
-const ICONS_RAW: Record<IconName, string> = {
+const ICONS_RAW = {
   modeHome: modeHomeRaw,
   modeCreator: modeCreatorRaw,
   modeCreatorKeep: modeCreatorKeepRaw,
@@ -33,8 +34,9 @@ const ICONS_RAW: Record<IconName, string> = {
   modeCreatorLock: modeCreatorLockRaw,
   modeCreatorUnlock: modeCreatorUnlockRaw,
   modeCreatorToolsNavigate: modeCreatorToolsNavigateRaw,
-  modeCreatorToolsBrush: modeCreatorToolsBrushRaw,
+  modeCreatorToolsPencil: modeCreatorToolsPencilRaw,
   modeCreatorToolsErasor: modeCreatorToolsErasorRaw,
+  modeCreatorToolsBrush: modeCreatorToolsBrushRaw,
   modeCreatorToolsFill: modeCreatorToolsFillRaw,
   modeCreatorToolsDropper: modeCreatorToolsDropperRaw,
   modeCreatorToolsUndo: modeCreatorToolsUndoRaw,
@@ -42,7 +44,7 @@ const ICONS_RAW: Record<IconName, string> = {
   modeCreatorWardrobe: modeCreatorWardrobeRaw,
   modeCreator2D: modeCreator2DRaw,
   modeCreator3D: modeCreator3DRaw,
-};
+} as const;
 
 export type IconName = keyof typeof ICONS_RAW;
 

@@ -6,6 +6,8 @@
 export type CreatorEditModePayload = {
   mode: 'wardrobe' | '2d' | '3d';
   previousMode?: 'wardrobe' | '2d' | '3d';
+  /** True for mode bar / Tab; false for route/hash bootstrap (e.g. deep link to #/creator/3d). */
+  fromUserModeNavigation?: boolean;
 };
 
 export type CreatorColorPayload = { color: string };
@@ -15,7 +17,7 @@ export type CreatorTexturePositionPayload = {
   layer: string | null;
   skinX: number;
   skinY: number;
-  tool?: 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'navigate';
+  tool?: 'pencil' | 'eraser' | 'paintBrush' | 'fill' | 'eyedropper' | 'navigate';
   currentColor?: string | null;
   hoverColor?: string | null;
 };

@@ -1,7 +1,7 @@
 {
   "visibleLayers": ["arms", "sleeves"],
-  "cameraPosition": { "x": 0, "y": 1.2, "z": 2.6 },
-  "cameraTarget": { "x": 0, "y": 1, "z": 0 },
-  "fov": 31,
-  "viewport": { "width": 480, "height": 450 }
+  "cameraPosition": { "x": 0, "y": 1.2, "z": 2.35 },
+  "cameraTarget": { "x": 0, "y": 0.98, "z": 0 },
+  "fov": 30,
+  "viewport": { "width": 400, "height": 450 }
 }

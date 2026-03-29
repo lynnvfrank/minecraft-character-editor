@@ -1,6 +1,11 @@
 import type { SkinEntry } from '../domain';
 import { createEl } from './dom';
-import type { WardrobeLayerKey, WardrobePartKey } from './wardrobePartsPanel';
+import { setWardrobeSelectorPanelHoverPreviewLayer } from './wardrobeHoverPreview';
+import {
+  getWardrobeDualLibraryPair,
+  type WardrobeLayerKey,
+  type WardrobePartKey,
+} from './wardrobeLayers';
 
 export type WardrobeLibraryItem = SkinEntry & { id?: string };
 
@@ -46,7 +51,7 @@ export const WARDROBE_PART_PANEL_CONFIGS: readonly WardrobePartPanelConfig[] = [
     key: 'jacketGroup',
     panelId: 'creator-wardrobe-jacket-group-panel',
     selectorId: 'creator-wardrobe-jacket-group-selector',
-    title: 'Jacket (vest + sleeves)',
+    title: 'Jacket',
     noneLabel: 'No jacket',
   },
   {
@@ -75,14 +80,14 @@ export const WARDROBE_PART_PANEL_CONFIGS: readonly WardrobePartPanelConfig[] = [
     key: 'jacket',
     panelId: 'creator-wardrobe-jacket-panel',
     selectorId: 'creator-wardrobe-jacket-selector',
-    title: 'Jackets',
+    title: 'Vests',
     noneLabel: 'No jacket',
   },
   {
     key: 'body',
     panelId: 'creator-wardrobe-body-panel',
     selectorId: 'creator-wardrobe-body-selector',
-    title: 'Bodies',
+    title: 'Chests',
     noneLabel: 'No body',
   },
   {
@@ -120,6 +125,63 @@ export function getWardrobePanelIdForLayer(layer: WardrobeLayerKey): string | nu
   return WARDROBE_PART_PANEL_CONFIGS.find((config) => config.key === layer)?.panelId ?? null;
 }
 
+function getDualLibraryPanelIdsForLayer(layer: WardrobeLayerKey): readonly string[] | null {
+  const pair = getWardrobeDualLibraryPair(layer);
+  if (!pair) return null;
+  const topPanelId = getWardrobePanelIdForLayer(pair[0]);
+  const bottomPanelId = getWardrobePanelIdForLayer(pair[1]);
+  if (!topPanelId || !bottomPanelId) return null;
+  return [topPanelId, bottomPanelId];
+}
+
+/**
+ * DOM ids of library panels to show for the selected wardrobe layer (Creator.Wardrobe right rail).
+ * Paired atomics (hat/head, body/arms, jacket/sleeves, pants/legs) show both panels; switching within a pair does not swap panels.
+ * `top` and other composites use {@link getWardrobePanelIdForLayer}.
+ */
+export function getWardrobeLibraryPanelIdsForLayer(layer: WardrobeLayerKey | null): readonly string[] {
+  if (layer == null) return [];
+  if (layer === 'fullOutfit') return ['creator-wardrobe-outfits-panel'];
+  const dual = getDualLibraryPanelIdsForLayer(layer);
+  if (dual) return dual;
+  const id = getWardrobePanelIdForLayer(layer);
+  return id ? [id] : [];
+}
+
+function bindWardrobeLibraryHoverPreview(selector: HTMLElement, layerKey: WardrobeLayerKey): void {
+  if (selector.dataset.wardrobeHoverBound === '1') return;
+  selector.dataset.wardrobeHoverBound = '1';
+
+  selector.addEventListener('pointerenter', () => {
+    if (document.body.dataset.route !== 'creator') return;
+    if (document.body.dataset.editMode !== 'wardrobe') return;
+    setWardrobeSelectorPanelHoverPreviewLayer(layerKey);
+  });
+
+  selector.addEventListener('pointerleave', (e) => {
+    if (document.body.dataset.route !== 'creator') return;
+    if (document.body.dataset.editMode !== 'wardrobe') return;
+    const rel = e.relatedTarget;
+    if (rel instanceof Node && selector.contains(rel)) return;
+    if (rel instanceof Element && rel.closest('.creator-wardrobe-library-selector')) {
+      return;
+    }
+    setWardrobeSelectorPanelHoverPreviewLayer(null);
+  });
+}
+
+/** Attach hover preview for Creator.Wardrobe library strips (right rail). Idempotent per selector. */
+export function ensureWardrobeLibraryHoverPreviewBound(): void {
+  const outfitsSelector = document.getElementById('creator-skin-selector');
+  if (outfitsSelector?.classList.contains('creator-wardrobe-library-selector')) {
+    bindWardrobeLibraryHoverPreview(outfitsSelector, 'fullOutfit');
+  }
+  for (const config of WARDROBE_PART_PANEL_CONFIGS) {
+    const el = document.getElementById(config.selectorId);
+    if (el) bindWardrobeLibraryHoverPreview(el, config.key);
+  }
+}
+
 export function buildWardrobeLibraryPanels(): void {
   const host = document.getElementById('creator-upper-right-panels-root');
   if (!host) return;
@@ -151,20 +213,21 @@ export function buildWardrobeLibraryPanels(): void {
     );
     host.appendChild(panel);
   }
+
+  ensureWardrobeLibraryHoverPreviewBound();
 }
 
 type RenderWardrobeLibraryPanelOptions = {
+  partKey?: WardrobePartKey;
   selectorId: string;
   items: WardrobeLibraryItem[];
-  /** Active selection: null (No/Original for base), originalSentinel (Original), or library path */
+  /** Active selection: null (None for overlay) or library path */
   activeValue: string | null;
   onSelect: (value: string | null) => void;
+  onHoverStart?: (value: string | null) => void;
+  onHoverEnd?: () => void;
   includeNone?: boolean;
   noneLabel?: string;
-  includeOriginal?: boolean;
-  originalLabel?: string;
-  originalPreview?: string | null;
-  originalSentinel?: string;
 };
 
 export function renderWardrobeLibraryPanel(options: RenderWardrobeLibraryPanelOptions): void {
@@ -173,32 +236,20 @@ export function renderWardrobeLibraryPanel(options: RenderWardrobeLibraryPanelOp
 
   container.innerHTML = '';
   bindWardrobeLibraryNavigation(container);
+  container.onmouseleave = () => {
+    options.onHoverEnd?.();
+  };
 
-  const originalSentinel = options.originalSentinel ?? '__original__';
-  const entries: Array<WardrobeLibraryItem & { isNone?: boolean; isOriginal?: boolean }> = [];
+  const entries: Array<WardrobeLibraryItem & { isNone?: boolean }> = [];
 
   if (options.includeNone) {
     entries.push({ id: '__none__', path: '', label: options.noneLabel ?? 'None', isNone: true });
-  }
-  if (options.includeOriginal) {
-    entries.push({
-      id: '__original__',
-      path: originalSentinel,
-      label: options.originalLabel ?? 'Original',
-      isOriginal: true,
-    });
   }
   entries.push(...options.items);
 
   entries.forEach((item) => {
     const isNone = item.isNone === true;
-    const isOriginal = item.isOriginal === true;
-    const isBasePanel = !options.includeNone;
-    const isActive = isNone
-      ? options.activeValue === null
-      : isOriginal
-        ? options.activeValue === originalSentinel || (isBasePanel && options.activeValue === null)
-        : item.path === options.activeValue;
+    const isActive = isNone ? options.activeValue === null : item.path === options.activeValue;
 
     const btn = createEl(
       'button',
@@ -208,30 +259,17 @@ export function renderWardrobeLibraryPanel(options: RenderWardrobeLibraryPanelOp
           'skin-preview',
           'creator-wardrobe-library-item',
           isNone ? 'creator-wardrobe-library-item-none' : '',
-          isOriginal ? 'creator-wardrobe-library-item-original' : '',
           isActive ? 'active' : '',
         ].filter(Boolean).join(' '),
         'data-path': item.path,
         'data-none': isNone ? '1' : '0',
-        'data-original': isOriginal ? '1' : '0',
         title: item.label,
-        'aria-label': isNone || isOriginal ? item.label : `Select ${item.label}`,
+        'aria-label': isNone ? item.label : `Select ${item.label}`,
       },
     );
 
     if (isNone) {
       btn.appendChild(createEl('span', { className: 'creator-wardrobe-library-item-none-label' }, item.label));
-    } else if (isOriginal) {
-      if (options.originalPreview) {
-        const img = createEl('img', {
-          src: options.originalPreview,
-          alt: item.label,
-          loading: 'eager',
-        });
-        btn.appendChild(img);
-      } else {
-        btn.appendChild(createEl('span', { className: 'creator-wardrobe-library-item-original-label' }, item.label));
-      }
     } else {
       const img = createEl('img', {
         src: item.preview ?? item.path,
@@ -243,8 +281,11 @@ export function renderWardrobeLibraryPanel(options: RenderWardrobeLibraryPanelOp
 
     btn.addEventListener('click', () => {
       if (isNone) options.onSelect(null);
-      else if (isOriginal) options.onSelect(originalSentinel);
       else options.onSelect(item.path);
+    });
+    btn.addEventListener('mouseenter', () => {
+      if (isNone) options.onHoverStart?.(null);
+      else options.onHoverStart?.(item.path);
     });
     container.appendChild(btn);
   });

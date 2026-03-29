@@ -29,3 +29,12 @@ export const creatorWardrobeFocusSlice = createSubscribable();
  * 2D paint mask (selectedLayers / restrictToLayers). Call notify when those change.
  */
 export const creator2dPaintSlice = createSubscribable();
+
+/** Focused Creation toggle; notify after setFocusedCreationEnabled. */
+export const creatorFocusedCreationSlice = createPayloadSubscribable<{ enabled: boolean }>();
+
+/** Wardrobe hover-preview state (tree/library hover layer + source). */
+export const creatorWardrobeHoverPreviewSlice = createPayloadSubscribable<{
+  layer: import('../creator/wardrobeLayers').WardrobeLayerKey | null;
+  source: 'layerPanel' | 'selectorPanel' | null;
+}>();

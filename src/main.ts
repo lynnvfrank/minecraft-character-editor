@@ -31,6 +31,13 @@ import {
   setActiveTool,
   normalizeLayerStateForNonEditMode,
   unregisterCreatorShortcuts,
+  getFocusedCreationEnabled,
+  setFocusedCreationEnabled,
+  getWardrobeSelectedLayer,
+  getWardrobeHoverPreviewLayer,
+  applyFocusedSoloForWardrobeLayer,
+  setLayersPanelFocusedListExpanded,
+  flushDeferredWardrobeLibraryPanelsAfterCamera,
 } from './creator';
 import { EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
 import { createIcon } from './creator/icons';
@@ -43,6 +50,10 @@ import { createCharacterEventsController } from './controllers/characterEvents';
 import { createAnimationLoopController } from './controllers/animationLoop';
 import { createCreatorPoseController, type CreatorPoseController } from './controllers/creatorPose';
 import { createCreatorCameraController } from './controllers/creatorCameraController';
+import {
+  createFocusedCreationController,
+  type FocusedCreationController,
+} from './controllers/focusedCreationController';
 import {
   startModeActor,
   getModeActor,
@@ -251,6 +262,7 @@ function updateRouteButtonsState() {
 }
 
 let creatorPoseController: CreatorPoseController;
+let focusedCreationController: FocusedCreationController | null = null;
 let characterController: ReturnType<typeof createCharacterController>;
 let viewerUIController: ReturnType<typeof createViewerUIController>;
 let characterEventsController: ReturnType<typeof createCharacterEventsController>;
@@ -353,7 +365,40 @@ function applyRoute(routeInfo?: RouteInfo): void {
       });
     }
     window.setTimeout(() => {
-      creatorPoseController.snapCameraToCreatorView(creatorPoseController.getCreatorCameraPose());
+      const entryMode = getEditMode();
+      if (
+        entryMode === EDIT_MODE_WARDROBE &&
+        getFocusedCreationEnabled() &&
+        getRoute() === 'creator'
+      ) {
+        const char = getCharacter(getPrimaryCharacterId());
+        if (char) {
+          const preset = getPreviewPreset('fullOutfit');
+          const origin = char.container.position;
+          const position = new THREE.Vector3(
+            preset.cameraPosition.x + origin.x,
+            preset.cameraPosition.y + origin.y,
+            preset.cameraPosition.z + origin.z
+          );
+          const target = new THREE.Vector3(
+            preset.cameraTarget.x + origin.x,
+            preset.cameraTarget.y + origin.y,
+            preset.cameraTarget.z + origin.z
+          );
+          try {
+            const ctx = getSceneContext();
+            ctx.camera.fov = preset.fov ?? 35;
+            ctx.camera.updateProjectionMatrix();
+          } catch {
+            // scene not ready
+          }
+          creatorPoseController.snapCameraToCreatorView({ position, target });
+        } else {
+          creatorPoseController.snapCameraToCreatorView(creatorPoseController.getCreatorCameraPose());
+        }
+      } else {
+        creatorPoseController.snapCameraToCreatorView(creatorPoseController.getCreatorCameraPose());
+      }
     }, 0);
     window.setTimeout(() => {
       updateCreator3DViewPlacement();
@@ -476,9 +521,51 @@ let previewRouteSyncToken = 0;
 const previewImageCache = new Map<string, Promise<HTMLImageElement>>();
 let activePreviewCameraPreset: PreviewPresetKey | null = null;
 let lastPreviewCameraPanelSignature = '';
+const focusAutoDisableBoundControls = new WeakSet<object>();
+let lastCreatorCameraInputWasMouse = false;
 
 function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function bindFocusedModeAutoDisableOnMouseCameraMove(): void {
+  const ctx = sceneContext;
+  if (!ctx?.renderer || !ctx?.controls) return;
+  const canvas = ctx.renderer.domElement;
+  if (!canvas) return;
+
+  // OrbitControls start does not describe the input device, so we infer it from recent DOM input.
+  const markMouseInput = () => {
+    lastCreatorCameraInputWasMouse = true;
+  };
+  const markNonMouseInput = () => {
+    lastCreatorCameraInputWasMouse = false;
+  };
+
+  if (!canvas.dataset.focusedMouseInputBound) {
+    canvas.dataset.focusedMouseInputBound = '1';
+    canvas.addEventListener('pointerdown', (event: PointerEvent) => {
+      if (event.pointerType === 'mouse') markMouseInput();
+      else markNonMouseInput();
+    });
+    canvas.addEventListener('mousedown', markMouseInput);
+    canvas.addEventListener('wheel', markMouseInput, { passive: true });
+    canvas.addEventListener('touchstart', markNonMouseInput, { passive: true });
+  }
+
+  const controlsObj = ctx.controls as object & {
+    addEventListener?: (type: string, listener: () => void) => void;
+  };
+  if (focusAutoDisableBoundControls.has(controlsObj)) return;
+  focusAutoDisableBoundControls.add(controlsObj);
+  controlsObj.addEventListener?.('start', () => {
+    if (!lastCreatorCameraInputWasMouse) return;
+    if (getRoute() !== 'creator') return;
+    const mode = getEditMode();
+    if (mode !== 'wardrobe' && mode !== '3d') return;
+    if (!getFocusedCreationEnabled()) return;
+    setFocusedCreationEnabled(false);
+  });
 }
 
 async function waitForPreviewSceneReady(timeoutMs: number = 30000): Promise<void> {
@@ -847,9 +934,11 @@ function updateCreator3DViewPlacement() {
     const ctx = sceneContext;
     if (app.parentElement !== wrapper) {
       wrapper.appendChild(app);
-      ctx.controls.dispose();
-      ctx.controls = recreateOrbitControls(ctx.camera, ctx.renderer);
+      const prevControls = ctx.controls;
+      ctx.controls = recreateOrbitControls(ctx.camera, ctx.renderer, prevControls);
+      prevControls.dispose();
       updateOrbitControlsForEditMode(ctx.controls, getRoute);
+      bindFocusedModeAutoDisableOnMouseCameraMove();
     }
     onWindowResize();
   } else {
@@ -1146,6 +1235,7 @@ async function main(): Promise<void> {
 
   sceneContext = initViewerScene(container, params) as AppSceneContext;
   setupCreatorCameraLight(sceneContext.camera);
+  bindFocusedModeAutoDisableOnMouseCameraMove();
 
   const controllerRefs = {
     creatorPoseController: null as CreatorPoseController | null,
@@ -1222,6 +1312,22 @@ async function main(): Promise<void> {
     getRoute,
     getEditMode,
     creatorPoseController,
+  });
+
+  focusedCreationController?.dispose();
+  focusedCreationController = createFocusedCreationController({
+    getFocusedCreationEnabled,
+    getRoute,
+    getEditMode,
+    getWardrobeSelectedLayer,
+    getWardrobeHoverPreviewLayer,
+    applyFocusedSoloForWardrobeLayer,
+    setLayersPanelFocusedListExpanded,
+    creatorPoseController,
+    getCharacter,
+    getPrimaryCharacterId,
+    getSceneContext,
+    flushDeferredWardrobeLibraryPanelsAfterCamera,
   });
 
   if (getRoute() === 'creator') {

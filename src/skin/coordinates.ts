@@ -32,6 +32,20 @@ export function skinToWorking(sx: number, sy: number): WorkingCoord {
   };
 }
 
+/**
+ * Snap arbitrary working coords to the center of a skin pixel’s 2×2 working block (RM=2).
+ * Keeps the soft brush aligned with the 64×64 export grid (no “half-pixel” placement).
+ */
+export function snapWorkingToSkinCellCenter(wx: number, wy: number): WorkingCoord {
+  const sx = Math.floor(wx / RESOLUTION_MULTIPLIER);
+  const sy = Math.floor(wy / RESOLUTION_MULTIPLIER);
+  const ox = Math.floor(RESOLUTION_MULTIPLIER / 2);
+  return {
+    x: Math.max(0, Math.min(WORK_SIZE - 1, sx * RESOLUTION_MULTIPLIER + ox)),
+    y: Math.max(0, Math.min(WORK_SIZE - 1, sy * RESOLUTION_MULTIPLIER + ox)),
+  };
+}
+
 /** UV (0–1) → working coords. Texture uses flipY so v is inverted. */
 export function uvToWorkingCoords(u: number, v: number): WorkingCoord {
   const x = Math.floor(u * WORK_SIZE);
