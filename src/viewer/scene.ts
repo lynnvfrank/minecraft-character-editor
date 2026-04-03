@@ -123,7 +123,9 @@ export function applyShadowToModel(model: THREE.Group): void {
     if ((obj as THREE.Mesh).isMesh) {
       const mesh = obj as THREE.Mesh;
       mesh.castShadow = true;
-      mesh.receiveShadow = true;
+      // Do not receive shadows on the skinned character: self-shadowing from the
+      // directional light causes severe striped shadow-map acne on low-poly limbs.
+      mesh.receiveShadow = false;
     }
   });
 }
