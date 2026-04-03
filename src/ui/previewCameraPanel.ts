@@ -1,4 +1,6 @@
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import { createEl } from '../creator/dom';
+import { cx, paperBtn, paperCard } from './paperUiClasses';
 import { PREVIEW_PRESET_KEYS, getPreviewPresetLabel, type PreviewPresetKey } from '../viewer';
 
 type VectorLike = {
@@ -38,7 +40,7 @@ export function ensurePreviewCameraPanel(ctx: PreviewCameraPanelContext): void {
     'div',
     {
       id: 'preview-camera-panel',
-      className: 'preview-camera-panel',
+      className: cx('preview-camera-panel', paperCard(PaperUiSurface.previewCameraPanel)),
       'aria-label': 'Preview camera presets',
     },
     createEl('div', { className: 'preview-camera-panel-title' }, 'Camera presets'),
@@ -50,7 +52,7 @@ export function ensurePreviewCameraPanel(ctx: PreviewCameraPanelContext): void {
           'button',
           {
             type: 'button',
-            className: 'preview-camera-preset-btn',
+            className: cx('preview-camera-preset-btn', paperBtn(PaperUiSurface.previewCameraPresetBtn, 'secondaryOutlineSm')),
             'data-preset': preset,
             title: `Move camera to ${getPreviewPresetLabel(preset)}`,
           },
@@ -64,7 +66,7 @@ export function ensurePreviewCameraPanel(ctx: PreviewCameraPanelContext): void {
     'div',
     {
       id: 'preview-camera-info-panel',
-      className: 'preview-camera-info-panel',
+      className: cx('preview-camera-info-panel', paperCard(PaperUiSurface.previewCameraInfoPanel)),
       'aria-live': 'polite',
       'aria-label': 'Preview camera info',
     },

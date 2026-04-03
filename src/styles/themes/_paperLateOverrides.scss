@@ -1,0 +1,219 @@
+/**
+ * Loaded after all feature SCSS so Paper + app class combos win on cascade.
+ * Requires `<html class="paper-ui">` with the Paper theme (see themes/_papercss.scss).
+ */
+
+/* Viewer chrome */
+html.paper-ui #controls-bar.card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+html.paper-ui #controls-bar.card:hover {
+  transform: none;
+}
+
+/* Paper styles `a` globally; nav uses paper-btn for sketch chrome */
+html.paper-ui #controls-bar a.nav-link.paper-btn {
+  text-decoration: none !important;
+  background-image: none !important;
+  margin-bottom: 0;
+}
+
+html.paper-ui #controls-bar .skin-preview.paper-btn,
+html.paper-ui #controls-bar .anim-button.paper-btn,
+html.paper-ui #controls-bar .sequence-button.paper-btn {
+  margin-bottom: 0;
+}
+
+/* Creator tool strips + camera bar */
+html.paper-ui body[data-route="creator"] .creator-mode-panel.card,
+html.paper-ui body[data-route="creator"] .creator-save-download-panel.card,
+html.paper-ui body[data-route="creator"] .creator-canvas-overlays-panel.card,
+html.paper-ui body[data-route="creator"] .creator-tools-panel.card,
+html.paper-ui body[data-route="creator"] .creator-undo-redo-panel.card,
+html.paper-ui body[data-route="creator"] .creator-camera-controls-toolbar.card {
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin: 0;
+  align-items: center;
+}
+
+html.paper-ui body[data-route="creator"] .creator-mode-panel.card:hover,
+html.paper-ui body[data-route="creator"] .creator-save-download-panel.card:hover,
+html.paper-ui body[data-route="creator"] .creator-canvas-overlays-panel.card:hover,
+html.paper-ui body[data-route="creator"] .creator-tools-panel.card:hover,
+html.paper-ui body[data-route="creator"] .creator-undo-redo-panel.card:hover,
+html.paper-ui body[data-route="creator"] .creator-camera-controls-toolbar.card:hover {
+  transform: none;
+}
+
+html.paper-ui .creator-wardrobe-outfits-panel.card {
+  margin: 0;
+}
+
+html.paper-ui .creator-home-panel.card {
+  margin: 0;
+}
+
+html.paper-ui .creator-home-btn.paper-btn {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+html.paper-ui body[data-route="creator"] .creator-camera-controls-toolbar .paper-btn,
+html.paper-ui body[data-route="creator"] .creator-save-download-panel .paper-btn {
+  margin-bottom: 0;
+}
+
+/* Wardrobe / library thumbnails: keep grid density */
+html.paper-ui .creator-wardrobe-library-item.paper-btn {
+  margin-bottom: 0;
+  padding: 0.15rem;
+}
+
+html.paper-ui .skin-preview.creator-skin-preview.paper-btn {
+  margin-bottom: 0;
+}
+
+/* Floating panels: soften card hover jump */
+html.paper-ui .creator-layers-panel.card:hover,
+html.paper-ui .creator-swatches-panel.card:hover,
+html.paper-ui .creator-color-picker-panel.card:hover,
+html.paper-ui .creator-hover-info-panel.card:hover,
+html.paper-ui .creator-wardrobe-library-panel.card:hover,
+html.paper-ui .creator-wardrobe-parts-panel.card:hover,
+html.paper-ui .preview-camera-panel.card:hover,
+html.paper-ui .preview-camera-info-panel.card:hover,
+html.paper-ui .fake-chat-window.card:hover,
+html.paper-ui .creator-panel.card:hover {
+  transform: none;
+}
+
+html.paper-ui #creator-top-center-panels.card,
+html.paper-ui #creator-bottom-center-panels.card {
+  margin: 0;
+}
+
+html.paper-ui #creator-top-center-panels.card:hover,
+html.paper-ui #creator-bottom-center-panels.card:hover {
+  transform: none;
+}
+
+html.paper-ui .creator-3d-preview-slot.card:hover {
+  transform: none;
+}
+
+html.paper-ui .app-lower-left-panels.card {
+  margin: 0;
+}
+
+html.paper-ui .app-lower-left-panels.card:hover {
+  transform: none;
+}
+
+html.paper-ui .preview-lower-right-panels.card,
+html.paper-ui .preview-right-panels-group.card,
+html.paper-ui .creator-lower-right-panels.card,
+html.paper-ui .creator-right-panels-group.card {
+  margin: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+html.paper-ui .preview-lower-right-panels.card:hover,
+html.paper-ui .preview-right-panels-group.card:hover,
+html.paper-ui .creator-lower-right-panels.card:hover,
+html.paper-ui .creator-right-panels-group.card:hover {
+  transform: none;
+}
+
+html.paper-ui #test-controls.card {
+  margin: 0;
+}
+
+html.paper-ui #test-controls.card:hover {
+  transform: none;
+}
+
+/* Paper light: default :focus uses --secondary (blue); use sketch ink */
+html.paper-ui button:focus,
+html.paper-ui .paper-btn:focus,
+html.paper-ui [type=button]:focus {
+  border-color: var(--primary) !important;
+}
+
+/* Viewer bar: feature SCSS adds blue/purple gradients after Paper — reset */
+html.paper-ui #controls-bar .group-label {
+  color: var(--muted-text);
+}
+
+html.paper-ui #controls-bar .skin-preview.paper-btn:hover {
+  border-color: var(--primary);
+  box-shadow: 2px 8px 8px -5px var(--shadow-color-hover);
+}
+
+html.paper-ui .anim-button.paper-btn {
+  background: var(--main-background) !important;
+  background-image: none !important;
+  color: var(--primary-text) !important;
+  border-color: var(--primary) !important;
+  box-shadow: 2px 8px 8px -5px var(--shadow-color-regular) !important;
+}
+
+html.paper-ui .anim-button.paper-btn:hover {
+  border-color: var(--primary);
+  box-shadow: 2px 8px 8px -5px var(--shadow-color-hover) !important;
+}
+
+html.paper-ui .anim-button.paper-btn.active {
+  border-color: var(--primary) !important;
+  box-shadow: 2px 8px 4px -6px var(--shadow-color-hover) !important;
+}
+
+html.paper-ui .sequence-button.paper-btn {
+  background: var(--main-background) !important;
+  background-image: none !important;
+  color: var(--primary-text) !important;
+  border-color: var(--primary) !important;
+  box-shadow: 2px 8px 8px -5px var(--shadow-color-regular) !important;
+}
+
+html.paper-ui .sequence-button.paper-btn:hover {
+  border-color: var(--primary);
+  box-shadow: 2px 8px 8px -5px var(--shadow-color-hover) !important;
+}
+
+html.paper-ui .creator-tools-panel-btn.active.paper-btn {
+  border-color: var(--primary) !important;
+  background-color: var(--primary-light) !important;
+  color: var(--primary-text) !important;
+}
+
+html.paper-ui .creator-wardrobe-parts-btn.active.paper-btn {
+  background: var(--primary-light) !important;
+  border-color: var(--primary) !important;
+}
+
+html.paper-ui .creator-wardrobe-library-item.active.paper-btn,
+html.paper-ui .creator-skin-preview.active.paper-btn,
+html.paper-ui .skin-preview.active.paper-btn {
+  border-color: var(--primary) !important;
+  box-shadow: none !important;
+}
+
+html.paper-ui .creator-layer-part-btn.creator-layer-part-visible.paper-btn {
+  border-color: var(--primary) !important;
+  background-color: var(--primary-light) !important;
+  color: var(--primary-text) !important;
+}
+
+html.paper-ui .creator-layer-part-btn.creator-layer-part-hidden.paper-btn {
+  border-color: var(--muted-light) !important;
+  background-color: var(--main-background) !important;
+  color: var(--muted-text) !important;
+}

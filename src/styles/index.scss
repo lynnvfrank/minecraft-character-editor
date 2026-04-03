@@ -1,5 +1,6 @@
-// Main styles entry — modular SCSS partials
-// Order matters for cascade; matches original style.css structure
+// Main styles entry — modular SCSS partials.
+// Theme loads first (core colors, fonts, tokens). Change active theme in `themes/_active.scss`.
+@use 'themes/active';
 
 @use 'reset';
 @use 'routes';
@@ -18,3 +19,4 @@
 @use 'app-shell';
 @use 'viewer-controls';
 @use 'fake-chat';
+@use 'themes/paperLateOverrides';

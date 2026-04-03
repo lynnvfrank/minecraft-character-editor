@@ -4,7 +4,9 @@
  */
 import * as THREE from 'three';
 import { getTrapezoidBounds, WALK_CYCLE_DISTANCE, type TurnStrategy } from '../animation';
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import { getPrimaryCharacterId } from '../domain';
+import { cx, paperBtn } from '../ui/paperUiClasses';
 
 type AnimationManager = {
   turnTo: (targetFacingRad: number) => Promise<void>;
@@ -31,6 +33,8 @@ export function setupTestControls(deps: SetupTestControlsDeps): void {
 
   container.innerHTML = '';
 
+  const pb = (): string => paperBtn(PaperUiSurface.debugTestControls, 'secondaryOutlineSm');
+
   const panel = document.createElement('div');
   panel.className = 'test-controls-panel';
   panel.innerHTML = '<span class="test-controls-label">Debug Test Controls</span>';
@@ -44,7 +48,7 @@ export function setupTestControls(deps: SetupTestControlsDeps): void {
   turnStrategies.forEach((s) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'test-control-btn test-control-strategy-btn';
+    btn.className = cx('test-control-btn', 'test-control-strategy-btn', pb());
     btn.textContent = s;
     btn.dataset.strategy = s;
     btn.classList.toggle('active', turnStrategy === s);
@@ -66,7 +70,7 @@ export function setupTestControls(deps: SetupTestControlsDeps): void {
   const addButton = (label: string, onClick: () => void, parent: HTMLElement = panel) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'test-control-btn';
+    btn.className = cx('test-control-btn', pb());
     btn.textContent = label;
     btn.addEventListener('click', () => {
       animationManager.stop();
@@ -93,7 +97,7 @@ export function setupTestControls(deps: SetupTestControlsDeps): void {
   const pauseRow = buttonRow();
   const pauseBtn = document.createElement('button');
   pauseBtn.type = 'button';
-  pauseBtn.className = 'test-control-btn';
+  pauseBtn.className = cx('test-control-btn', pb());
   pauseBtn.textContent = 'Pause';
   pauseBtn.addEventListener('click', () => {
     setPaused(true);
@@ -104,7 +108,7 @@ export function setupTestControls(deps: SetupTestControlsDeps): void {
   });
   const resumeBtn = document.createElement('button');
   resumeBtn.type = 'button';
-  resumeBtn.className = 'test-control-btn';
+  resumeBtn.className = cx('test-control-btn', pb());
   resumeBtn.textContent = 'Resume';
   resumeBtn.disabled = true;
   resumeBtn.addEventListener('click', () => {
@@ -116,7 +120,7 @@ export function setupTestControls(deps: SetupTestControlsDeps): void {
   });
   const stepFrameBtn = document.createElement('button');
   stepFrameBtn.type = 'button';
-  stepFrameBtn.className = 'test-control-btn';
+  stepFrameBtn.className = cx('test-control-btn', pb());
   stepFrameBtn.textContent = 'Step Frame';
   stepFrameBtn.disabled = true;
   stepFrameBtn.addEventListener('click', () => {

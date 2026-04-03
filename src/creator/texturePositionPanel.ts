@@ -1,5 +1,7 @@
 import type { CreatorTexturePositionDetail } from '../events/appEvents';
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import { creatorTexturePositionSlice } from '../state/creatorSlices';
+import { cx, paperCard } from '../ui/paperUiClasses';
 import { TOOL_LABELS, type DrawingTool } from './api';
 import { getCreatorPanelsContainer } from './container';
 
@@ -12,7 +14,7 @@ export function buildTexturePositionPanel(): void {
 
   panel = document.createElement('div');
   panel.id = 'creator-hover-info-panel';
-  panel.className = 'creator-hover-info-panel';
+  panel.className = cx('creator-hover-info-panel', paperCard(PaperUiSurface.hoverInfoPanel));
   panel.setAttribute('aria-live', 'polite');
   panel.setAttribute('aria-label', 'Current tool and skin coordinates');
   const textSpan = document.createElement('span');

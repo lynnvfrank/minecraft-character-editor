@@ -1,9 +1,11 @@
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import {
   creatorColorSlice,
   creatorSkinLoadSlice,
   creatorSwatchHistorySlice,
   creatorSwatchPaletteSlice,
 } from '../state/creatorSlices';
+import { cx, paperBtn, paperCard } from '../ui/paperUiClasses';
 import { isValidHex, normalizeHex, rgbToHex, hexToRgb } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { SwatchesContext, SwatchPaletteId } from './api';
@@ -108,7 +110,12 @@ function createSwatchSlots(container: Element, ctx: SwatchesContext, max: number
   for (let i = 0; i < max; i++) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'creator-swatch-item creator-swatch-drop-target creator-swatch-draggable';
+    btn.className = cx(
+      'creator-swatch-item',
+      'creator-swatch-drop-target',
+      'creator-swatch-draggable',
+      paperBtn(PaperUiSurface.swatchGridItem, 'secondaryOutlineSm'),
+    );
     btn.dataset.index = String(i);
     btn.addEventListener('click', () => {
       if (btn.dataset.color) ctx.applyColor(btn.dataset.color, false);
@@ -174,7 +181,7 @@ export function buildSwatchesPanel(ctx: SwatchesContext): void {
 
   panel = document.createElement('div');
   panel.id = 'creator-swatches-panel';
-  panel.className = 'creator-swatches-panel';
+  panel.className = cx('creator-swatches-panel', paperCard(PaperUiSurface.swatchesPanel));
   panel.setAttribute('aria-label', 'Color swatches');
   const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
   const addShortcut = isMac ? '⌘⇧+' : 'Ctrl+Shift+';
@@ -189,7 +196,7 @@ export function buildSwatchesPanel(ctx: SwatchesContext): void {
   for (const { id, label } of PALETTES) {
     const tab = document.createElement('button');
     tab.type = 'button';
-    tab.className = 'creator-swatches-tab';
+    tab.className = cx('creator-swatches-tab', paperBtn(PaperUiSurface.swatchesTab, 'secondaryOutlineSm'));
     tab.dataset.palette = id;
     tab.textContent = label;
     tab.setAttribute('role', 'tab');
@@ -216,7 +223,7 @@ export function buildSwatchesPanel(ctx: SwatchesContext): void {
   titleSpan.className = 'creator-swatches-title';
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
-  toggleBtn.className = 'creator-swatches-toggle';
+  toggleBtn.className = cx('creator-swatches-toggle', paperBtn(PaperUiSurface.swatchesToggle, 'secondaryOutlineSm'));
   toggleBtn.title = 'Minimize panel';
   toggleBtn.setAttribute('aria-label', 'Minimize panel');
   const minimizeIcon = document.createElement('span');

@@ -4,7 +4,9 @@
  * 60s no messages → start idle wandering.
  */
 import type { SequenceStep } from '../animation';
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import { logger } from '../lib';
+import { cx, paperBtn, paperCard } from './paperUiClasses';
 
 const CANNED_RESPONSES = [
   "Hey! 👋",
@@ -41,11 +43,11 @@ export function createFakeChatUI(callbacks: FakeChatUICallbacks) {
   const container = document.createElement('div');
   container.id = 'fake-chat-container';
   container.innerHTML = `
-    <div class="fake-chat-window">
+    <div class="${cx('fake-chat-window', paperCard(PaperUiSurface.fakeChat))}">
       <div class="fake-chat-messages" id="fake-chat-messages"></div>
       <div class="fake-chat-input-row">
         <input type="text" id="fake-chat-input" placeholder="Type a message..." autocomplete="off" />
-        <button type="button" id="fake-chat-send">Send</button>
+        <button type="button" id="fake-chat-send" class="${paperBtn(PaperUiSurface.fakeChat, 'primarySm')}">Send</button>
       </div>
     </div>
   `;

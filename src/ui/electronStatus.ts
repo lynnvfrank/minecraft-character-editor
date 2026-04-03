@@ -13,6 +13,9 @@ declare global {
   }
 }
 
+import { PaperUiSurface } from '../config/paperUiSurfaces';
+import { cx, paperBtn } from './paperUiClasses';
+
 export function initElectronStatus(): void {
   if (typeof window === 'undefined' || !window.electronAPI) return;
 
@@ -23,7 +26,7 @@ export function initElectronStatus(): void {
     <div class="electron-status-content">
       <span class="electron-status-label">Server</span>
       <span class="electron-status-value" id="electron-status-url">—</span>
-      <button type="button" id="electron-status-toggle" class="electron-status-toggle" aria-label="Collapse">▼</button>
+      <button type="button" id="electron-status-toggle" class="${cx('electron-status-toggle', paperBtn(PaperUiSurface.electronStatus, 'secondaryOutlineSm'))}" aria-label="Collapse">▼</button>
     </div>
     <div class="electron-status-details" id="electron-status-details">
       <div class="electron-status-first-run" id="electron-status-first-run" hidden>

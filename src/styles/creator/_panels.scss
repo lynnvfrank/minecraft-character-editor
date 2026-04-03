@@ -165,12 +165,12 @@ body[data-creator-exiting="1"] .creator-upper-left-panels {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  background: rgba(20, 25, 40, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-panel);
   padding: 0.35rem 0.5rem;
   font-size: 0.85rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--panel-shadow);
 }
 body[data-route="creator"] .creator-lower-left-panels .creator-save-download-panel {
   animation: creator-slide-in-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -197,12 +197,12 @@ body[data-creator-exiting="1"] .creator-lower-left-panels .creator-save-download
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  background: rgba(20, 25, 40, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-panel);
   padding: 0.35rem 0.5rem;
   font-size: 0.85rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--panel-shadow);
 }
 .creator-mode-panel .creator-tools-panel-btn {
   flex: 1;
@@ -225,12 +225,12 @@ body[data-creator-exiting="1"] .creator-lower-left-panels .creator-save-download
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  background: rgba(20, 25, 40, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-panel);
   padding: 0.35rem 0.5rem;
   font-size: 0.85rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--panel-shadow);
 }
 .creator-canvas-overlays-panel .creator-tools-panel-btn {
   flex: 1;

@@ -9,6 +9,8 @@
 // --- Imports: skin & domain ---
 import { partToLayer, WORK_SIZE, RESOLUTION_MULTIPLIER, snapWorkingToSkinCellCenter } from './skin';
 import type { SkinEntry } from './domain';
+import { PaperUiSurface } from './config/paperUiSurfaces';
+import { cx, paperCard } from './ui/paperUiClasses';
 
 // --- Imports: creator modules ---
 import {
@@ -433,10 +435,10 @@ export function initCreator(): void {
   if (wrapper && !document.getElementById('creator-lower-right-panels')) {
     const container = document.createElement('div');
     container.id = 'creator-lower-right-panels';
-    container.className = 'creator-lower-right-panels';
+    container.className = cx('creator-lower-right-panels', paperCard(PaperUiSurface.creatorLowerRightPanels));
     const group = document.createElement('div');
     group.id = 'creator-right-panels-group';
-    group.className = 'creator-right-panels-group';
+    group.className = cx('creator-right-panels-group', paperCard(PaperUiSurface.creatorRightPanelsGroup));
     container.appendChild(group);
     wrapper.appendChild(container);
   } else {
@@ -444,7 +446,7 @@ export function initCreator(): void {
     if (container && !document.getElementById('creator-right-panels-group')) {
       const group = document.createElement('div');
       group.id = 'creator-right-panels-group';
-      group.className = 'creator-right-panels-group';
+      group.className = cx('creator-right-panels-group', paperCard(PaperUiSurface.creatorRightPanelsGroup));
       while (container.firstChild) group.appendChild(container.firstChild);
       container.appendChild(group);
     }

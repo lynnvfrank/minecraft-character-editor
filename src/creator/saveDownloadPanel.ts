@@ -4,6 +4,8 @@
  * Animates in from the left when creator is shown.
  */
 
+import { PaperUiSurface } from '../config/paperUiSurfaces';
+import { cx, paperBtn, paperCard } from '../ui/paperUiClasses';
 import { createEl } from './dom';
 import { createIcon } from './icons';
 
@@ -23,7 +25,7 @@ export function buildSaveDownloadPanel(ctx: SaveDownloadPanelContext): void {
     'div',
     {
       id: 'creator-save-download-panel',
-      className: 'creator-save-download-panel',
+      className: cx('creator-save-download-panel', paperCard(PaperUiSurface.saveDownloadPanel)),
       role: 'group',
       'aria-label': 'Keep and save',
     },
@@ -31,26 +33,34 @@ export function buildSaveDownloadPanel(ctx: SaveDownloadPanelContext): void {
       'button',
       {
         type: 'button',
-        className: 'creator-btn creator-save-download-btn',
+        className: cx(
+          'creator-btn',
+          'creator-save-download-btn',
+          paperBtn(PaperUiSurface.saveDownloadPanel, 'primarySm'),
+        ),
         id: 'creator-save-btn',
         title: 'Keep current skin in Outfits',
         'aria-label': 'Keep to outfits',
       },
       createIcon('modeCreatorKeep', { width: 18, height: 18 }),
-      ' Keep'
+      ' Keep',
     ),
     createEl(
       'button',
       {
         type: 'button',
-        className: 'creator-btn creator-save-download-btn',
+        className: cx(
+          'creator-btn',
+          'creator-save-download-btn',
+          paperBtn(PaperUiSurface.saveDownloadPanel, 'secondaryOutlineSm'),
+        ),
         id: 'creator-download-skin-btn',
         title: 'Save skin as PNG',
         'aria-label': 'Save skin',
       },
       createIcon('modeCreatorSave', { width: 18, height: 18 }),
-      ' Save'
-    )
+      ' Save',
+    ),
   );
 
   panel.querySelector('#creator-save-btn')?.addEventListener('click', ctx.onSave);

@@ -1,4 +1,6 @@
 import type { CreatorTexturePositionDetail, CreatorLockFeedbackDetail } from '../events/appEvents';
+import { PaperUiSurface } from '../config/paperUiSurfaces';
+import { cx, paperBtn, paperCard } from '../ui/paperUiClasses';
 import {
   creatorFocusedCreationSlice,
   creatorLayerSlice,
@@ -20,7 +22,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   const groups = ctx.layerGroups;
   panel = document.createElement('div');
   panel.id = 'creator-layers-panel';
-  panel.className = 'creator-layers-panel';
+  panel.className = cx('creator-layers-panel', paperCard(PaperUiSurface.skinLayersPanel));
   panel.setAttribute('aria-label', 'Layers');
 
   const header = document.createElement('div');
@@ -30,13 +32,13 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   titleSpan.textContent = 'Layers';
   const expandListBtn = document.createElement('button');
   expandListBtn.type = 'button';
-  expandListBtn.className = 'creator-layers-panel-expand-list';
+  expandListBtn.className = cx('creator-layers-panel-expand-list', paperBtn(PaperUiSurface.skinLayersHeaderButton, 'secondaryOutlineSm'));
   expandListBtn.textContent = 'Show all layers';
   expandListBtn.setAttribute('aria-label', 'Show all layers');
   expandListBtn.hidden = true;
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
-  toggleBtn.className = 'creator-layers-panel-toggle';
+  toggleBtn.className = cx('creator-layers-panel-toggle', paperBtn(PaperUiSurface.skinLayersHeaderButton, 'secondaryOutlineSm'));
   toggleBtn.title = 'Minimize panel';
   toggleBtn.setAttribute('aria-label', 'Minimize panel');
   const minimizeIcon = document.createElement('span');
@@ -112,7 +114,12 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
         partsWrap.className = 'creator-layers-panel-parts';
         const lBtn = document.createElement('button');
         lBtn.type = 'button';
-        lBtn.className = `creator-layer-part-btn creator-layer-part-btn-l ${lVisible ? 'creator-layer-part-visible' : 'creator-layer-part-hidden'}`;
+        lBtn.className = cx(
+          'creator-layer-part-btn',
+          'creator-layer-part-btn-l',
+          lVisible ? 'creator-layer-part-visible' : 'creator-layer-part-hidden',
+          paperBtn(PaperUiSurface.skinLayersPartButton),
+        );
         lBtn.dataset.layer = layer;
         lBtn.dataset.side = 'L';
         lBtn.textContent = 'L';
@@ -120,7 +127,12 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
         lBtn.setAttribute('aria-label', `${layerName} left`);
         const rBtn = document.createElement('button');
         rBtn.type = 'button';
-        rBtn.className = `creator-layer-part-btn creator-layer-part-btn-r ${rVisible ? 'creator-layer-part-visible' : 'creator-layer-part-hidden'}`;
+        rBtn.className = cx(
+          'creator-layer-part-btn',
+          'creator-layer-part-btn-r',
+          rVisible ? 'creator-layer-part-visible' : 'creator-layer-part-hidden',
+          paperBtn(PaperUiSurface.skinLayersPartButton),
+        );
         rBtn.dataset.layer = layer;
         rBtn.dataset.side = 'R';
         rBtn.textContent = 'R';

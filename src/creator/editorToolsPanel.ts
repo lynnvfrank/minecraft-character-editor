@@ -1,4 +1,6 @@
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import { creatorModeSlice, creatorToolsSlice } from '../state/creatorSlices';
+import { cx, paperBtn, paperCard } from '../ui/paperUiClasses';
 import { createEl } from './dom';
 import type { EditorToolsContext } from './api';
 import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE, isDrawingTool, isToggleType } from './api';
@@ -21,19 +23,19 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   if (oldModePanel) oldModePanel.remove();
 
   const modeIconOpts = { width: 18, height: 18 };
-  const modePanel = createEl('div', { id: 'creator-mode-panel', className: 'creator-mode-panel', role: 'group', 'aria-label': 'Creator mode' },
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_WARDROBE, title: 'Wardrobe', 'aria-label': 'Wardrobe' }, createIcon('modeCreatorWardrobe', modeIconOpts)),
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_3D, title: 'Edit on 3D model' }, createIcon('modeCreator3D', modeIconOpts), ' 3D'),
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_2D, title: 'Edit on 2D canvas' }, createIcon('modeCreator2D', modeIconOpts), ' 2D')
+  const modePanel = createEl('div', { id: 'creator-mode-panel', className: cx('creator-mode-panel', paperCard(PaperUiSurface.editorModePanel)), role: 'group', 'aria-label': 'Creator mode' },
+    createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-mode-btn', paperBtn(PaperUiSurface.editorModePanel)), 'data-mode': EDIT_MODE_WARDROBE, title: 'Wardrobe', 'aria-label': 'Wardrobe' }, createIcon('modeCreatorWardrobe', modeIconOpts)),
+    createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-mode-btn', paperBtn(PaperUiSurface.editorModePanel)), 'data-mode': EDIT_MODE_3D, title: 'Edit on 3D model' }, createIcon('modeCreator3D', modeIconOpts), ' 3D'),
+    createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-mode-btn', paperBtn(PaperUiSurface.editorModePanel)), 'data-mode': EDIT_MODE_2D, title: 'Edit on 2D canvas' }, createIcon('modeCreator2D', modeIconOpts), ' 2D')
   );
   upperLeftPanels.insertBefore(modePanel, upperLeftPanels.firstChild);
 
   const oldOverlaysPanel = document.getElementById('creator-canvas-overlays-panel');
   if (oldOverlaysPanel) oldOverlaysPanel.remove();
 
-  const overlaysPanel = createEl('div', { id: 'creator-canvas-overlays-panel', className: 'creator-canvas-overlays-panel', role: 'group', 'aria-label': 'Canvas overlays' },
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'rulers', title: 'Toggle rulers' }, 'Rulers'),
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'template', title: 'Show template overlay' }, 'Template')
+  const overlaysPanel = createEl('div', { id: 'creator-canvas-overlays-panel', className: cx('creator-canvas-overlays-panel', paperCard(PaperUiSurface.editorOverlaysPanel)), role: 'group', 'aria-label': 'Canvas overlays' },
+    createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-canvas-overlays-btn', paperBtn(PaperUiSurface.editorOverlaysPanel)), 'data-toggle': 'rulers', title: 'Toggle rulers' }, 'Rulers'),
+    createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-canvas-overlays-btn', paperBtn(PaperUiSurface.editorOverlaysPanel)), 'data-toggle': 'template', title: 'Show template overlay' }, 'Template')
   );
   upperLeftPanels.appendChild(overlaysPanel);
 
@@ -43,23 +45,23 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   if (oldUndoRedoPanel) oldUndoRedoPanel.remove();
 
   const iconOpts = { width: 30, height: 30 };
-  const panel = createEl('div', { id: 'creator-tools-panel', className: 'creator-tools-panel', 'aria-label': 'Editor tools' },
+  const panel = createEl('div', { id: 'creator-tools-panel', className: cx('creator-tools-panel', paperCard(PaperUiSurface.editorToolsPanel)), 'aria-label': 'Editor tools' },
     createEl('div', { className: 'creator-tools-panel-row creator-tools-panel-tools-row', role: 'group', 'aria-label': 'Drawing tools' },
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'navigate', title: 'Navigate: orbit/zoom, no paint (H, 1)', 'aria-label': 'Navigate' }, createIcon('modeCreatorToolsNavigate', iconOpts)),
+      createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-btn-icon', paperBtn(PaperUiSurface.editorToolsPanel)), 'data-tool': 'navigate', title: 'Navigate: orbit/zoom, no paint (H, 1)', 'aria-label': 'Navigate' }, createIcon('modeCreatorToolsNavigate', iconOpts)),
       createEl('div', { className: 'creator-tools-panel-divider', 'aria-hidden': 'true' }),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'pencil', title: 'Pencil (P, 2)', 'aria-label': 'Pencil' }, createIcon('modeCreatorToolsPencil', iconOpts)),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eraser', title: 'Eraser (E, 3)', 'aria-label': 'Eraser' }, createIcon('modeCreatorToolsErasor', iconOpts)),
+      createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-btn-icon', paperBtn(PaperUiSurface.editorToolsPanel)), 'data-tool': 'pencil', title: 'Pencil (P, 2)', 'aria-label': 'Pencil' }, createIcon('modeCreatorToolsPencil', iconOpts)),
+      createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-btn-icon', paperBtn(PaperUiSurface.editorToolsPanel)), 'data-tool': 'eraser', title: 'Eraser (E, 3)', 'aria-label': 'Eraser' }, createIcon('modeCreatorToolsErasor', iconOpts)),
       // Soft paint brush hidden from release UI; tool code remains (see setActiveTool guard).
       // createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'paintBrush', title: 'Soft brush (B, 4)', 'aria-label': 'Soft brush' }, createIcon('modeCreatorToolsBrush', iconOpts)),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'fill', title: 'Fill (G, 4)', 'aria-label': 'Fill' }, createIcon('modeCreatorToolsFill', iconOpts)),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eyedropper', title: 'Eyedropper: sample color from 2D or 3D (5)', 'aria-label': 'Eyedropper' }, createIcon('modeCreatorToolsDropper', iconOpts))
+      createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-btn-icon', paperBtn(PaperUiSurface.editorToolsPanel)), 'data-tool': 'fill', title: 'Fill (G, 4)', 'aria-label': 'Fill' }, createIcon('modeCreatorToolsFill', iconOpts)),
+      createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-btn-icon', paperBtn(PaperUiSurface.editorToolsPanel)), 'data-tool': 'eyedropper', title: 'Eyedropper: sample color from 2D or 3D (5)', 'aria-label': 'Eyedropper' }, createIcon('modeCreatorToolsDropper', iconOpts))
     )
   );
 
-  const undoRedoPanel = createEl('div', { id: 'creator-undo-redo-panel', className: 'creator-undo-redo-panel creator-tools-panel', role: 'group', 'aria-label': 'Undo Redo' },
+  const undoRedoPanel = createEl('div', { id: 'creator-undo-redo-panel', className: cx('creator-undo-redo-panel', 'creator-tools-panel', paperCard(PaperUiSurface.editorUndoRedoPanel)), role: 'group', 'aria-label': 'Undo Redo' },
     createEl('div', { className: 'creator-tools-panel-row creator-tools-panel-undo-redo', role: 'group', 'aria-label': 'Undo Redo' },
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon creator-tools-panel-undo-btn', id: 'creator-tools-undo-btn', title: 'Undo (Ctrl+Z)', 'aria-label': 'Undo' }, createIcon('modeCreatorToolsUndo', iconOpts)),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon creator-tools-panel-redo-btn', id: 'creator-tools-redo-btn', title: 'Redo (Ctrl+Shift+Z)', 'aria-label': 'Redo' }, createIcon('modeCreatorToolsRedo', iconOpts))
+      createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-btn-icon', 'creator-tools-panel-undo-btn', paperBtn(PaperUiSurface.editorUndoRedoPanel)), id: 'creator-tools-undo-btn', title: 'Undo (Ctrl+Z)', 'aria-label': 'Undo' }, createIcon('modeCreatorToolsUndo', iconOpts)),
+      createEl('button', { type: 'button', className: cx('creator-tools-panel-btn', 'creator-tools-panel-btn-icon', 'creator-tools-panel-redo-btn', paperBtn(PaperUiSurface.editorUndoRedoPanel)), id: 'creator-tools-redo-btn', title: 'Redo (Ctrl+Shift+Z)', 'aria-label': 'Redo' }, createIcon('modeCreatorToolsRedo', iconOpts))
     )
   );
 

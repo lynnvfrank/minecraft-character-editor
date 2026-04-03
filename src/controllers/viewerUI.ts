@@ -4,7 +4,9 @@
  */
 
 import * as THREE from 'three';
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import { logger } from '../lib';
+import { cx, paperBtn } from '../ui/paperUiClasses';
 import { APP_EVENTS, publish } from '../events/appEvents';
 import type { SkinEntry, AnimationEntry } from '../domain';
 import type { CharacterState } from './characterTypes';
@@ -47,7 +49,7 @@ export function createViewerUIController(deps: ViewerUIDeps): ViewerUIController
     skins.forEach((skin) => {
       const wrap = document.createElement('button');
       wrap.type = 'button';
-      wrap.className = 'skin-preview';
+      wrap.className = cx('skin-preview', paperBtn(PaperUiSurface.viewerSkinPreview, 'secondaryOutlineSm'));
       wrap.dataset.character = charId;
       wrap.dataset.skin = skin.path;
       wrap.setAttribute('aria-label', `Select skin: ${skin.label}`);
@@ -79,7 +81,7 @@ export function createViewerUIController(deps: ViewerUIDeps): ViewerUIController
     animations.forEach((anim) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'anim-button';
+      btn.className = cx('anim-button', paperBtn(PaperUiSurface.viewerAnimButton, 'secondaryOutlineSm'));
       btn.dataset.character = charId;
       btn.dataset.action = anim.key;
       btn.textContent = anim.label;
@@ -105,7 +107,7 @@ export function createViewerUIController(deps: ViewerUIDeps): ViewerUIController
     sequences.forEach((seq) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'sequence-button';
+      btn.className = cx('sequence-button', paperBtn(PaperUiSurface.viewerSequenceButton, 'secondaryOutlineSm'));
       btn.dataset.sequence = seq.id;
       btn.textContent = seq.label;
       btn.setAttribute('aria-label', `Play sequence: ${seq.label}`);

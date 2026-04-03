@@ -1,6 +1,7 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="paper-ui">
   <head>
+    <!-- `paper-ui`: scope Paper theme tokens/overrides (see themes/_papercss.scss). Remove when using builtin. -->
     <meta charset="UTF-8" />
     <title>3D Character Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,11 +16,11 @@
     </script>
   </head>
   <body>
-    <div id="creator-panel" class="creator-panel" aria-label="Character creator">
+    <div id="creator-panel" class="creator-panel card" aria-label="Character creator">
       <main class="creator-main">
         <div class="creator-toolbar" role="toolbar" aria-label="Editor tools"></div>
         <div class="creator-actions">
-          <button type="button" id="creator-download-btn" class="creator-btn">Download</button>
+          <button type="button" id="creator-download-btn" class="creator-btn paper-btn btn-small btn-secondary-outline">Download</button>
         </div>
       </main>
     </div>
@@ -30,25 +31,25 @@
           </div>
         </div>
         <div id="creator-lower-left-panels" class="creator-lower-left-panels">
-          <div class="creator-3d-preview-slot" id="creator-3d-preview-slot" aria-hidden="true"></div>
-          <div id="creator-home-panel" class="creator-home-panel" aria-label="Navigation">
-            <button type="button" id="enter-viewer-btn" class="creator-home-btn" aria-label="Return to home mode">Home</button>
+          <div class="creator-3d-preview-slot card" id="creator-3d-preview-slot" aria-hidden="true"></div>
+          <div id="creator-home-panel" class="creator-home-panel card" aria-label="Navigation">
+            <button type="button" id="enter-viewer-btn" class="creator-home-btn paper-btn btn-small btn-secondary-outline" aria-label="Return to home mode">Home</button>
           </div>
         </div>
       </div>
       <div id="creator-upper-right-panels-root" class="creator-upper-right-panels-root">
-        <div id="creator-wardrobe-outfits-panel" class="creator-wardrobe-outfits-panel" aria-label="Outfits">
+        <div id="creator-wardrobe-outfits-panel" class="creator-wardrobe-outfits-panel card" aria-label="Outfits">
           <div class="creator-wardrobe-outfits-header">Outfits</div>
           <div id="creator-skin-selector" class="creator-skin-selector" role="listbox" aria-label="Available skins"></div>
         </div>
       </div>
-      <div id="app-lower-left-panels" class="app-lower-left-panels">
+      <div id="app-lower-left-panels" class="app-lower-left-panels card">
         <div class="creator-home-panel" aria-label="Navigation">
-          <button type="button" id="enter-creator-btn" class="creator-home-btn" aria-label="Enter character design mode">Design</button>
+          <button type="button" id="enter-creator-btn" class="creator-home-btn paper-btn btn-small btn-secondary-outline" aria-label="Enter character design mode">Design</button>
         </div>
       </div>
-      <div id="creator-top-center-panels" class="creator-top-center-panels" aria-label="Camera controls"></div>
-      <div id="creator-bottom-center-panels" class="creator-bottom-center-panels" aria-label="Editor toolbar"></div>
+      <div id="creator-top-center-panels" class="creator-top-center-panels card" aria-label="Camera controls"></div>
+      <div id="creator-bottom-center-panels" class="creator-bottom-center-panels card" aria-label="Editor toolbar"></div>
       <div class="creator-canvas-area" id="creator-canvas-area">
         <div class="creator-canvas-wrap" id="creator-canvas-wrap">
           <div class="creator-ruler-corner" id="creator-ruler-corner"></div>
@@ -62,11 +63,11 @@
       </div>
       <div id="app">
       <div id="three-canvas-container"></div>
-      <div id="controls-bar">
+      <div id="controls-bar" class="card">
         <nav class="control-group nav-control-group">
-          <a href="#/" class="nav-link">Viewer</a>
-          <a href="#/preview" class="nav-link">Preview</a>
-          <a href="#/creator" class="nav-link">Creator</a>
+          <a href="#/" class="nav-link paper-btn btn-small btn-secondary-outline">Viewer</a>
+          <a href="#/preview" class="nav-link paper-btn btn-small btn-secondary-outline">Preview</a>
+          <a href="#/creator" class="nav-link paper-btn btn-small btn-secondary-outline">Creator</a>
         </nav>
         <div class="control-group skin-control-group">
           <span class="group-label">Skin</span>
@@ -81,7 +82,7 @@
           <div id="sequence-selector" class="button-row" role="group" aria-label="Composite sequences"></div>
         </div>
       </div>
-      <div id="test-controls" class="test-controls" aria-label="Debug test controls"></div>
+      <div id="test-controls" class="test-controls card" aria-label="Debug test controls"></div>
     </div>
     </div>
 

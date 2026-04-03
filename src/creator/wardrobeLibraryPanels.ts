@@ -1,4 +1,6 @@
 import type { SkinEntry } from '../domain';
+import { PaperUiSurface } from '../config/paperUiSurfaces';
+import { cx, paperBtn, paperCard } from '../ui/paperUiClasses';
 import { createEl } from './dom';
 import { setWardrobeSelectorPanelHoverPreviewLayer } from './wardrobeHoverPreview';
 import {
@@ -197,7 +199,7 @@ export function buildWardrobeLibraryPanels(): void {
       'div',
       {
         id: config.panelId,
-        className: 'creator-wardrobe-library-panel creator-mode-panel-hidden',
+        className: cx('creator-wardrobe-library-panel', 'creator-mode-panel-hidden', paperCard(PaperUiSurface.wardrobeLibraryPanel)),
         'aria-label': config.title,
       },
       createEl('div', { className: 'creator-wardrobe-library-header' }, config.title),
@@ -255,12 +257,13 @@ export function renderWardrobeLibraryPanel(options: RenderWardrobeLibraryPanelOp
       'button',
       {
         type: 'button',
-        className: [
+        className: cx(
           'skin-preview',
           'creator-wardrobe-library-item',
           isNone ? 'creator-wardrobe-library-item-none' : '',
           isActive ? 'active' : '',
-        ].filter(Boolean).join(' '),
+          paperBtn(PaperUiSurface.wardrobeLibraryThumbnail, 'secondaryOutlineSm'),
+        ),
         'data-path': item.path,
         'data-none': isNone ? '1' : '0',
         title: item.label,

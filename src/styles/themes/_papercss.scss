@@ -1,0 +1,54 @@
+/**
+ * PaperCSS theme — default Paper palette is **light** (`html` without `.dark`).
+ *
+ * Requires `<html class="paper-ui">` in `index.html` so layout/token rules apply only with this theme.
+ * When using `themes/_active.scss` → `builtin`, remove the `paper-ui` class from `<html>`.
+ *
+ * Dark Paper: use `<html class="paper-ui dark">` (Paper’s `html.dark` variables).
+ */
+
+@import 'papercss/dist/paper.min.css';
+
+html.paper-ui {
+  --creator-right-panel-width: 250px;
+
+  --app-bg: var(--main-background);
+  --app-fg: var(--primary-text);
+  --app-muted-fg: var(--muted-text);
+  --app-font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
+
+  --panel-surface: var(--white);
+  --panel-border: var(--muted-light);
+  --panel-shadow: 0 4px 16px var(--shadow-color-regular);
+  --radius-panel: 8px;
+
+  --preview-slot-bg: var(--main-background-light);
+  --preview-slot-border: var(--muted-light);
+  --preview-slot-shadow: 0 4px 12px var(--shadow-color-regular);
+
+  --floating-btn-border: var(--primary);
+  --floating-btn-fg: var(--primary-text);
+  --floating-btn-shadow: 0 8px 20px var(--shadow-color-regular);
+  --floating-btn-shadow-hover: 0 12px 26px var(--shadow-color-hover);
+  --floating-btn-accent-start: var(--secondary-light);
+  --floating-btn-accent-end: var(--secondary-light-10);
+  --radius-pill: 999px;
+}
+
+html.paper-ui,
+html.paper-ui body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: var(--app-font-family);
+  background: var(--app-bg);
+  color: var(--app-fg);
+}
+
+html.paper-ui body {
+  overflow: hidden;
+}
+
+/* Layout + Paper chrome overrides: `themes/_paperLateOverrides.scss` (loaded last). */

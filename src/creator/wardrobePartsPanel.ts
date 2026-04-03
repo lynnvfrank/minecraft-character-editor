@@ -1,4 +1,6 @@
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import { creatorModeSlice, creatorWardrobeFocusSlice } from '../state/creatorSlices';
+import { cx, paperBtn, paperCard } from '../ui/paperUiClasses';
 import modeWardrobeFullOutfit from './icons/mode.wardrobe.fullOutfit.svg';
 import modeWardrobeTop from './icons/mode.wardrobe.top.svg';
 import modeWardrobeHead from './icons/mode.wardrobe.head.svg';
@@ -187,8 +189,11 @@ function buildTreeRec(
 
   const layerBtn = document.createElement('button');
   layerBtn.type = 'button';
-  layerBtn.className =
-    'creator-wardrobe-parts-btn' + (selectedLayer === node.key ? ' active' : '');
+  layerBtn.className = cx(
+    'creator-wardrobe-parts-btn',
+    selectedLayer === node.key ? 'active' : '',
+    paperBtn(PaperUiSurface.wardrobeLayerButton, 'secondaryOutlineSm'),
+  );
   layerBtn.dataset.layer = node.key;
   layerBtn.title = node.label;
 
@@ -239,7 +244,11 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
 
   const panel = document.createElement('div');
   panel.id = 'creator-wardrobe-parts-panel';
-  panel.className = 'creator-wardrobe-parts-panel creator-wardrobe-parts-panel-tree';
+  panel.className = cx(
+    'creator-wardrobe-parts-panel',
+    'creator-wardrobe-parts-panel-tree',
+    paperCard(PaperUiSurface.wardrobePartsPanel),
+  );
   panel.setAttribute('role', 'tree');
   panel.setAttribute('aria-label', 'Wardrobe parts');
 

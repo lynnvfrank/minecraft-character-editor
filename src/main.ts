@@ -12,6 +12,7 @@ import {
   type CharacterStateLike,
 } from './animation';
 import { getPreviewBaseSkinCandidates } from './config/scene.config';
+import { applyIndexHtmlPaperOptOut, PaperUiSurface } from './config/paperUiSurfaces';
 import {
   getUrlSearchParams,
   parseUrlParamsConfig,
@@ -83,6 +84,7 @@ import {
   creatorSkinLoadSlice,
 } from './state/creatorSlices';
 import { logger, easeOutCubic } from './lib';
+import { cx, paperCard } from './ui/paperUiClasses';
 import { createSocketManager, createCharacterAI } from './services';
 import { preprocessSkinTexture } from './skin';
 import {
@@ -594,7 +596,7 @@ function ensurePreviewPanelsContainer(): HTMLElement | null {
   if (!container) {
     container = document.createElement('div');
     container.id = 'preview-lower-right-panels';
-    container.className = 'preview-lower-right-panels';
+    container.className = cx('preview-lower-right-panels', paperCard(PaperUiSurface.previewLowerRightPanels));
     wrapper.appendChild(container);
   }
 
@@ -602,7 +604,7 @@ function ensurePreviewPanelsContainer(): HTMLElement | null {
   if (!group) {
     group = document.createElement('div');
     group.id = 'preview-right-panels-group';
-    group.className = 'preview-right-panels-group';
+    group.className = cx('preview-right-panels-group', paperCard(PaperUiSurface.previewRightPanelsGroup));
     container.appendChild(group);
   }
 
@@ -1222,6 +1224,7 @@ export async function captureCreator3DPartThumbnail(
 // -----------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  applyIndexHtmlPaperOptOut();
   logger.info('general', 'App started');
   if (!container) throw new Error('Missing #three-canvas-container element in DOM.');
 

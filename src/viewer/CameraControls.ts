@@ -3,8 +3,10 @@
  * Publishes events only; camera movement is handled by creatorCameraController.
  */
 
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import { publish, subscribe, CREATOR_EVENTS } from '../events/appEvents';
 import { createEl } from '../creator/dom';
+import { cx, paperBtn, paperCard } from '../ui/paperUiClasses';
 
 const BUTTONS: Array<{
   id: string;
@@ -55,7 +57,7 @@ export function buildCameraControls(options?: BuildCameraControlsOptions): void 
 
   const toolbar = createEl('div', {
     id: 'creator-camera-controls-toolbar',
-    className: 'creator-camera-controls-toolbar',
+    className: cx('creator-camera-controls-toolbar', paperCard(PaperUiSurface.cameraToolbar)),
     role: 'group',
     'aria-label': 'Camera controls',
   });
@@ -65,7 +67,7 @@ export function buildCameraControls(options?: BuildCameraControlsOptions): void 
     const btn = createEl('button', {
       type: 'button',
       id: cfg.id,
-      className: 'creator-camera-controls-btn',
+      className: cx('creator-camera-controls-btn', paperBtn(PaperUiSurface.cameraToolbar)),
       title: cfg.title,
       'aria-label': cfg.title,
       'data-action': cfg.event,
@@ -82,7 +84,7 @@ export function buildCameraControls(options?: BuildCameraControlsOptions): void 
     const focusedBtn = createEl('button', {
       type: 'button',
       id: 'camera-focused-toggle',
-      className: 'creator-camera-controls-btn creator-camera-controls-btn-focused',
+      className: cx('creator-camera-controls-btn', 'creator-camera-controls-btn-focused', paperBtn(PaperUiSurface.cameraToolbar)),
       title: 'Guided view: camera follows selection. Turn off for full control.',
     });
     const syncFocusedBtn = () => {

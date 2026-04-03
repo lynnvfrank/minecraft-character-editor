@@ -4,7 +4,9 @@
  * saveCurrentSkinToOutfits, downloadCurrentSkin, bindOutfitsKeyboardNav.
  */
 
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import type { SkinEntry } from '../domain';
+import { cx, paperBtn } from '../ui/paperUiClasses';
 import type { CreatorState } from '../state';
 import type { WardrobeApi } from './wardrobe';
 import { extractColorsFromSkin } from './swatches';
@@ -95,7 +97,12 @@ export function createSkinGalleryApi(deps: SkinGalleryDeps): SkinGalleryApi {
     allSkins.forEach((skin, index) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'skin-preview creator-skin-preview creator-wardrobe-library-item';
+      btn.className = cx(
+        'skin-preview',
+        'creator-skin-preview',
+        'creator-wardrobe-library-item',
+        paperBtn(PaperUiSurface.skinGalleryOutfitThumbnail, 'secondaryOutlineSm'),
+      );
       btn.dataset.path = skin.path;
       btn.dataset.index = String(index);
       btn.setAttribute('aria-label', `Load skin: ${skin.label}`);

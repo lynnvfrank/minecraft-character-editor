@@ -1,4 +1,6 @@
+import { PaperUiSurface } from '../config/paperUiSurfaces';
 import { creatorColorSlice } from '../state/creatorSlices';
+import { cx, paperBtn, paperCard } from '../ui/paperUiClasses';
 import { hexToHsva, hsvaToHex, adjustHexBrightness, isValidHex } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { ColorPickerContext } from './api';
@@ -63,7 +65,7 @@ export function buildColorPickerPanel(ctx: ColorPickerContext): void {
 
   panel = document.createElement('div');
   panel.id = 'creator-color-picker-panel';
-  panel.className = 'creator-color-picker-panel';
+  panel.className = cx('creator-color-picker-panel', paperCard(PaperUiSurface.colorPickerPanel));
   panel.setAttribute('aria-label', 'Color picker');
   panel.dataset.hue = String(h);
   panel.dataset.sat = String(s);
@@ -83,7 +85,7 @@ export function buildColorPickerPanel(ctx: ColorPickerContext): void {
   titleSpan.textContent = 'Color';
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
-  toggleBtn.className = 'creator-color-picker-toggle';
+  toggleBtn.className = cx('creator-color-picker-toggle', paperBtn(PaperUiSurface.colorPickerToggle, 'secondaryOutlineSm'));
   toggleBtn.title = 'Minimize panel';
   toggleBtn.setAttribute('aria-label', 'Minimize panel');
   const minimizeIcon = document.createElement('span');
@@ -137,7 +139,7 @@ export function buildColorPickerPanel(ctx: ColorPickerContext): void {
   for (let i = 0; i < SWATCH_COUNT; i++) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'creator-color-picker-swatch-btn';
+    btn.className = cx('creator-color-picker-swatch-btn', paperBtn(PaperUiSurface.colorPickerSwatchBtn, 'secondaryOutlineSm'));
     btn.dataset.index = String(i);
     btn.style.backgroundColor = swatchColors[i];
     const delta = getDeltaForIndex(i, activeSwatchIndex);
