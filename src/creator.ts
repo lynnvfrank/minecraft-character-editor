@@ -335,10 +335,13 @@ function buildCreatorPanels(): void {
     setLayerLocked: layerVisibilityApi.setLayer3DLocked,
     onVisibilitySoloClick: layerVisibilityApi.onVisibilitySoloClick,
     onLockSoloClick: layerVisibilityApi.onLockSoloClick,
+    exitVisibilitySoloRestore: layerVisibilityApi.exitVisibilitySoloRestore,
+    clearVisibilitySoloFlags: layerVisibilityApi.clearVisibilitySoloFlags,
     syncVisibilityCheckboxes: layerVisibilityApi.syncVisibilityCheckboxes,
     syncLockCheckboxes: layerVisibilityApi.syncLockCheckboxes,
     clearSoloIndicator: layerVisibilityApi.clearSoloIndicator,
     setupDragToToggle: layerVisibilityApi.setupDragToToggle,
+    setupPartDragToToggle: layerVisibilityApi.setupPartDragToToggle,
     layerGroups: LAYER_GROUPS,
     getEditMode: () => state.editMode,
     getFocusedCreationEnabled: () => state.focusedCreationEnabled,
@@ -479,7 +482,6 @@ export function initCreator(): void {
     onCanvasChange: () => creatorCanvasSlice.notify(),
     updateUndoRedoButtons: updateAllUndoRedoButtons,
     undoLimit: UNDO_LIMIT,
-    getFocusedCreationEnabled: () => state.focusedCreationEnabled,
     clearSkinHoverPreview,
     updateSkinHoverPreview,
   };
@@ -699,6 +701,10 @@ export function getActiveTool(): DrawingTool {
 export function setActiveTool(tool: DrawingTool): void {
   /** Paint brush is not exposed in the toolbar; reject selection (API / stale state). */
   if (tool === 'paintBrush') {
+    tool = 'pencil';
+  }
+  /** Fill is not exposed in the toolbar; reject selection (API / stale state). */
+  if (tool === 'fill') {
     tool = 'pencil';
   }
   state.activeTool = tool;

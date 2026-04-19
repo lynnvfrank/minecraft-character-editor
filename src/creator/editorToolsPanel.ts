@@ -51,8 +51,9 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
       createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eraser', title: 'Eraser (E, 3)', 'aria-label': 'Eraser' }, createIcon('modeCreatorToolsErasor', iconOpts)),
       // Soft paint brush hidden from release UI; tool code remains (see setActiveTool guard).
       // createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'paintBrush', title: 'Soft brush (B, 4)', 'aria-label': 'Soft brush' }, createIcon('modeCreatorToolsBrush', iconOpts)),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'fill', title: 'Fill (G, 4)', 'aria-label': 'Fill' }, createIcon('modeCreatorToolsFill', iconOpts)),
-      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eyedropper', title: 'Eyedropper: sample color from 2D or 3D (5)', 'aria-label': 'Eyedropper' }, createIcon('modeCreatorToolsDropper', iconOpts))
+      // Fill disabled in release UI (no toolbar button, no G shortcut; setActiveTool rejects fill).
+      // createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'fill', title: 'Fill (G, 4)', 'aria-label': 'Fill' }, createIcon('modeCreatorToolsFill', iconOpts)),
+      createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-btn-icon', 'data-tool': 'eyedropper', title: 'Eyedropper: sample color from 2D or 3D (4)', 'aria-label': 'Eyedropper' }, createIcon('modeCreatorToolsDropper', iconOpts))
     )
   );
 

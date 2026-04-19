@@ -88,14 +88,15 @@ export function createEditorToolKeyBindings(
     //   e.preventDefault();
     //   setActiveTool('paintBrush');
     // },
-    g: (e) => {
-      e.preventDefault();
-      setActiveTool('fill');
-    },
-    G: (e) => {
-      e.preventDefault();
-      setActiveTool('fill');
-    },
+    // Fill disabled in release UI — no keyboard shortcut (see setActiveTool guard).
+    // g: (e) => {
+    //   e.preventDefault();
+    //   setActiveTool('fill');
+    // },
+    // G: (e) => {
+    //   e.preventDefault();
+    //   setActiveTool('fill');
+    // },
   };
 
   const ctrlKeyBindings: Record<string, (e: KeyboardEvent) => void> = {

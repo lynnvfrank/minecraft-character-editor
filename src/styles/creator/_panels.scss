@@ -43,6 +43,68 @@ body[data-route="creator"] .creator-upper-right-panels-root {
   align-items: stretch;
   gap: 0.5rem;
 }
+/* Creator.Wardrobe: one library column (Outfits only, or Outfits + one part library). Fills viewport height; grids scroll. */
+body[data-route="creator"] .creator-upper-right-panels-root--wardrobe-single-library {
+  bottom: 0.75rem;
+  min-height: 0;
+}
+body[data-route="creator"]
+  .creator-upper-right-panels-root--wardrobe-single-library
+  .creator-wardrobe-library-panel:not(.creator-mode-panel-hidden):not(#creator-wardrobe-outfits-panel) {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.3rem 0.5rem 0.75rem;
+}
+body[data-route="creator"]
+  .creator-upper-right-panels-root--wardrobe-single-library
+  .creator-wardrobe-library-panel:not(.creator-mode-panel-hidden):not(#creator-wardrobe-outfits-panel)
+  .creator-wardrobe-library-selector {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  justify-items: center;
+  align-content: start;
+  gap: 0.5rem;
+}
+body[data-route="creator"]
+  .creator-upper-right-panels-root--wardrobe-single-library:has(
+    .creator-wardrobe-library-panel:not(.creator-mode-panel-hidden):not(#creator-wardrobe-outfits-panel)
+  )
+  #creator-wardrobe-outfits-panel {
+  flex: 0 0 auto;
+}
+body[data-route="creator"]
+  .creator-upper-right-panels-root--wardrobe-single-library:not(
+    :has(.creator-wardrobe-library-panel:not(.creator-mode-panel-hidden):not(#creator-wardrobe-outfits-panel))
+  )
+  #creator-wardrobe-outfits-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.3rem 0.5rem 0.75rem;
+}
+body[data-route="creator"]
+  .creator-upper-right-panels-root--wardrobe-single-library:not(
+    :has(.creator-wardrobe-library-panel:not(.creator-mode-panel-hidden):not(#creator-wardrobe-outfits-panel))
+  )
+  #creator-wardrobe-outfits-panel
+  .creator-skin-selector {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  justify-items: center;
+  align-content: start;
+  gap: 0.5rem;
+}
 /* Creator.Wardrobe: paired part libraries stacked (hat/head, chest/arms, vest/sleeves, pants/legs). */
 body[data-route="creator"] .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries {
   bottom: 0.75rem;

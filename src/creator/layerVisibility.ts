@@ -33,11 +33,18 @@ export type LayerVisibilityApi = {
     getValue: (layer: string) => boolean,
     setValue: (layer: string, value: boolean) => void,
     sync: (panel: HTMLElement) => void,
-    canStartDrag?: (e: Event) => boolean
+    canStartDrag?: (e: Event) => boolean,
+    /** When true (visibility row drag only), paint the same on/off across L/R limb part buttons. */
+    applyPartsWhileDragging?: boolean
   ) => void;
+  setupPartDragToToggle: (panel: HTMLElement, sync: (panel: HTMLElement) => void) => void;
   onVisibilitySoloClick: (layer: string) => void;
   onLockSoloClick: (layer: string) => void;
   clearSoloIndicator: (panel: HTMLElement) => void;
+  /** End Alt visibility solo and restore pre-solo visibility + L/R part state (no-op if not in solo). */
+  exitVisibilitySoloRestore: () => void;
+  /** Drop Alt visibility solo bookkeeping without changing layer visibility (keeps current on/off mask). */
+  clearVisibilitySoloFlags: () => void;
   clearLayerSoloModes: () => void;
   saveLayerStateAndNormalizeForNonEditMode: () => void;
   restoreLayerStateForEditMode: () => void;
@@ -51,10 +58,29 @@ function getLayerUnderPoint(clientX: number, clientY: number): string | null {
   return row instanceof HTMLElement ? row.dataset.layer ?? null : null;
 }
 
+function getPartButtonUnderPoint(
+  clientX: number,
+  clientY: number
+): { layer: string; side: PartSide } | null {
+  const el = document.elementFromPoint(clientX, clientY);
+  if (!el) return null;
+  const btn = el.closest('.creator-layer-part-btn');
+  if (!(btn instanceof HTMLElement)) return null;
+  const layer = btn.dataset.layer;
+  const side = btn.dataset.side;
+  if (!layer || (side !== 'L' && side !== 'R')) return null;
+  if (!isLayerKey(layer) || !isLayerWithParts(layer)) return null;
+  return { layer, side };
+}
+
 export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityApi {
   let savedLayerStateBeforeNonEditMode: SavedLayerState | null = null;
+  /** Snapshot of `layer3DPartVisible` before Alt visibility solo; restored when solo exits. */
+  let visibilitySoloBeforePartState: Partial<
+    Record<string, { L?: boolean; R?: boolean }>
+  > | null = null;
 
-  function setLayer3DVisibleAll(visible: Record<string, boolean>): void {
+  function setLayer3DVisibleAll(visible: Record<string, boolean>, notify = true): void {
     let changed = false;
     for (const k of LAYER_KEYS) {
       if (visible[k] !== undefined && state.layer3DVisible[k] !== visible[k]) {
@@ -62,7 +88,7 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
         changed = true;
       }
     }
-    if (changed) {
+    if (changed && notify) {
       creatorLayerSlice.notify();
     }
   }
@@ -133,6 +159,67 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
       });
   }
 
+  function setupPartDragToToggle(panel: HTMLElement, sync: (panel: HTMLElement) => void): void {
+    panel.querySelectorAll<HTMLButtonElement>('.creator-layer-part-btn').forEach((btn) => {
+      btn.addEventListener('mousedown', (e) => {
+        if (!(e instanceof MouseEvent) || e.button !== 0) return;
+        if (e.altKey) return;
+        const layer = btn.dataset.layer;
+        const side = btn.dataset.side;
+        if (!layer || (side !== 'L' && side !== 'R')) return;
+        if (!isLayerKey(layer) || !isLayerWithParts(layer)) return;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const dragValue = !getPartVisible(layer, side as PartSide);
+        let hasDragged = false;
+        let clickSuppressor: ((clickEv: Event) => void) | null = null;
+        const removeClickSuppressor = () => {
+          if (clickSuppressor) {
+            btn.removeEventListener('click', clickSuppressor, true);
+            clickSuppressor = null;
+          }
+        };
+        const tearDown = () => {
+          document.removeEventListener('mousemove', handleMove);
+          document.removeEventListener('mouseup', handleUp, true);
+          removeClickSuppressor();
+        };
+        const handleMove = (moveEv: MouseEvent) => {
+          if (!hasDragged) {
+            const dx = moveEv.clientX - startX;
+            const dy = moveEv.clientY - startY;
+            if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
+            hasDragged = true;
+            moveEv.preventDefault();
+            applyPartDragTarget({ layer, side: side as PartSide }, dragValue);
+            sync(panel);
+            clickSuppressor = (clickEv: Event) => {
+              removeClickSuppressor();
+              clickEv.preventDefault();
+              clickEv.stopPropagation();
+            };
+            btn.addEventListener('click', clickSuppressor, true);
+          }
+          const partTarget = getPartButtonUnderPoint(moveEv.clientX, moveEv.clientY);
+          if (partTarget != null) {
+            applyPartDragTarget(partTarget, dragValue);
+            sync(panel);
+          }
+          const targetLayer = getLayerUnderPoint(moveEv.clientX, moveEv.clientY);
+          if (targetLayer != null && isLayerKey(targetLayer)) {
+            setLayer3DVisible(targetLayer, dragValue);
+            sync(panel);
+          }
+        };
+        const handleUp = () => {
+          tearDown();
+        };
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('mouseup', handleUp, true);
+      });
+    });
+  }
+
   function setupDragToToggle(
     panel: HTMLElement,
     labelSelector: string,
@@ -140,7 +227,8 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
     getValue: (layer: string) => boolean,
     setValue: (layer: string, value: boolean) => void,
     sync: (panel: HTMLElement) => void,
-    canStartDrag: (e: Event) => boolean = () => true
+    canStartDrag: (e: Event) => boolean = () => true,
+    applyPartsWhileDragging = false
   ): void {
     panel.querySelectorAll(labelSelector).forEach((label) => {
       const input = label.querySelector<HTMLInputElement>(inputSelector);
@@ -149,11 +237,24 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
       label.addEventListener('mousedown', (e) => {
         if (!(e instanceof MouseEvent) || e.button !== 0 || !canStartDrag(e))
           return;
-        e.preventDefault();
+        // Do not preventDefault on mousedown: it breaks the first label→checkbox
+        // activation so users often need a second click. Suppress only after a drag commits.
         const startX = e.clientX;
         const startY = e.clientY;
         const dragValue = !getValue(layer);
         let hasDragged = false;
+        let clickSuppressor: ((clickEv: Event) => void) | null = null;
+        const removeClickSuppressor = () => {
+          if (clickSuppressor) {
+            label.removeEventListener('click', clickSuppressor, true);
+            clickSuppressor = null;
+          }
+        };
+        const tearDown = () => {
+          document.removeEventListener('mousemove', handleMove);
+          document.removeEventListener('mouseup', handleUp, true);
+          removeClickSuppressor();
+        };
         const handleMove = (moveEv: MouseEvent) => {
           if (!hasDragged) {
             const dx = moveEv.clientX - startX;
@@ -164,29 +265,41 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
             )
               return;
             hasDragged = true;
+            moveEv.preventDefault();
             setValue(layer, dragValue);
             sync(panel);
+            clickSuppressor = (clickEv: Event) => {
+              removeClickSuppressor();
+              const t = clickEv.target;
+              if (
+                t instanceof HTMLElement &&
+                t.closest('.creator-layer-part-btn')
+              ) {
+                return;
+              }
+              clickEv.preventDefault();
+              clickEv.stopPropagation();
+            };
+            label.addEventListener('click', clickSuppressor, true);
           }
           const targetLayer = getLayerUnderPoint(moveEv.clientX, moveEv.clientY);
           if (targetLayer != null && isLayerKey(targetLayer)) {
             setValue(targetLayer, dragValue);
             sync(panel);
           }
-        };
-        const handleClick = (clickEv: Event) => {
-          label.removeEventListener('click', handleClick, true);
-          if (hasDragged) {
-            clickEv.preventDefault();
-            clickEv.stopPropagation();
+          if (applyPartsWhileDragging) {
+            const partTarget = getPartButtonUnderPoint(moveEv.clientX, moveEv.clientY);
+            if (partTarget != null) {
+              applyPartDragTarget(partTarget, dragValue);
+              sync(panel);
+            }
           }
         };
         const handleUp = () => {
-          document.removeEventListener('mousemove', handleMove);
-          document.removeEventListener('mouseup', handleUp, true);
+          tearDown();
         };
         document.addEventListener('mousemove', handleMove);
         document.addEventListener('mouseup', handleUp, true);
-        label.addEventListener('click', handleClick, true);
       });
     });
   }
@@ -196,16 +309,65 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
     indicator?.remove();
   }
 
+  function saveVisibilitySoloPartBackup(): void {
+    visibilitySoloBeforePartState = Object.fromEntries(
+      Object.entries(state.layer3DPartVisible).map(([k, v]) => [k, { ...v }])
+    );
+  }
+
+  function restoreVisibilitySoloPartBackup(): void {
+    if (visibilitySoloBeforePartState == null) {
+      state.layer3DPartVisible = {};
+    } else {
+      state.layer3DPartVisible = Object.fromEntries(
+        Object.entries(visibilitySoloBeforePartState).map(([k, v]) => [
+          k,
+          { ...v },
+        ])
+      );
+    }
+    visibilitySoloBeforePartState = null;
+  }
+
+  function exitVisibilitySoloRestore(): void {
+    if (!state.layer3DSoloMode) return;
+    if (state.layer3DSoloBeforeState)
+      setLayer3DVisibleAll(state.layer3DSoloBeforeState, false);
+    restoreVisibilitySoloPartBackup();
+    creatorLayerSlice.notify();
+    state.layer3DSoloMode = false;
+    state.layer3DSoloBeforeState = null;
+    state.layer3DSoloCurrentLayer = null;
+  }
+
+  function clearVisibilitySoloFlags(): void {
+    if (!state.layer3DSoloMode) return;
+    state.layer3DSoloMode = false;
+    state.layer3DSoloBeforeState = null;
+    state.layer3DSoloCurrentLayer = null;
+    visibilitySoloBeforePartState = null;
+  }
+
+  /** Part drag / eye-row drag over parts: show layer without restoring the pre-solo “all layers” snapshot. */
+  function applyPartDragTarget(
+    partTarget: { layer: string; side: PartSide },
+    dragValue: boolean
+  ): void {
+    if (!isLayerKey(partTarget.layer) || !isLayerWithParts(partTarget.layer)) return;
+    if (dragValue && state.layer3DVisible[partTarget.layer] !== true) {
+      clearVisibilitySoloFlags();
+      setLayer3DVisible(partTarget.layer, true);
+    }
+    setLayerPartVisible(partTarget.layer, partTarget.side, dragValue);
+  }
+
   function onVisibilitySoloClick(layer: string): void {
     if (state.layer3DSoloMode) {
       if (state.layer3DSoloCurrentLayer === layer) {
-        if (state.layer3DSoloBeforeState)
-          setLayer3DVisibleAll(state.layer3DSoloBeforeState);
-        state.layer3DSoloMode = false;
-        state.layer3DSoloBeforeState = null;
-        state.layer3DSoloCurrentLayer = null;
+        exitVisibilitySoloRestore();
       } else {
         state.layer3DSoloCurrentLayer = layer;
+        state.layer3DPartVisible = {};
         const soloState = Object.fromEntries(
           LAYER_KEYS.map((k) => [k, k === layer])
         );
@@ -213,6 +375,8 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
       }
     } else {
       state.layer3DSoloBeforeState = { ...state.layer3DVisible };
+      saveVisibilitySoloPartBackup();
+      state.layer3DPartVisible = {};
       state.layer3DSoloCurrentLayer = layer;
       const soloState = Object.fromEntries(
         LAYER_KEYS.map((k) => [k, k === layer])
@@ -252,6 +416,7 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
     state.layer3DSoloMode = false;
     state.layer3DSoloBeforeState = null;
     state.layer3DSoloCurrentLayer = null;
+    visibilitySoloBeforePartState = null;
     state.layer3DSoloLockMode = false;
     state.layer3DSoloLockBeforeState = null;
     state.layer3DSoloLockCurrentLayer = null;
@@ -325,9 +490,12 @@ export function createLayerVisibilityApi(state: CreatorState): LayerVisibilityAp
     syncVisibilityCheckboxes,
     syncLockCheckboxes,
     setupDragToToggle,
+    setupPartDragToToggle,
     onVisibilitySoloClick,
     onLockSoloClick,
     clearSoloIndicator,
+    exitVisibilitySoloRestore,
+    clearVisibilitySoloFlags,
     clearLayerSoloModes,
     saveLayerStateAndNormalizeForNonEditMode,
     restoreLayerStateForEditMode,

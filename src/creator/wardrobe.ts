@@ -154,6 +154,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
     if (currentIds.length === 0) {
       root?.classList.remove('creator-upper-right-panels-root--wardrobe-dual-libraries');
+      root?.classList.remove('creator-upper-right-panels-root--wardrobe-single-library');
       return;
     }
 
@@ -182,6 +183,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
         setModePanelHidden(panel, true);
       });
       root?.classList.remove('creator-upper-right-panels-root--wardrobe-dual-libraries');
+      root?.classList.remove('creator-upper-right-panels-root--wardrobe-single-library');
     }, delayMs);
   }
 
@@ -213,6 +215,10 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     const token = ++wardrobePanelTransitionToken;
     const isDualLibraries = layer != null && isWardrobeDualLibrarySplitLayer(layer);
     root?.classList.toggle('creator-upper-right-panels-root--wardrobe-dual-libraries', isDualLibraries);
+    root?.classList.toggle(
+      'creator-upper-right-panels-root--wardrobe-single-library',
+      !isDualLibraries && targetIds.length > 0,
+    );
 
     if (panelSetsEqual(currentIds, targetIds)) {
       for (const id of targetIds) {

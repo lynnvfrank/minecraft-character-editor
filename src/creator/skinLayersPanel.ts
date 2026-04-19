@@ -8,7 +8,27 @@ import {
 } from '../state/creatorSlices';
 import type { SkinLayersContext, PartSide } from './api';
 import { createIcon } from './icons';
-import { isLayerWithParts } from '../skin';
+
+/** Matches `LAYER_GROUPS` pairs in `creator.ts` — sleeves/arms and pants/legs share a Left/Right limb grid (no per-layer name rows). */
+function isLimbPairGroup(group: readonly string[]): boolean {
+  const key = group.join(',');
+  return key === 'sleeves,arms' || key === 'pants,legs';
+}
+
+function limbPartButtonLabel(layerKey: string): string {
+  switch (layerKey) {
+    case 'sleeves':
+      return 'Sleeve';
+    case 'arms':
+      return 'Arm';
+    case 'pants':
+      return 'Pant';
+    case 'legs':
+      return 'Leg';
+    default:
+      return layerKey.charAt(0).toUpperCase() + layerKey.slice(1);
+  }
+}
 
 export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   const upperLeftPanels = document.getElementById('creator-upper-left-panels');
@@ -54,7 +74,6 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
 
   const updateLayerButtonUI = (panelEl: HTMLElement) => {
     panelEl.querySelectorAll<HTMLElement>('.creator-layers-panel-row').forEach((rowEl) => {
-      const layer = rowEl.dataset.layer;
       const visibleInput = rowEl.querySelector<HTMLInputElement>('.creator-layer-3d-visible');
       const lockInput = rowEl.querySelector<HTMLInputElement>('.creator-layer-3d-lock');
       const eyeEl = rowEl.querySelector<SVGSVGElement>('.creator-layer-eye');
@@ -67,22 +86,88 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       rowEl.classList.toggle('creator-layer-unlocked', !isLocked);
       if (eyeEl) eyeEl.replaceWith(createIcon(isVisible ? 'modeCreatorVisible' : 'modeCreatorHidden', { width: 16, height: 16, className: 'creator-layer-eye' }));
       if (lockEl) lockEl.replaceWith(createIcon(isLocked ? 'modeCreatorLock' : 'modeCreatorUnlock', { width: 16, height: 16, className: 'creator-layer-lock' }));
-      if (layer && isLayerWithParts(layer)) {
-        const parts = ctx.layerPartVisible[layer];
-        ['L', 'R'].forEach((side) => {
-          const btn = rowEl.querySelector<HTMLButtonElement>(`.creator-layer-part-btn[data-side="${side}"]`);
-          if (btn) {
-            const visible = side === 'R' ? (parts?.R !== false) : (parts?.L !== false);
-            btn.classList.toggle('creator-layer-part-visible', visible);
-            btn.classList.toggle('creator-layer-part-hidden', !visible);
-          }
-        });
+    });
+    panelEl.querySelectorAll<HTMLButtonElement>('.creator-layer-part-btn').forEach((btn) => {
+      const layer = btn.dataset.layer;
+      const side = btn.dataset.side;
+      if (!layer || (side !== 'L' && side !== 'R')) return;
+      const visible = ctx.getPartVisible(layer, side);
+      btn.classList.toggle('creator-layer-part-visible', visible);
+      btn.classList.toggle('creator-layer-part-hidden', !visible);
+      const eyeEl = btn.querySelector<SVGSVGElement>('.creator-layer-part-btn-eye');
+      if (eyeEl) {
+        eyeEl.replaceWith(
+          createIcon(visible ? 'modeCreatorVisible' : 'modeCreatorHidden', {
+            width: 14,
+            height: 14,
+            className: 'creator-layer-eye creator-layer-part-btn-eye',
+          })
+        );
       }
     });
   };
 
   for (let i = 0; i < groups.length; i++) {
     const group = groups[i];
+    if (isLimbPairGroup(group)) {
+      const composite = document.createElement('div');
+      composite.className = 'creator-layers-panel-composite';
+      composite.dataset.layers = group.join(' ');
+
+      const partsRoot = document.createElement('div');
+      partsRoot.className = 'creator-layers-panel-limb-parts';
+      partsRoot.setAttribute('role', 'group');
+      const showSideColumnTitles = group[0] === 'sleeves';
+
+      for (const sideSpec of [{ key: 'L' as const, title: 'Left' }, { key: 'R' as const, title: 'Right' }]) {
+        const col = document.createElement('div');
+        col.className = 'creator-layers-panel-limb-column';
+        const btnWrap = document.createElement('div');
+        btnWrap.className = 'creator-layers-panel-limb-side-btns';
+        for (const layer of group) {
+          const partVis = ctx.getPartVisible(layer, sideSpec.key);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `creator-layer-part-btn creator-layer-part-btn-${sideSpec.key.toLowerCase()} ${partVis ? 'creator-layer-part-visible' : 'creator-layer-part-hidden'}`;
+          btn.dataset.layer = layer;
+          btn.dataset.side = sideSpec.key;
+          const short = limbPartButtonLabel(layer);
+          const labelSpan = document.createElement('span');
+          labelSpan.className = 'creator-layer-part-btn-label';
+          labelSpan.textContent = short;
+          const eyeIcon = createIcon(partVis ? 'modeCreatorVisible' : 'modeCreatorHidden', {
+            width: 14,
+            height: 14,
+            className: 'creator-layer-eye creator-layer-part-btn-eye',
+          });
+          btn.append(labelSpan, eyeIcon);
+          btn.title = `${layer} ${sideSpec.title.toLowerCase()}: toggle visibility`;
+          btn.setAttribute('aria-label', `${short} ${sideSpec.title}`);
+          btnWrap.appendChild(btn);
+        }
+        if (showSideColumnTitles) {
+          const titleEl = document.createElement('span');
+          titleEl.className = 'creator-layers-panel-limb-side-title';
+          titleEl.textContent = sideSpec.title;
+          col.append(titleEl, btnWrap);
+        } else {
+          col.appendChild(btnWrap);
+        }
+        partsRoot.appendChild(col);
+      }
+      composite.appendChild(partsRoot);
+
+      list.appendChild(composite);
+
+      if (i < groups.length - 1) {
+        const sep = document.createElement('div');
+        sep.className = 'creator-layers-panel-separator';
+        sep.setAttribute('aria-hidden', 'true');
+        list.appendChild(sep);
+      }
+      continue;
+    }
+
     for (const layer of group) {
       const row = document.createElement('div');
       row.className = 'creator-layers-panel-row';
@@ -90,45 +175,24 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
 
       const layerName = layer.charAt(0).toUpperCase() + layer.slice(1);
 
-      const visibilityLabel = document.createElement('label');
-      visibilityLabel.className = 'creator-layers-panel-visibility';
-      visibilityLabel.title = `${layerName} visibility (eye): hide to paint underlying parts. Alt+click: solo this layer`;
+      /** Wrapper div (not a label) so L/R part buttons are not inside the eye checkbox label — that nesting broke part clicks. */
+      const visibilityWrap = document.createElement('div');
+      visibilityWrap.className = 'creator-layers-panel-visibility';
       const visibilityInput = document.createElement('input');
       visibilityInput.type = 'checkbox';
       visibilityInput.className = 'creator-layer-3d-visible';
       visibilityInput.dataset.layer = layer;
       visibilityInput.checked = ctx.layerVisibility[layer];
       const eyeIcon = createIcon(visibilityInput.checked ? 'modeCreatorVisible' : 'modeCreatorHidden', { width: 16, height: 16, className: 'creator-layer-eye' });
+
+      const visibilityToggle = document.createElement('label');
+      visibilityToggle.className = 'creator-layers-panel-visibility-toggle';
+      visibilityToggle.title = `${layerName} visibility (eye): hide to paint underlying parts. Alt+click: solo this layer`;
       const layerNameSpan = document.createElement('span');
       layerNameSpan.className = 'creator-layers-panel-name';
       layerNameSpan.textContent = layerName;
-      visibilityLabel.append(visibilityInput, eyeIcon, layerNameSpan);
-
-      if (isLayerWithParts(layer)) {
-        const parts = ctx.layerPartVisible[layer];
-        const lVisible = parts?.L !== false;
-        const rVisible = parts?.R !== false;
-        const partsWrap = document.createElement('span');
-        partsWrap.className = 'creator-layers-panel-parts';
-        const lBtn = document.createElement('button');
-        lBtn.type = 'button';
-        lBtn.className = `creator-layer-part-btn creator-layer-part-btn-l ${lVisible ? 'creator-layer-part-visible' : 'creator-layer-part-hidden'}`;
-        lBtn.dataset.layer = layer;
-        lBtn.dataset.side = 'L';
-        lBtn.textContent = 'L';
-        lBtn.title = `${layerName} left: toggle visibility`;
-        lBtn.setAttribute('aria-label', `${layerName} left`);
-        const rBtn = document.createElement('button');
-        rBtn.type = 'button';
-        rBtn.className = `creator-layer-part-btn creator-layer-part-btn-r ${rVisible ? 'creator-layer-part-visible' : 'creator-layer-part-hidden'}`;
-        rBtn.dataset.layer = layer;
-        rBtn.dataset.side = 'R';
-        rBtn.textContent = 'R';
-        rBtn.title = `${layerName} right: toggle visibility`;
-        rBtn.setAttribute('aria-label', `${layerName} right`);
-        partsWrap.append(lBtn, rBtn);
-        visibilityLabel.append(partsWrap);
-      }
+      visibilityToggle.append(visibilityInput, eyeIcon, layerNameSpan);
+      visibilityWrap.append(visibilityToggle);
 
       const lockLabel = document.createElement('label');
       lockLabel.className = 'creator-layers-panel-lock';
@@ -141,7 +205,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       const lockIcon = createIcon(lockInput.checked ? 'modeCreatorLock' : 'modeCreatorUnlock', { width: 16, height: 16, className: 'creator-layer-lock' });
       lockLabel.append(lockInput, lockIcon);
 
-      row.append(visibilityLabel, lockLabel);
+      row.append(visibilityWrap, lockLabel);
       list.appendChild(row);
     }
     if (i < groups.length - 1) {
@@ -154,11 +218,11 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
 
   panel.append(header, list);
 
-  panel.querySelectorAll('.creator-layers-panel-visibility').forEach((label) => {
-    const input = label.querySelector<HTMLInputElement>('.creator-layer-3d-visible');
+  panel.querySelectorAll('.creator-layers-panel-visibility-toggle').forEach((toggleLabel) => {
+    const input = toggleLabel.querySelector<HTMLInputElement>('.creator-layer-3d-visible');
     const layer = input?.dataset.layer;
     if (!layer) return;
-    label.addEventListener('click', (e) => {
+    toggleLabel.addEventListener('click', (e) => {
       if (e instanceof MouseEvent && e.altKey) {
         e.preventDefault();
         ctx.onVisibilitySoloClick(layer);
@@ -202,34 +266,61 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
 
   panel.querySelectorAll<HTMLButtonElement>('.creator-layer-part-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
+      if (e instanceof MouseEvent && e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const layer = btn.dataset.layer;
+        if (layer) {
+          ctx.onVisibilitySoloClick(layer);
+          if (panel) {
+            ctx.syncVisibilityCheckboxes(panel);
+            updateLayerButtonUI(panel);
+            ctx.clearSoloIndicator(panel);
+          }
+        }
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       const layer = btn.dataset.layer;
       const side = btn.dataset.side as PartSide | undefined;
       if (layer && (side === 'L' || side === 'R')) {
-        const parts = ctx.layerPartVisible[layer];
-        const current = side === 'R' ? (parts?.R !== false) : (parts?.L !== false);
-        ctx.setLayerPartVisible(layer, side, !current);
-        if (panel) updateLayerButtonUI(panel);
+        if (!ctx.isLayer3DVisible(layer)) {
+          ctx.clearVisibilitySoloFlags();
+          ctx.setLayerVisible(layer, true);
+          ctx.setLayerPartVisible(layer, side, true);
+        } else {
+          const current = ctx.getPartVisible(layer, side);
+          ctx.setLayerPartVisible(layer, side, !current);
+        }
+        if (panel) {
+          ctx.syncVisibilityCheckboxes(panel);
+          updateLayerButtonUI(panel);
+          ctx.clearSoloIndicator(panel);
+        }
       }
     });
   });
 
+  const syncVisibilityPanel = (p: HTMLElement) => {
+    ctx.syncVisibilityCheckboxes(p);
+    updateLayerButtonUI(p);
+    ctx.clearSoloIndicator(p);
+  };
   ctx.setupDragToToggle(
     panel,
     '.creator-layers-panel-visibility',
     '.creator-layer-3d-visible',
     (l) => ctx.layerVisibility[l],
     (l, v) => ctx.setLayerVisible(l, v),
-    (p) => {
-      ctx.syncVisibilityCheckboxes(p);
-      updateLayerButtonUI(p);
-      ctx.clearSoloIndicator(p);
-    },
+    syncVisibilityPanel,
     (e) =>
       !(e instanceof MouseEvent && e.altKey) &&
-      !(e.target instanceof HTMLElement && e.target.closest('.creator-layer-part-btn'))
+      !(e.target instanceof HTMLElement && e.target.closest('.creator-layer-part-btn')) &&
+      (e.target instanceof HTMLElement && !!e.target.closest('.creator-layers-panel-visibility-toggle')),
+    true
   );
+  ctx.setupPartDragToToggle(panel, syncVisibilityPanel);
   ctx.setupDragToToggle(
     panel,
     '.creator-layers-panel-lock',
@@ -271,6 +362,24 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       } else {
         rowEl.removeAttribute('hidden');
         rowEl.removeAttribute('aria-hidden');
+      }
+    });
+    panelEl.querySelectorAll<HTMLElement>('.creator-layers-panel-composite').forEach((comp) => {
+      const ids = comp.dataset.layers?.split(/\s+/).filter((s) => s.length > 0) ?? [];
+      if (!compact) {
+        comp.removeAttribute('hidden');
+        comp.removeAttribute('aria-hidden');
+        comp.classList.remove('creator-layers-panel-composite--focus-collapsed-hidden');
+        return;
+      }
+      const hideComposite = ids.length > 0 && ids.every((id) => !ctx.isLayer3DVisible(id));
+      comp.classList.toggle('creator-layers-panel-composite--focus-collapsed-hidden', hideComposite);
+      if (hideComposite) {
+        comp.setAttribute('hidden', '');
+        comp.setAttribute('aria-hidden', 'true');
+      } else {
+        comp.removeAttribute('hidden');
+        comp.removeAttribute('aria-hidden');
       }
     });
   };
@@ -319,6 +428,11 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       const shouldHighlight = layer != null && rowLayer === layer;
       row.classList.toggle('creator-layers-panel-row-highlight', !!shouldHighlight);
     });
+    layersPanel.querySelectorAll<HTMLElement>('.creator-layers-panel-composite').forEach((comp) => {
+      const ids = comp.dataset.layers?.split(/\s+/).filter((s) => s.length > 0) ?? [];
+      const shouldHighlight = layer != null && ids.includes(layer);
+      comp.classList.toggle('creator-layers-panel-composite-highlight', !!shouldHighlight);
+    });
   });
   const syncLayersPanelFromState = () => {
     if (document.body.dataset.route !== 'creator') return;
@@ -344,15 +458,22 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     const panelEl = document.getElementById('creator-layers-panel');
     if (!panelEl) return;
     const row = panelEl.querySelector<HTMLElement>(`.creator-layers-panel-row[data-layer="${layer}"]`);
-    if (!row) return;
-    const lockEl = row.querySelector<SVGElement>('.creator-layer-lock');
-    row.classList.add('creator-layer-row-wiggle');
-    if (lockEl) lockEl.classList.add('creator-layer-lock-flash');
-    const clear = () => {
-      row.classList.remove('creator-layer-row-wiggle');
-      if (lockEl) lockEl.classList.remove('creator-layer-lock-flash');
-    };
-    setTimeout(clear, LOCK_FEEDBACK_DURATION_MS);
+    if (row) {
+      const lockEl = row.querySelector<SVGElement>('.creator-layer-lock');
+      row.classList.add('creator-layer-row-wiggle');
+      if (lockEl) lockEl.classList.add('creator-layer-lock-flash');
+      const clear = () => {
+        row.classList.remove('creator-layer-row-wiggle');
+        if (lockEl) lockEl.classList.remove('creator-layer-lock-flash');
+      };
+      setTimeout(clear, LOCK_FEEDBACK_DURATION_MS);
+      return;
+    }
+    const composite = panelEl.querySelector<HTMLElement>(`.creator-layers-panel-composite[data-layers~="${layer}"]`);
+    if (!composite) return;
+    composite.classList.add('creator-layer-row-wiggle');
+    const clearComp = () => composite.classList.remove('creator-layer-row-wiggle');
+    setTimeout(clearComp, LOCK_FEEDBACK_DURATION_MS);
   });
 
   upperLeftPanels.appendChild(panel);

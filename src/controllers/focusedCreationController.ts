@@ -1,7 +1,8 @@
 /**
  * Focused Creation: in Creator.Wardrobe the character stays fully visible (all layers); camera
- * presets follow the selected wardrobe row when focused mode is on. On Wardrobe→Creator.3D/2D,
- * layer visibility matches the wardrobe selection when focused mode is on.
+ * presets follow the selected wardrobe row when focused mode is on. On Wardrobe→Creator.2D,
+ * layer visibility always matches the wardrobe selection (blocky grid + layers panel). On
+ * Wardrobe→Creator.3D, layer visibility matches the wardrobe selection when focused mode is on.
  */
 
 import * as THREE from 'three';
@@ -176,7 +177,7 @@ export function createFocusedCreationController(
     if (deps.getRoute() !== 'creator') return;
     const { mode, previousMode } = detail;
     if ((mode === '3d' || mode === '2d') && previousMode === 'wardrobe') {
-      if (!deps.getFocusedCreationEnabled()) return;
+      if (mode === '3d' && !deps.getFocusedCreationEnabled()) return;
       const layer = deps.getWardrobeSelectedLayer();
       const expanded = layer === 'fullOutfit' || layer === 'all';
       deps.setLayersPanelFocusedListExpanded(expanded);

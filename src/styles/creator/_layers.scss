@@ -10,6 +10,8 @@
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  user-select: none;
+  -webkit-user-select: none;
 }
 .creator-layers-panel-header {
   display: flex;
@@ -106,6 +108,10 @@
 .creator-layers-panel-focused-compact .creator-layers-panel-separator {
   display: none;
 }
+/* Compact mode hides separators; limb grids use one top border instead. */
+.creator-layers-panel-focused-compact .creator-layers-panel-limb-parts {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
 /* Non-visible layers removed from layout while list is collapsed (overrides .creator-layers-panel-row flex). */
 .creator-layers-panel-row.creator-layers-panel-row--focus-collapsed-hidden {
   display: none !important;
@@ -119,6 +125,94 @@
   display: flex;
   align-items: center;
   gap: 0.45rem;
+}
+/* Sleeves+Arms and Pants+Legs: Left/Right limb grid only (Sleeve/Arm or Pant/Leg) */
+.creator-layers-panel-composite {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.creator-layers-panel-composite-highlight {
+  background: rgba(99, 179, 237, 0.2);
+  border-radius: 4px;
+}
+.creator-layers-panel-composite--focus-collapsed-hidden {
+  display: none !important;
+}
+.creator-layers-panel-row--limb-pair {
+  margin: 0;
+}
+.creator-layers-panel-limb-parts {
+  display: flex;
+  flex-direction: row;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.35rem 0.2rem 0.2rem;
+}
+.creator-layers-panel-limb-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+.creator-layers-panel-limb-side-title {
+  display: block;
+  width: 100%;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: rgba(203, 213, 225, 0.95);
+  text-align: left;
+  letter-spacing: 0.03em;
+}
+.creator-layers-panel-limb-side-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.creator-layers-panel-limb-side-btns .creator-layer-part-btn {
+  width: 100%;
+  min-height: 26px;
+  font-size: 0.7rem;
+}
+.creator-layer-part-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.15rem 0.35rem 0.15rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+}
+.creator-layer-part-btn-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.creator-layer-part-btn .creator-layer-part-btn-eye {
+  flex-shrink: 0;
+}
+.creator-layer-part-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+.creator-layer-part-btn.creator-layer-part-visible {
+  border-color: rgba(63, 140, 255, 0.55);
+  background: rgba(63, 140, 255, 0.25);
+}
+.creator-layer-part-btn.creator-layer-part-hidden {
+  opacity: 0.5;
+  filter: grayscale(0.4);
+}
+.creator-layer-part-btn.creator-layer-part-hidden:hover {
+  opacity: 0.75;
 }
 .creator-layers-panel-row-highlight {
   background: rgba(99, 179, 237, 0.2);
@@ -151,6 +245,17 @@
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.2);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+/* Inner label: checkbox + eye + name */
+.creator-layers-panel-visibility-toggle {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  cursor: pointer;
 }
 .creator-layers-panel-lock {
   flex-shrink: 0;
@@ -197,7 +302,8 @@
   transform-origin: center;
   animation: creator-lock-flash 0.4s ease-out;
 }
-.creator-layers-panel-row.creator-layer-row-wiggle {
+.creator-layers-panel-row.creator-layer-row-wiggle,
+.creator-layers-panel-composite.creator-layer-row-wiggle {
   animation: creator-layer-wiggle 0.4s ease-out;
 }
 @keyframes creator-lock-flash {
@@ -226,7 +332,7 @@
   margin-left: auto;
   margin-right: 0.2rem;
 }
-.creator-layers-panel-visibility .creator-layers-panel-name {
+.creator-layers-panel-visibility-toggle .creator-layers-panel-name {
   order: 1;
 }
 .creator-layers-panel-name {
@@ -235,38 +341,8 @@
   font-weight: 600;
   letter-spacing: 0.01em;
 }
-.creator-layers-panel-parts {
-  display: inline-flex;
-  gap: 2px;
-  flex-shrink: 0;
-  margin-left: 0.25rem;
-  order: 1;
-}
-.creator-layer-part-btn {
-  width: 20px;
-  height: 22px;
-  padding: 0;
-  font-size: 0.65rem;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
-}
-.creator-layer-part-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.35);
-}
-.creator-layer-part-btn.creator-layer-part-visible {
-  border-color: rgba(63, 140, 255, 0.55);
-  background: rgba(63, 140, 255, 0.25);
-}
-.creator-layer-part-btn.creator-layer-part-hidden {
-  opacity: 0.5;
-  filter: grayscale(0.4);
-}
-.creator-layer-part-btn.creator-layer-part-hidden:hover {
-  opacity: 0.75;
+
+/* Creator 2D/3D: layers panel is the only surface with per-layer lock icons — hide the control (state unchanged). */
+#creator-layers-panel .creator-layers-panel-lock {
+  display: none !important;
 }

@@ -151,7 +151,6 @@ export interface BlockyEditorContext {
   undoLimit: number;
   /** Called when canvas pixels change (paint, fill, etc.). */
   onCanvasChange?: () => void;
-  getFocusedCreationEnabled?: () => boolean;
   /** Restore skin canvas after temporary hover preview (shared with 3D preview texture). */
   clearSkinHoverPreview: () => void;
   /** Temporary pencil / eraser / paint brush preview on skin canvas; `canPaintAt` must match 2D layer rules. */
@@ -365,8 +364,8 @@ function isFullSkinLayerVisibilityForBlocky(state: CreatorState): boolean {
   });
 }
 
+/** Crop/zoom blocky cells to visible skin regions in 2D whenever any layer/part is hidden (not tied to camera Focused Creation). */
 function shouldUseFocusedBlockyLayout(ctx: BlockyEditorContext): boolean {
-  if (!ctx.getFocusedCreationEnabled?.()) return false;
   if (ctx.state.editMode !== '2d') return false;
   return !isFullSkinLayerVisibilityForBlocky(ctx.state);
 }

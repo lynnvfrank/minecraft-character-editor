@@ -72,6 +72,9 @@ export interface SkinLayersContext {
   setLayerLocked: (layer: string, locked: boolean) => void;
   onVisibilitySoloClick: (layer: string) => void;
   onLockSoloClick: (layer: string) => void;
+  /** No-op if not in Alt visibility solo. */
+  exitVisibilitySoloRestore: () => void;
+  clearVisibilitySoloFlags: () => void;
   syncVisibilityCheckboxes: (panel: HTMLElement) => void;
   syncLockCheckboxes: (panel: HTMLElement) => void;
   clearSoloIndicator: (panel: HTMLElement) => void;
@@ -82,8 +85,10 @@ export interface SkinLayersContext {
     getValue: (layer: string) => boolean,
     setValue: (layer: string, value: boolean) => void,
     sync: (panel: HTMLElement) => void,
-    canStartDrag?: (e: Event) => boolean
+    canStartDrag?: (e: Event) => boolean,
+    applyPartsWhileDragging?: boolean
   ) => void;
+  setupPartDragToToggle: (panel: HTMLElement, sync: (panel: HTMLElement) => void) => void;
   layerGroups: readonly (readonly string[])[];
   getEditMode: () => EditMode;
   getFocusedCreationEnabled: () => boolean;

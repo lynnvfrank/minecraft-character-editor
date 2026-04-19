@@ -18,7 +18,8 @@ This is the outline of the features that the Minecraft 3D Viewer project is read
 
 - ⬜️ Camera controls
 - ⬜️ Focus mode
-- ⬜️ Body model instead of text layers
+- ⬜️ (IDEA) Body model instead of text layers in 3D/2D
+- ⬜️ (IDEA) Better text layers in 3D/2D
 
 ### Wardrobe
 
@@ -28,7 +29,7 @@ This is the outline of the features that the Minecraft 3D Viewer project is read
 
 ### 3D
 
-- ⬜️ Legs, Arms, and Sleeves display left and right in a different way
+- ✅ Legs, Arms, and Sleeves display left and right in a different way
 - ⬜️ Layers - "Show all layers" and the toggle are redundant
 
 - ✅ brush renamed to pencil
@@ -52,10 +53,6 @@ This is the outline of the features that the Minecraft 3D Viewer project is read
 - ✅ create a brush
 - ✅ brush has size
 - ✅ brush has pressure
-
-- ⬜️ fill shows preview over blocky editor
-- ⬜️ fill has tolerance
-- ⬜️ fill has pressure
 
 - ⬜️ 3d preview camera should focus on the area while painting
 - ✅ 3d preview camera show tool hover (pencil, eraser)
