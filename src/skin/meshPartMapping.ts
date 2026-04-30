@@ -18,7 +18,7 @@ export type MappingRule = {
 const MESH_PART_CONFIG: Record<string, MappingRule[]> = {};
 
 /** Known models use heuristics (same logic as before). Add explicit rules to override. */
-const KNOWN_MODELS = new Set(['RunningboyRig']);
+const KNOWN_MODELS = new Set(['RunningboyRig', 'RunningboyRigSlim']);
 
 /** Derive model key from path, e.g. "/models/RunningboyRig.fbx" → "RunningboyRig" */
 function modelKeyFromPath(path: string): string {

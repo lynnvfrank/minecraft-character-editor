@@ -1141,7 +1141,7 @@ export async function captureCreator3DPartThumbnail(
   captureTexture.flipY = true;
 
   applySkinToModel(char.model, captureTexture, char.texturePreset, char.alphaMode, char.currentSkin);
-  applyCreatorLayerVisibilityForCapture(char.model, layerVisible, '/models/RunningboyRig.fbx');
+  applyCreatorLayerVisibilityForCapture(char.model, layerVisible, '/models/RunningboyRigSlim.fbx');
 
   const capturePos = new THREE.Vector3(
     preset.cameraPosition.x,

@@ -40,7 +40,7 @@ export function buildCharacterConfig(
   return {
     id,
     label: 'Runningboy',
-    model: '/models/RunningboyRig.fbx',
+    model: '/models/RunningboyRigSlim.fbx',
     skin: skinPath,
     texturePreset: 'clamped-flip',
     alphaMode: 'transparent',
