@@ -1,0 +1,42 @@
+schema_version: 1
+id: minecraft-character-editor
+tags:
+- node
+commands:
+  build:
+    default:
+      argv:
+      - npm
+      - run
+      - build
+      cwd: .
+      timeout_seconds: 1200
+  test:
+    default:
+      argv:
+      - npm
+      - run
+      - test
+      cwd: .
+      timeout_seconds: 1200
+verification:
+  implementation:
+  - build
+  - test
+  post_repair:
+  - build
+  - test
+builders:
+  default_owner: client-builder
+  routes:
+  - id: client
+    owner: client-builder
+    priority: 200
+    globs:
+    - '**/*.js'
+    - '**/*.ts'
+    - '**/*.css'
+    - '**/*.html'
+documentation:
+  model: feature-records
+  config: {}
