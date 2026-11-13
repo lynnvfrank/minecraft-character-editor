@@ -88,15 +88,9 @@ export function createAnimationLoopController(deps: AnimationLoopDeps): Animatio
         data.walkT = aw.t.toFixed(3);
         data.walkPos = aw.pos;
       }
-      if ((debug as { turnStartLerpState?: { t: number; elapsed: number } }).turnStartLerpState) {
-        const ts = (debug as { turnStartLerpState: { t: number; elapsed: number } }).turnStartLerpState;
-        data.turnStartT = ts.t.toFixed(3);
-        data.turnStartElapsed = ts.elapsed.toFixed(3);
-      }
-      if ((debug as { turnLerpState?: { remainingSec: number } }).turnLerpState) {
-        const tl = (debug as { turnLerpState: { remainingSec: number } }).turnLerpState;
-        data.turnLerpRemaining = tl.remainingSec.toFixed(3);
-      }
+      const fd = (debug as { facingDeg?: number | null; ownsFacing?: boolean });
+      if (fd.facingDeg != null) data.facingDeg = fd.facingDeg.toFixed(1);
+      data.ownsFacing = fd.ownsFacing;
       logger.debug('animation', 'Step frame', data);
     }
 

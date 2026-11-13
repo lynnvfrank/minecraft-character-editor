@@ -8,6 +8,7 @@ import { getPrimaryCharacterId } from '../domain';
 
 type AnimationManager = {
   turnTo: (targetFacingRad: number) => Promise<void>;
+  getFacing: () => number;
   walkTo: (target: THREE.Vector3 | [number, number, number], speed?: number) => Promise<void>;
   stop: () => void;
 };
@@ -79,13 +80,13 @@ export function setupTestControls(deps: SetupTestControlsDeps): void {
   addButton('Turn left 90°', () => {
     const char = getCharacter(getPrimaryCharacterId());
     if (!char) return;
-    const targetFacing = char.model.rotation.y + Math.PI / 2;
+    const targetFacing = animationManager.getFacing() + Math.PI / 2;
     animationManager.turnTo(targetFacing);
   }, turnRow);
   addButton('Turn right 90°', () => {
     const char = getCharacter(getPrimaryCharacterId());
     if (!char) return;
-    const targetFacing = char.model.rotation.y - Math.PI / 2;
+    const targetFacing = animationManager.getFacing() - Math.PI / 2;
     animationManager.turnTo(targetFacing);
   }, turnRow);
   panel.appendChild(turnRow);
