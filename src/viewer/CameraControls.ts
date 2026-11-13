@@ -5,6 +5,12 @@
 
 import { publish, subscribe, CREATOR_EVENTS } from '../events/appEvents';
 import { createEl } from '../creator/dom';
+import {
+  LIGHTING_PRESETS,
+  LIGHTING_PRESET_ORDER,
+  getLightingPreset,
+  setLightingPreset,
+} from './scene';
 
 const BUTTONS: Array<{
   id: string;
@@ -100,6 +106,26 @@ export function buildCameraControls(options?: BuildCameraControlsOptions): void 
     options.subscribeFocusedCreationChanged?.(syncFocusedBtn);
     toolbar.insertBefore(focusedBtn, toolbar.firstChild);
   }
+
+  // Lighting preset cycler: Shader → Sunset → Night → Classic.
+  const lightBtn = createEl('button', {
+    type: 'button',
+    id: 'camera-lighting-toggle',
+    className: 'creator-camera-controls-btn creator-camera-controls-btn-lighting',
+  });
+  const syncLightBtn = () => {
+    const p = LIGHTING_PRESETS[getLightingPreset()];
+    lightBtn.textContent = `☀ ${p.label}`;
+    lightBtn.title = `Lighting: ${p.title}. Click to cycle.`;
+    lightBtn.setAttribute('aria-label', `Lighting preset: ${p.label}. Click to change.`);
+  };
+  syncLightBtn();
+  lightBtn.addEventListener('click', () => {
+    const i = LIGHTING_PRESET_ORDER.indexOf(getLightingPreset());
+    setLightingPreset(LIGHTING_PRESET_ORDER[(i + 1) % LIGHTING_PRESET_ORDER.length]);
+    syncLightBtn();
+  });
+  toolbar.appendChild(lightBtn);
 
   if (!moveStartEndBound) {
     moveStartEndBound = true;
