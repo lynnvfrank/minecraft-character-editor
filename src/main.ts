@@ -97,6 +97,7 @@ import {
 import { registerArmModelPanelContext } from './creator/armModelPanel';
 import { createSubscribable } from './lib/subscribable';
 import { initTheme } from './ui/theme';
+import { initAboutPanel } from './ui/aboutPanel';
 import {
   SKIN_LAYER_BOUNDS,
   LAYER_KEYS,
@@ -1310,6 +1311,7 @@ async function main(): Promise<void> {
 
   sceneContext = initViewerScene(container, params) as AppSceneContext;
   initTheme();
+  initAboutPanel();
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();
 

@@ -6,7 +6,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { addProps } from './props';
 
 export type SceneContext = {
   scene: THREE.Scene;
@@ -50,7 +49,6 @@ export function initScene(
 
   addLights(scene, renderer);
   addGround(scene);
-  if (params.get('props') !== '0') void addProps(scene);
   // Subtle atmospheric fade into the background.
   scene.fog = new THREE.Fog(0x050710, 8, 18);
 
