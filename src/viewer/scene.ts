@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 export type SceneContext = {
   scene: THREE.Scene;
@@ -34,6 +35,10 @@ export function initScene(
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Filmic tone mapping: richer contrast and soft highlight roll-off (like shader packs).
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
@@ -42,34 +47,166 @@ export function initScene(
   controls.enableDamping = true;
   controls.target.set(0, 1, 0);
 
-  addLights(scene);
+  addLights(scene, renderer);
   addGround(scene);
+  // Subtle atmospheric fade into the background.
+  scene.fog = new THREE.Fog(0x050710, 8, 18);
 
   const clock = new THREE.Clock();
   return { scene, camera, renderer, controls, clock, characters: {}, container };
 }
 
-export function addLights(scene: THREE.Scene): void {
-  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x202030, 1.0);
+/**
+ * Shader-pack-style lighting: warm "sun" key light with soft self-shadows,
+ * cool sky ambient, a blue-ish rim light that outlines the silhouette, and a
+ * soft image-based environment so faces never go fully black.
+ */
+export type LightingPresetId = 'shader' | 'sunset' | 'night' | 'classic';
+
+type LightingPreset = {
+  label: string;
+  title: string;
+  toneMapping: THREE.ToneMapping;
+  exposure: number;
+  envIntensity: number;
+  selfShadow: boolean;
+  background: number;
+  hemi: [sky: number, ground: number, intensity: number];
+  sun: [color: number, intensity: number, x: number, y: number, z: number];
+  rim: [color: number, intensity: number];
+  fill: [color: number, intensity: number];
+};
+
+export const LIGHTING_PRESETS: Record<LightingPresetId, LightingPreset> = {
+  shader: {
+    label: 'Shader', title: 'Shader-pack look: warm sun, soft self-shadows, blue rim light',
+    toneMapping: THREE.ACESFilmicToneMapping, exposure: 1.05, envIntensity: 0.35, selfShadow: true,
+    background: 0x050710,
+    hemi: [0xbfd8ff, 0x3a2a1e, 0.55],
+    sun: [0xfff1d6, 2.4, 2.5, 5, 3],
+    rim: [0x9ab8ff, 1.6],
+    fill: [0xffe6cc, 0.25],
+  },
+  sunset: {
+    label: 'Sunset', title: 'Golden hour: low orange sun, long shadows, purple rim',
+    toneMapping: THREE.ACESFilmicToneMapping, exposure: 1.1, envIntensity: 0.2, selfShadow: true,
+    background: 0x1a0d1f,
+    hemi: [0xff9a6b, 0x2a1030, 0.45],
+    sun: [0xffa040, 3.0, 4, 1.8, 2.5],
+    rim: [0xb070ff, 2.2],
+    fill: [0xff7050, 0.2],
+  },
+  night: {
+    label: 'Night', title: 'Moonlight: cool blue key light with a warm torch-like fill',
+    toneMapping: THREE.ACESFilmicToneMapping, exposure: 1.2, envIntensity: 0.1, selfShadow: true,
+    background: 0x02030a,
+    hemi: [0x304070, 0x05050a, 0.4],
+    sun: [0xa8c0ff, 1.4, -2, 5, 2],
+    rim: [0x6080ff, 1.2],
+    fill: [0xffa050, 0.9],
+  },
+  classic: {
+    label: 'Classic', title: 'The original flat lighting (before the shader update)',
+    toneMapping: THREE.NoToneMapping, exposure: 1.0, envIntensity: 0, selfShadow: false,
+    background: 0x050710,
+    hemi: [0xffffff, 0x202030, 1.0],
+    sun: [0xffffff, 1.2, 3, 6, 4],
+    rim: [0xffffff, 0],
+    fill: [0xffffff, 0.4],
+  },
+};
+
+export const LIGHTING_PRESET_ORDER: LightingPresetId[] = ['shader', 'sunset', 'night', 'classic'];
+
+type LightRig = {
+  scene: THREE.Scene;
+  renderer?: THREE.WebGLRenderer;
+  hemi: THREE.HemisphereLight;
+  sun: THREE.DirectionalLight;
+  rim: THREE.DirectionalLight;
+  fill: THREE.DirectionalLight;
+};
+
+let rig: LightRig | null = null;
+let currentPreset: LightingPresetId = 'shader';
+
+export function getLightingPreset(): LightingPresetId {
+  return currentPreset;
+}
+
+/** Switch the whole scene's lighting look. Safe to call any time after initScene. */
+export function setLightingPreset(id: LightingPresetId): void {
+  currentPreset = id;
+  if (!rig) return;
+  const p = LIGHTING_PRESETS[id];
+  const { scene, renderer, hemi, sun, rim, fill } = rig;
+  if (renderer) {
+    renderer.toneMapping = p.toneMapping;
+    renderer.toneMappingExposure = p.exposure;
+  }
+  scene.environmentIntensity = p.envIntensity;
+  (scene.background as THREE.Color).setHex(p.background);
+  if (scene.fog) scene.fog.color.setHex(p.background);
+  hemi.color.setHex(p.hemi[0]); hemi.groundColor.setHex(p.hemi[1]); hemi.intensity = p.hemi[2];
+  sun.color.setHex(p.sun[0]); sun.intensity = p.sun[1]; sun.position.set(p.sun[2], p.sun[3], p.sun[4]);
+  rim.color.setHex(p.rim[0]); rim.intensity = p.rim[1]; rim.visible = p.rim[1] > 0;
+  fill.color.setHex(p.fill[0]); fill.intensity = p.fill[1];
+  // Toggle self-shadowing on every character mesh (ground keeps receiving shadows).
+  scene.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh && mesh.castShadow) mesh.receiveShadow = p.selfShadow;
+    // Materials must recompile when tone mapping / shadow receipt changes.
+    const mats = mesh.isMesh ? (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) : [];
+    mats.forEach((m) => { if (m) m.needsUpdate = true; });
+  });
+}
+
+export function addLights(scene: THREE.Scene, renderer?: THREE.WebGLRenderer): void {
+  // Soft image-based ambient (gives gentle directional shading on every face).
+  if (renderer) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environmentIntensity = 0.35;
+    pmrem.dispose();
+  }
+
+  // Sky (cool) / ground bounce (warm) ambient.
+  const hemiLight = new THREE.HemisphereLight(0xbfd8ff, 0x3a2a1e, 0.55);
   hemiLight.position.set(0, 4, 0);
   scene.add(hemiLight);
 
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  dirLight.position.set(3, 6, 4);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(2048, 2048);
-  dirLight.shadow.camera.near = 1;
-  dirLight.shadow.camera.far = 20;
-  dirLight.shadow.camera.left = -8;
-  dirLight.shadow.camera.right = 8;
-  dirLight.shadow.camera.top = 8;
-  dirLight.shadow.camera.bottom = -8;
-  scene.add(dirLight);
+  // Key light: warm late-afternoon sun.
+  const sun = new THREE.DirectionalLight(0xfff1d6, 2.4);
+  sun.position.set(2.5, 5, 3);
+  sun.target.position.set(0, 1, 0);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  // Tight frustum around the character = much sharper, cleaner shadows.
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 14;
+  sun.shadow.camera.left = -2.5;
+  sun.shadow.camera.right = 2.5;
+  sun.shadow.camera.top = 3;
+  sun.shadow.camera.bottom = -2;
+  // These two settings remove the striped "shadow acne" on the boxy limbs,
+  // which is what let us turn self-shadowing back on.
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.02;
+  sun.shadow.radius = 4;
+  scene.add(sun);
+  scene.add(sun.target);
 
-  // Fill light from below: illuminates undersurfaces (bottom of head, legs, soles).
-  const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+  // Rim light from behind: cool edge highlight that separates the character from the background.
+  const rim = new THREE.DirectionalLight(0x9ab8ff, 1.6);
+  rim.position.set(-3, 3, -4);
+  scene.add(rim);
+
+  // Gentle fill from below so undersurfaces (chin, soles) stay readable while painting.
+  const fillLight = new THREE.DirectionalLight(0xffe6cc, 0.25);
   fillLight.position.set(0, -4, 2);
   scene.add(fillLight);
+
+  rig = { scene, renderer, hemi: hemiLight, sun, rim, fill: fillLight };
 }
 
 /** Default on/off for the camera-following light. Set to false to disable at startup. */
@@ -124,9 +261,9 @@ export function applyShadowToModel(model: THREE.Group): void {
     if ((obj as THREE.Mesh).isMesh) {
       const mesh = obj as THREE.Mesh;
       mesh.castShadow = true;
-      // Do not receive shadows on the skinned character: self-shadowing from the
-      // directional light causes severe striped shadow-map acne on low-poly limbs.
-      mesh.receiveShadow = false;
+      // Self-shadowing (head shading the body, arms on torso). Acne is prevented by
+      // the sun's shadow.bias / normalBias in addLights.
+      mesh.receiveShadow = LIGHTING_PRESETS[currentPreset].selfShadow;
     }
   });
 }
