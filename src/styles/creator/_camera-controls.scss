@@ -25,27 +25,27 @@ body[data-route="creator"] .creator-top-center-panels {
   flex-direction: row;
   flex-wrap: nowrap;
   gap: 0.35rem;
-  background: rgba(20, 25, 40, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
   border-radius: 8px;
   padding: 0.35rem 0.5rem;
   font-size: 0.85rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
 }
 
 .creator-camera-controls-btn {
   padding: 0.35rem 0.6rem;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  background: rgba(var(--fg-rgb), 0.06);
+  color: rgba(var(--fg-rgb), 0.9);
   font-size: 0.8rem;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .creator-camera-controls-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(var(--fg-rgb), 0.12);
+  border-color: rgba(var(--fg-rgb), 0.3);
 }
 .creator-camera-controls-btn:disabled {
   opacity: 0.6;

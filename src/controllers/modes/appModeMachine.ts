@@ -139,9 +139,7 @@ export function startModeActor() {
   return modeActor;
 }
 
-function getEditModeFromSnapshot(
-  snapshot: { value: string | Record<string, string> | Record<string, Record<string, string>> }
-): EditMode {
+function getEditModeFromSnapshot(snapshot: { value: unknown }): EditMode {
   const val = snapshot.value;
   if (typeof val === 'object' && val !== null && 'creator' in val) {
     const child = (val as { creator: string }).creator;

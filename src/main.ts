@@ -84,7 +84,19 @@ import {
 } from './state/creatorSlices';
 import { logger, easeOutCubic } from './lib';
 import { createSocketManager, createCharacterAI } from './services';
-import { preprocessSkinTexture } from './skin';
+import {
+  preprocessSkinTexture,
+  ARM_MODEL_PATHS,
+  detectArmModelFromRGBA,
+  resolveArmModel,
+  readArmModelSetting,
+  writeArmModelSetting,
+  type ArmModel,
+  type ArmModelSetting,
+} from './skin';
+import { registerArmModelPanelContext } from './creator/armModelPanel';
+import { createSubscribable } from './lib/subscribable';
+import { initTheme } from './ui/theme';
 import {
   SKIN_LAYER_BOUNDS,
   LAYER_KEYS,
@@ -984,6 +996,7 @@ function setupCreatorPreviewDirtySubscription(): void {
   });
   creatorSkinLoadSlice.subscribe((detail) => {
     markDirty();
+    setDetectedArmModel(detectArmModelFromCanvas(getCreatorSkinCanvas()));
     const path = detail.path;
     if (typeof path === 'string') {
       const char = getCharacter(getPrimaryCharacterId());
@@ -1141,7 +1154,7 @@ export async function captureCreator3DPartThumbnail(
   captureTexture.flipY = true;
 
   applySkinToModel(char.model, captureTexture, char.texturePreset, char.alphaMode, char.currentSkin);
-  applyCreatorLayerVisibilityForCapture(char.model, layerVisible, '/models/RunningboyRigSlim.fbx');
+  applyCreatorLayerVisibilityForCapture(char.model, layerVisible, char.modelPath);
 
   const capturePos = new THREE.Vector3(
     preset.cameraPosition.x,
@@ -1218,6 +1231,68 @@ export async function captureCreator3DPartThumbnail(
 }
 
 // -----------------------------------------------------------------------------
+// Arm model (slim / classic): user setting + auto-detect from the current skin
+// -----------------------------------------------------------------------------
+
+let armModelSetting: ArmModelSetting = readArmModelSetting();
+let detectedArmModel: ArmModel = 'slim';
+const armModelSlice = createSubscribable();
+
+function getResolvedArmModel(): ArmModel {
+  return resolveArmModel(armModelSetting, detectedArmModel);
+}
+
+function applyArmModel(): void {
+  armModelSlice.notify();
+  if (!characterController) return;
+  const char = getCharacter(getPrimaryCharacterId());
+  if (!char) return;
+  const path = ARM_MODEL_PATHS[getResolvedArmModel()];
+  if (char.modelPath === path) return;
+  void characterController.setModel(char.id, path).then(() => {
+    creatorPreviewDirty = true;
+    lastAppliedPreviewSignature = null;
+  });
+}
+
+function detectArmModelFromCanvas(canvas: HTMLCanvasElement): ArmModel | null {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  return detectArmModelFromRGBA(data, canvas.width, canvas.height);
+}
+
+async function detectArmModelFromPath(path: string): Promise<ArmModel | null> {
+  try {
+    const img = await loadPreviewImage(path);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || 64;
+    canvas.height = img.naturalHeight || 64;
+    canvas.getContext('2d')?.drawImage(img, 0, 0);
+    return detectArmModelFromCanvas(canvas);
+  } catch {
+    return null;
+  }
+}
+
+function setDetectedArmModel(model: ArmModel | null): void {
+  if (!model || model === detectedArmModel) return;
+  detectedArmModel = model;
+  applyArmModel();
+}
+
+registerArmModelPanelContext({
+  getSetting: () => armModelSetting,
+  getResolved: getResolvedArmModel,
+  setSetting: (setting) => {
+    armModelSetting = setting;
+    writeArmModelSetting(setting);
+    applyArmModel();
+  },
+  subscribe: (cb) => armModelSlice.subscribe(cb),
+});
+
+// -----------------------------------------------------------------------------
 // Main initialization
 // -----------------------------------------------------------------------------
 
@@ -1234,6 +1309,7 @@ async function main(): Promise<void> {
   }
 
   sceneContext = initViewerScene(container, params) as AppSceneContext;
+  initTheme();
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();
 
@@ -1272,7 +1348,10 @@ async function main(): Promise<void> {
     getCreatorTransitionInFlight: () => controllerRefs.getCreatorTransitionInFlight(),
     getAnimationManager: () => controllerRefs.animationManager,
     highlightActiveButton: (charId, action) => viewerUIController.highlightActiveButton(charId, action),
-    highlightActiveSkin: (charId, path) => viewerUIController.highlightActiveSkin(charId, path),
+    highlightActiveSkin: (charId, path) => {
+      viewerUIController.highlightActiveSkin(charId, path);
+      if (armModelSetting === 'auto') void detectArmModelFromPath(path).then(setDetectedArmModel);
+    },
     useDebugTexture: USE_DEBUG_TEXTURE,
     logModelInfo: LOG_MODEL_INFO,
   });
@@ -1469,7 +1548,14 @@ async function main(): Promise<void> {
   }
 
   const initialSkin = skins.find((skin) => skin.path === FALLBACK_SKINS[0]?.path) ?? skins[0]!;
-  const config = buildCharacterConfig(initialSkin.path, animations);
+  detectedArmModel = (await detectArmModelFromPath(initialSkin.path)) ?? detectedArmModel;
+  armModelSlice.notify(); // the creator panel may already be showing the pre-detection default
+  const config = buildCharacterConfig(
+    initialSkin.path,
+    animations,
+    undefined,
+    ARM_MODEL_PATHS[getResolvedArmModel()]
+  );
   characterController.loadCharacter(config, skins);
   if (getRoute() === 'creator') {
     await loadSkinFromPath(initialSkin.path);

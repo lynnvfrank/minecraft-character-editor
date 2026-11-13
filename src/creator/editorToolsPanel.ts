@@ -3,6 +3,7 @@ import { createEl } from './dom';
 import type { EditorToolsContext } from './api';
 import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE, isDrawingTool, isToggleType } from './api';
 import { createIcon } from './icons';
+import { creatorScope } from './lifecycle';
 
 let toolShortcutKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
@@ -141,16 +142,16 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
     ctx.updateUndoRedoButtons();
   });
 
-  creatorToolsSlice.subscribe(() => {
+  creatorScope.track(creatorToolsSlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     updateToolActive();
     ctx.updateCanvasCursor();
-  });
-  creatorModeSlice.subscribe(() => {
+  }));
+  creatorScope.track(creatorModeSlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     updateEditModeButtons();
     updateViewToggleButtons();
-  });
+  }));
 
   updateToolActive();
   updateEditModeButtons();

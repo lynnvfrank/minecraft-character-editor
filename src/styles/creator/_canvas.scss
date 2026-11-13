@@ -5,7 +5,7 @@
   justify-content: center;
   min-height: 0;
   min-width: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(var(--shadow-rgb), 0.4);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -41,7 +41,7 @@
 .creator-ruler-corner {
   grid-column: 1;
   grid-row: 1;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--shadow-rgb), 0.5);
 }
 .creator-ruler-top {
   grid-column: 2;
@@ -49,7 +49,7 @@
   position: relative;
   width: 512px;
   height: 20px;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--shadow-rgb), 0.5);
 }
 .creator-ruler-left {
   grid-column: 1;
@@ -57,11 +57,11 @@
   position: relative;
   width: 20px;
   height: 512px;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--shadow-rgb), 0.5);
 }
 .creator-ruler-tick {
   position: absolute;
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(var(--fg-rgb), 0.7);
 }
 .creator-ruler-tick-major {
   width: 1px;
@@ -83,7 +83,7 @@
   width: 1px;
   height: 3px;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(var(--fg-rgb), 0.35);
 }
 .creator-ruler-top .creator-ruler-tick-cell {
   transform: translateX(-50%);
@@ -91,7 +91,7 @@
 .creator-ruler-label {
   position: absolute;
   font: 11px / 1 system-ui, -apple-system, sans-serif;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(var(--fg-rgb), 0.95);
   white-space: nowrap;
 }
 .creator-ruler-top .creator-ruler-label {
@@ -123,7 +123,7 @@
   width: 3px;
   right: 0;
   transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(var(--fg-rgb), 0.35);
 }
 .creator-ruler-left .creator-ruler-label {
   right: 4px;
@@ -161,7 +161,7 @@
   height: 512px;
   grid-template-columns: repeat(64, 1fr);
   grid-template-rows: repeat(64, 1fr);
-  background: #1a1a2e;
+  background: var(--canvas-empty);
   cursor: crosshair;
 }
 /* Focused mode: multiple UV parts packed (row/column/grid) for max cell size; regions positioned in TS */
@@ -176,7 +176,7 @@
 }
 .creator-blocky-region {
   display: grid;
-  background: #1a1a2e;
+  background: var(--canvas-empty);
 }
 .creator-blocky-cell {
   min-width: 0;
@@ -200,9 +200,9 @@
 .creator-btn {
   padding: 0.5rem 1.25rem;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
   background: rgba(63, 140, 255, 0.25);
-  color: #f5f5f5;
+  color: var(--text);
   font-size: 0.9rem;
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease;

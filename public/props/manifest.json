@@ -1,0 +1,65 @@
+{
+  "barrels-azure-quiver-x44-z128": {
+    "file": "props/barrels-azure-quiver-x44-z128.glb",
+    "size": [
+      3.494,
+      3.188,
+      3.375
+    ],
+    "triangles": 496
+  },
+  "barrels-azure-thistle-x44-z191": {
+    "file": "props/barrels-azure-thistle-x44-z191.glb",
+    "size": [
+      6.494,
+      6.5,
+      6.625
+    ],
+    "triangles": 1660
+  },
+  "boxes-brave-cypress-x65-z65": {
+    "file": "props/boxes-brave-cypress-x65-z65.glb",
+    "size": [
+      5.0,
+      5.0,
+      5.0
+    ],
+    "triangles": 730
+  },
+  "boxes-brave-kelp-x170-z86": {
+    "file": "props/boxes-brave-kelp-x170-z86.glb",
+    "size": [
+      3.625,
+      3.188,
+      3.625
+    ],
+    "triangles": 644
+  },
+  "chests-amber-crane-x380-z65": {
+    "file": "props/chests-amber-crane-x380-z65.glb",
+    "size": [
+      5.625,
+      7.125,
+      6.312
+    ],
+    "triangles": 1744
+  },
+  "vegetation-azure-walnut-x355-z33": {
+    "file": "props/vegetation-azure-walnut-x355-z33.glb",
+    "size": [
+      14.0,
+      15.0,
+      7.0
+    ],
+    "triangles": 1424
+  },
+  "vegetation-calm-grove-x334-z12": {
+    "file": "props/vegetation-calm-grove-x334-z12.glb",
+    "size": [
+      19.0,
+      20.0,
+      7.0
+    ],
+    "triangles": 1596
+  }
+}

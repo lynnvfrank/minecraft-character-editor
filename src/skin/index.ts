@@ -51,6 +51,19 @@ export {
 } from './preprocess';
 
 export {
+  ARM_MODEL_PATHS,
+  ARM_MODEL_SETTINGS,
+  detectArmModel,
+  detectArmModelFromRGBA,
+  resolveArmModel,
+  armModelFromPath,
+  readArmModelSetting,
+  writeArmModelSetting,
+  type ArmModel,
+  type ArmModelSetting,
+} from './armModel';
+
+export {
   getMinecraftPartFromMeshName,
   registerMeshPartMapping,
   type MappingRule,

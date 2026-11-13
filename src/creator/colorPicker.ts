@@ -2,6 +2,7 @@ import { creatorColorSlice } from '../state/creatorSlices';
 import { hexToHsva, hsvaToHex, adjustHexBrightness, isValidHex } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { ColorPickerContext } from './api';
+import { creatorScope } from './lifecycle';
 
 const SWATCH_COUNT = 5;
 const DELTA_STEP = 20;
@@ -344,7 +345,7 @@ export function buildColorPickerPanel(ctx: ColorPickerContext): void {
   fiveSwatchKeyHandler = handleFiveSwatchKeys;
   document.addEventListener('keydown', handleFiveSwatchKeys);
 
-  creatorColorSlice.subscribe((detail) => {
+  creatorScope.track(creatorColorSlice.subscribe((detail) => {
     if (document.body.dataset.route !== 'creator') return;
     const color = (detail.color ?? ctx.getCurrentColor()).slice(0, 7).toLowerCase();
     const picker = document.getElementById('creator-color-picker-panel') as HTMLElement | null;
@@ -374,7 +375,7 @@ export function buildColorPickerPanel(ctx: ColorPickerContext): void {
       el.title = delta === 0 ? 'Current color' : delta > 0 ? `+${delta} brighter` : `${delta} darker`;
     });
     updateActiveSwatchUI();
-  });
+  }));
 
   container.appendChild(panel);
   updateColorPickerFromHex(panel as HTMLElement, currentColor);

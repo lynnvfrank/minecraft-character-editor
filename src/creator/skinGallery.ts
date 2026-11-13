@@ -60,7 +60,6 @@ export function createSkinGalleryApi(deps: SkinGalleryDeps): SkinGalleryApi {
     captureCanvasForUndo,
     pushUndoLoad,
     swatchMax,
-    getWardrobeBaseSkinPath,
   } = deps;
 
   async function loadSkinFromPath(path: string): Promise<void> {

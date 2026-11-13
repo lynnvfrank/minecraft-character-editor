@@ -70,9 +70,9 @@ body[data-route="creator"][data-edit-mode="wardrobe"] .creator-canvas-area {
   box-sizing: border-box;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  background: rgba(20, 25, 40, 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.5);
+  background: rgba(var(--panel-rgb), 0.92);
 }
 .creator-3d-preview-slot #app {
   flex: 1 1 auto;

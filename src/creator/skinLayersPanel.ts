@@ -8,6 +8,7 @@ import {
 } from '../state/creatorSlices';
 import type { SkinLayersContext, PartSide } from './api';
 import { createIcon } from './icons';
+import { creatorScope } from './lifecycle';
 
 /** Matches `LAYER_GROUPS` pairs in `creator.ts` — sleeves/arms and pants/legs share a Left/Right limb grid (no per-layer name rows). */
 function isLimbPairGroup(group: readonly string[]): boolean {
@@ -418,7 +419,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   updateLayerButtonUI(panel);
 
   const LOCK_FEEDBACK_DURATION_MS = 400;
-  creatorTexturePositionSlice.subscribe((detail: CreatorTexturePositionDetail) => {
+  creatorScope.track(creatorTexturePositionSlice.subscribe((detail: CreatorTexturePositionDetail) => {
     if (document.body.dataset.route !== 'creator') return;
     const layer = detail.layer ?? null;
     const layersPanel = document.getElementById('creator-layers-panel');
@@ -433,7 +434,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
       const shouldHighlight = layer != null && ids.includes(layer);
       comp.classList.toggle('creator-layers-panel-composite-highlight', !!shouldHighlight);
     });
-  });
+  }));
   const syncLayersPanelFromState = () => {
     if (document.body.dataset.route !== 'creator') return;
     if (!panel) return;
@@ -443,15 +444,15 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     updateLayerButtonUI(panel);
   };
 
-  creatorLayerSlice.subscribe(syncLayersPanelFromState);
+  creatorScope.track(creatorLayerSlice.subscribe(syncLayersPanelFromState));
   // Defer so focusedCreationController can apply wardrobe→3D/2D solo first (same notify tick).
-  creatorModeSlice.subscribe(() => {
+  creatorScope.track(creatorModeSlice.subscribe(() => {
     queueMicrotask(() => {
       syncLayersPanelFromState();
     });
-  });
-  creatorFocusedCreationSlice.subscribe(syncLayersPanelFromState);
-  creatorLockFeedbackSlice.subscribe((detail: CreatorLockFeedbackDetail) => {
+  }));
+  creatorScope.track(creatorFocusedCreationSlice.subscribe(syncLayersPanelFromState));
+  creatorScope.track(creatorLockFeedbackSlice.subscribe((detail: CreatorLockFeedbackDetail) => {
     if (document.body.dataset.route !== 'creator') return;
     const layer = detail.layer;
     if (!layer) return;
@@ -474,7 +475,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     composite.classList.add('creator-layer-row-wiggle');
     const clearComp = () => composite.classList.remove('creator-layer-row-wiggle');
     setTimeout(clearComp, LOCK_FEEDBACK_DURATION_MS);
-  });
+  }));
 
   upperLeftPanels.appendChild(panel);
 }

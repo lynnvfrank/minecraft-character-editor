@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { logger } from '../lib';
+import { loadRig } from '../viewer/rigLoader';
 import { PREFERRED_IDLE_KEYS } from '../config/scene.config';
 import type { TexturePreset, AlphaMode } from '../viewer';
 import type { CharacterState, CharacterConfig } from './characterTypes';
@@ -54,6 +55,7 @@ export type CharacterController = {
   fadeToAction: (char: CharacterStateLike, next: THREE.AnimationAction, duration?: number) => void;
   getAction: (charId: string, key: string) => THREE.AnimationAction | undefined;
   switchSkin: (charId: string, skinPath: string) => void;
+  setModel: (charId: string, modelPath: string) => Promise<void>;
   resolveAnimationByName: (name: string) => string | undefined;
   resolveSkinByName: (name: string) => string | undefined;
 };
@@ -186,13 +188,114 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
     );
   }
 
+  /** When a one-shot clip finishes, return to idle (or the creator pose). */
+  function attachFinishedHandler(mixer: THREE.AnimationMixer, charId: string): void {
+    mixer.addEventListener('finished', () => {
+      const char = getCharacter(charId);
+      if (!char || char.mixer !== mixer) return;
+      if (getRoute() === 'creator') {
+        const cpc = getCreatorPoseController();
+        if (cpc?.isCreatorIdleCompletingTransition()) return;
+        cpc?.applyCreatorCharacterPose();
+        return;
+      }
+      if (getCreatorTransitionInFlight()) return;
+      if (!char.idleAction || char.currentAction === char.idleAction) return;
+      if (getAnimationManager()?.isInWalkToPhase?.() || getAnimationManager()?.isBusy?.()) return;
+      fadeToAction(char, char.idleAction!, 0.3);
+    });
+  }
+
+  /** Model load is async; remember the latest request so rapid toggles settle on the last one. */
+  const pendingModelSwap: Record<string, string> = {};
+
+  /**
+   * Swap the character's rig (e.g. slim ↔ classic arms) in place.
+   * Keeps the container (position/facing), current skin texture, and the playing clip + time.
+   */
+  function setModel(charId: string, modelPath: string): Promise<void> {
+    const char = getCharacter(charId);
+    if (!char || char.modelPath === modelPath) {
+      delete pendingModelSwap[charId];
+      return Promise.resolve();
+    }
+    pendingModelSwap[charId] = modelPath;
+    return new Promise((resolve) => {
+      loadRig(
+        modelPath,
+        (model) => {
+          const current = getCharacter(charId);
+          if (!current || pendingModelSwap[charId] !== modelPath) return resolve();
+          delete pendingModelSwap[charId];
+
+          model.scale.copy(current.model.scale);
+          model.position.copy(current.model.position);
+          model.rotation.copy(current.model.rotation);
+
+          // Reuse whatever texture is on the old rig (viewer skin or creator canvas texture).
+          let texture: THREE.Texture | null = null;
+          current.model.traverse((obj) => {
+            const mat = (obj as THREE.Mesh).material as THREE.MeshPhongMaterial | undefined;
+            if (!texture && (obj as THREE.Mesh).isMesh && mat?.map) texture = mat.map;
+          });
+          if (texture) {
+            applySkinToModel(model, texture, current.texturePreset, current.alphaMode, current.currentSkin, modelPath);
+          }
+          applyShadowToModel(model);
+
+          const mixer = new THREE.AnimationMixer(model);
+          const actions: Record<string, THREE.AnimationAction> = {};
+          for (const [key, clip] of Object.entries(current.clips)) {
+            const prev = current.actions[key];
+            const action = mixer.clipAction(clip, model);
+            action.setLoop(prev?.loop ?? THREE.LoopRepeat, prev?.repetitions ?? Infinity);
+            action.clampWhenFinished = prev?.clampWhenFinished ?? false;
+            actions[key] = action;
+          }
+          const keyOf = (a: THREE.AnimationAction | null | undefined) =>
+            a ? Object.keys(current.actions).find((k) => current.actions[k] === a) : undefined;
+          const currentKey = keyOf(current.currentAction);
+          const idleKey = keyOf(current.idleAction);
+
+          let nextCurrent: THREE.AnimationAction | null = null;
+          if (currentKey && actions[currentKey] && current.currentAction) {
+            nextCurrent = actions[currentKey];
+            nextCurrent.time = current.currentAction.time;
+            nextCurrent.setEffectiveWeight(1);
+            nextCurrent.play();
+          }
+
+          current.container.remove(current.model);
+          current.mixer.stopAllAction();
+          current.container.add(model);
+
+          current.model = model;
+          current.mixer = mixer;
+          current.actions = actions;
+          current.currentAction = nextCurrent;
+          current.idleAction = idleKey ? actions[idleKey] : undefined;
+          current.modelPath = modelPath;
+          attachFinishedHandler(mixer, charId);
+          mixer.update(0);
+
+          logger.info('general', 'Model swapped', { charId, modelPath });
+          resolve();
+        },
+        (err) => {
+          logger.error('general', 'Model swap failed', { modelPath, error: String(err) });
+          resolve();
+        }
+      );
+    });
+  }
+
   function loadCharacter(config: CharacterConfig, skins: SkinEntry[]) {
     const fbxLoader = new FBXLoader();
     const textureLoader = new THREE.TextureLoader();
     const animationsList = getAnimationsList();
 
     const loadModel = (texture: THREE.Texture | null) => {
-      fbxLoader.load(
+      loadRig(
         config.model,
         (model) => {
           logger.info('general', 'Model loaded', { label: config.label });
@@ -219,6 +322,7 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
 
           const mixer = new THREE.AnimationMixer(model);
           const actions: Record<string, THREE.AnimationAction> = {};
+          const clips: Record<string, THREE.AnimationClip> = {};
           let loadedCount = 0;
 
           const onClipLoaded = (animFbx: THREE.Group, key: string) => {
@@ -227,6 +331,7 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
               const action = mixer.clipAction(clip, model);
               action.setLoop(THREE.LoopRepeat, Infinity);
               actions[key] = action;
+              clips[key] = clip;
             });
             loadedCount++;
             if (loadedCount === config.animations.length) {
@@ -247,22 +352,11 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
                 texturePreset: config.texturePreset,
                 alphaMode: config.alphaMode,
                 currentSkin: config.skin,
+                modelPath: config.model,
+                clips,
               } as CharacterState;
 
-              mixer.addEventListener('finished', () => {
-                const char = getSceneContext().characters[config.id] as CharacterState | undefined;
-                if (!char) return;
-                if (getRoute() === 'creator') {
-                  const cpc = getCreatorPoseController();
-                  if (cpc?.isCreatorIdleCompletingTransition()) return;
-                  cpc?.applyCreatorCharacterPose();
-                  return;
-                }
-                if (getCreatorTransitionInFlight()) return;
-                if (!char.idleAction || char.currentAction === char.idleAction) return;
-                if (getAnimationManager()?.isInWalkToPhase?.() || getAnimationManager()?.isBusy?.()) return;
-                fadeToAction(char, char.idleAction!, 0.3);
-              });
+              attachFinishedHandler(mixer, config.id);
 
               if (idleAction) fadeToAction(getSceneContext().characters[config.id] as CharacterState, idleAction, 0);
 
@@ -297,7 +391,6 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
             );
           }
         },
-        undefined,
         (err) => logger.error('general', 'Model load error', { model: config.model, error: String(err) })
       );
     };
@@ -320,6 +413,7 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
     fadeToAction,
     getAction,
     switchSkin,
+    setModel,
     resolveAnimationByName,
     resolveSkinByName,
   };

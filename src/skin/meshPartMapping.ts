@@ -22,7 +22,7 @@ const KNOWN_MODELS = new Set(['RunningboyRig', 'RunningboyRigSlim']);
 
 /** Derive model key from path, e.g. "/models/RunningboyRig.fbx" → "RunningboyRig" */
 function modelKeyFromPath(path: string): string {
-  const base = path.split('/').pop() || path;
+  const base = path.split('#')[0]!.split('/').pop() || path;
   return base.replace(/\.(fbx|glb|gltf)$/i, '');
 }
 

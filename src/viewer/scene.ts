@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { addProps } from './props';
 
 export type SceneContext = {
   scene: THREE.Scene;
@@ -49,6 +50,7 @@ export function initScene(
 
   addLights(scene, renderer);
   addGround(scene);
+  if (params.get('props') !== '0') void addProps(scene);
   // Subtle atmospheric fade into the background.
   scene.fog = new THREE.Fog(0x050710, 8, 18);
 
@@ -130,6 +132,34 @@ type LightRig = {
 let rig: LightRig | null = null;
 let currentPreset: LightingPresetId = 'shader';
 
+/**
+ * Day-sky colors supplied by the app theme (ui/theme.ts). Presets with their own mood
+ * (sunset, night) keep their background; the neutral presets use the theme's sky.
+ */
+export type SkyTheme = { background: number; ground: number };
+let skyTheme: SkyTheme | null = null;
+const THEMED_PRESETS: ReadonlySet<LightingPresetId> = new Set(['shader', 'classic']);
+
+function applySky(): void {
+  if (!rig) return;
+  const { scene } = rig;
+  const p = LIGHTING_PRESETS[currentPreset];
+  const background = skyTheme && THEMED_PRESETS.has(currentPreset) ? skyTheme.background : p.background;
+  (scene.background as THREE.Color).setHex(background);
+  if (scene.fog) scene.fog.color.setHex(background);
+  const groundColor = skyTheme && THEMED_PRESETS.has(currentPreset) ? skyTheme.ground : GROUND_DEFAULT_COLOR;
+  scene.traverse((obj) => {
+    if (obj.name === 'ground' && (obj as THREE.Mesh).isMesh) {
+      ((obj as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(groundColor);
+    }
+  });
+}
+
+export function setSkyTheme(sky: SkyTheme | null): void {
+  skyTheme = sky;
+  applySky();
+}
+
 export function getLightingPreset(): LightingPresetId {
   return currentPreset;
 }
@@ -145,8 +175,7 @@ export function setLightingPreset(id: LightingPresetId): void {
     renderer.toneMappingExposure = p.exposure;
   }
   scene.environmentIntensity = p.envIntensity;
-  (scene.background as THREE.Color).setHex(p.background);
-  if (scene.fog) scene.fog.color.setHex(p.background);
+  applySky();
   hemi.color.setHex(p.hemi[0]); hemi.groundColor.setHex(p.hemi[1]); hemi.intensity = p.hemi[2];
   sun.color.setHex(p.sun[0]); sun.intensity = p.sun[1]; sun.position.set(p.sun[2], p.sun[3], p.sun[4]);
   rim.color.setHex(p.rim[0]); rim.intensity = p.rim[1]; rim.visible = p.rim[1] > 0;
@@ -242,14 +271,17 @@ export function isCreatorCameraLightEnabled(): boolean {
   return creatorCameraLightEnabled;
 }
 
+const GROUND_DEFAULT_COLOR = 0x1b1f3b;
+
 export function addGround(scene: THREE.Scene): void {
   const geo = new THREE.CircleGeometry(8, 64);
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x1b1f3b,
+    color: GROUND_DEFAULT_COLOR,
     metalness: 0.0,
     roughness: 0.8
   });
   const ground = new THREE.Mesh(geo, mat);
+  ground.name = 'ground';
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);

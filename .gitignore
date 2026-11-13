@@ -16,3 +16,6 @@ public/wardrobe/skins/previews/
 # Guard Ruby gems
 scripts/guard/vendor/
 scripts/guard/.bundle/
+
+# Python cache
+scripts/__pycache__/

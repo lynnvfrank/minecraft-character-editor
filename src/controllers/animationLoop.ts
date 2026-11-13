@@ -43,8 +43,6 @@ export function createAnimationLoopController(deps: AnimationLoopDeps): Animatio
     getSceneContext,
     getRoute,
     getCreatorTransitionInFlight,
-    getCharacter,
-    getPrimaryCharacterId,
     animationManager,
     characterAI,
     onFrameUpdate,
