@@ -45,7 +45,7 @@ type AnimationManagerDeps = {
   getAction: (charId: string, name: string) => THREE.AnimationAction | undefined;
   getCamera: () => THREE.PerspectiveCamera;
   clock?: THREE.Clock;
-  /** Turn strategy: snap=instant 90°, lerp=lerp model.y during turn, reset=lerp+reset BonesCharacter after turn. */
+  /** @deprecated Ignored. Turns now use root-yaw compensation for any angle. */
   getTurnStrategy?: () => TurnStrategy;
 };
 
@@ -62,40 +62,11 @@ function findBonesCharacter(model: THREE.Group): THREE.Object3D | null {
   return result;
 }
 
-/** Reset BonesCharacter quaternion to identity (for turn strategy 'reset'). */
-function resetBonesCharacter(model: THREE.Group): void {
-  const bonesChar = findBonesCharacter(model);
-  if (bonesChar) bonesChar.quaternion.identity();
-}
-
 /** Get BonesCharacter Y rotation (deg). Turn clip animates this. Returns null if not found. */
 function getBonesCharacterYawDeg(model: THREE.Group): number | null {
   const bc = findBonesCharacter(model);
   if (!bc) return null;
   const euler = new THREE.Euler().setFromQuaternion(bc.quaternion, 'YXZ');
-  return (euler.y * 180) / Math.PI;
-}
-
-/** Get root/hip bone Y rotation (deg) for turn diagnostics. Returns null if not found. */
-function getRootBoneYawDeg(model: THREE.Group): number | null {
-  let bone: THREE.Bone | null = null;
-  model.traverse((obj) => {
-    if (bone) return;
-    const mesh = obj as THREE.Mesh & { skeleton?: THREE.Skeleton };
-    if (mesh.isMesh && mesh.skeleton?.bones?.length) {
-      bone =
-        mesh.skeleton.bones.find(
-          (b) =>
-            b.name.toLowerCase().includes('hip') ||
-            b.name.toLowerCase().includes('spine')
-        ) ?? mesh.skeleton.bones[0] ?? null;
-    }
-  });
-  if (!bone) return null;
-  const euler = new THREE.Euler().setFromQuaternion(
-    (bone as THREE.Bone).quaternion,
-    'YXZ'
-  );
   return (euler.y * 180) / Math.PI;
 }
 
@@ -128,11 +99,9 @@ const WAYPOINT_RELATIVE: [number, number][] = [
 ];
 
 export function createAnimationManager(deps: AnimationManagerDeps) {
-  const { getCharacter, fadeToAction, getAction, getCamera, getTurnStrategy } = deps;
-
-  function getStrategy(): TurnStrategy {
-    return getTurnStrategy?.() ?? 'lerp';
-  }
+  // getTurnStrategy is accepted for compatibility but no longer used: facing is driven by
+  // live root-yaw compensation (see 'Facing model' below), which works for any turn angle.
+  const { getCharacter, fadeToAction, getAction, getCamera } = deps;
   const CHAR_ID = DEFAULT_CHARACTER_ID;
 
   let queue: SequenceStep[] = [];
@@ -158,37 +127,81 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     resolve: () => void;
   } | null = null;
 
+  /**
+   * Facing model
+   * ------------
+   * Turn clips rotate the rig root (BonesCharacter) by a fixed amount (~90°), but real turns
+   * can be anywhere from ~17° to 180°. Instead of guessing the clip's rotation, we keep one
+   * "desired visual facing" and every tick set:
+   *
+   *     model.rotation.y = facing - (rigYaw - rigYawBaseline)
+   *
+   * where rigYaw is read live from BonesCharacter after the mixer update. The clip's root
+   * rotation (including crossfades into/out of it) is cancelled exactly, so the on-screen
+   * heading follows only the eased curve we choose — the clip just supplies the footwork.
+   */
+  let facing: number | null = null;
+  /** Rig yaw when no turn clip is influencing it (bind pose offset). */
+  let rigYawBaseline = 0;
+  /** Seconds to keep compensating after a turn while the turn clip fades out. */
+  let settleSec = 0;
+  /** True while manager should write model.rotation.y (turn, walk, settle). */
+  let ownsFacing = false;
+
   let activeTurn: {
-    action: THREE.AnimationAction;
-    clipDurationSec: number;
+    action: THREE.AnimationAction | null;
+    startYaw: number;
+    targetYaw: number;
+    elapsed: number;
+    durationSec: number;
     resolvePromise: () => void;
-    onComplete: () => void;
   } | null = null;
+
+  /** Fade time used when leaving the turn clip; compensation must outlast it. */
+  const TURN_SETTLE_SEC = 0.6;
+  /** How quickly facing steers toward the walk direction (higher = snappier). */
+  const WALK_STEER_RATE = 8;
+
+  function wrapAngle(a: number): number {
+    a = (a + Math.PI) % (2 * Math.PI);
+    if (a < 0) a += 2 * Math.PI;
+    return a - Math.PI;
+  }
 
   /** Lerp angle taking shortest path (avoids 270° swing on large turns) */
   function lerpAngleRad(from: number, to: number, t: number): number {
-    let diff = to - from;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
-    return from + diff * t;
+    return wrapAngle(from + wrapAngle(to - from) * t);
   }
 
-  /** At turn start: lerp model.rotation.y from startYaw to modelTargetYaw (avoids 90° snap) */
-  let turnStartLerpState: {
-    char: CharacterStateLike;
-    startYaw: number;
-    modelTargetYaw: number;
-    elapsed: number;
-    durationSec: number;
-  } | null = null;
+  function smoothstep(t: number): number {
+    const c = Math.min(Math.max(t, 0), 1);
+    return c * c * (3 - 2 * c);
+  }
 
-  /** After turn: lerp model.rotation.y over crossfade so we don't overturn */
-  let turnLerpState: {
-    startYaw: number;
-    targetFacing: number;
-    remainingSec: number;
-    totalSec: number;
-  } | null = null;
+  function getRigYaw(model: THREE.Group): number {
+    const bc = findBonesCharacter(model);
+    if (!bc) return 0;
+    return new THREE.Euler().setFromQuaternion(bc.quaternion, 'YXZ').y;
+  }
+
+  /** Current visual facing (radians, wrapped). */
+  function getFacing(): number {
+    const char = getCharacter(CHAR_ID);
+    if (!char) return facing ?? 0;
+    if (!ownsFacing || facing == null) {
+      facing = wrapAngle(char.model.rotation.y + wrapAngle(getRigYaw(char.model) - rigYawBaseline));
+    }
+    return facing;
+  }
+
+  /** Set visual facing directly (e.g. characterAI turning toward the camera). */
+  function setFacing(yaw: number): void {
+    const char = getCharacter(CHAR_ID);
+    facing = wrapAngle(yaw);
+    if (!char) return;
+    const comp = ownsFacing ? wrapAngle(getRigYaw(char.model) - rigYawBaseline) : 0;
+    char.model.rotation.y = wrapAngle(facing - comp);
+  }
 
   /** True from start of walkTo until it resolves (includes turn phase). Lets characterAI avoid overwriting rotation. */
   let isInWalkTo = false;
@@ -233,9 +246,9 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     if (activeTurn) {
       activeTurn.resolvePromise();
       activeTurn = null;
+      // Let the turn clip fade out without the body snapping
+      settleSec = TURN_SETTLE_SEC;
     }
-    turnLerpState = null;
-    turnStartLerpState = null;
     stopIdleWanderer();
   }
 
@@ -258,170 +271,75 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   }
 
   /**
-   * Face the target before walking. Uses turn animation only when angle ≤ 90°.
-   * For larger angles: procedural rotation (avoids double-turn snap/pop).
+   * Turn in place to face targetFacing (visual heading, radians).
+   * The visual heading eases from current → target over the turn; the turn clip only
+   * provides footwork. Its root rotation is cancelled in tick(), so any angle works.
    */
   async function playTurnToFace(
     char: CharacterStateLike,
     targetFacing: number,
     distance: number,
     _gen: number,
-    beforeWalk = false
+    _beforeWalk = false
   ): Promise<void> {
     const MIN_DISTANCE_FOR_TURN = 0.5;
-    const TURN_THRESHOLD = 0.3; // ~17° — skip turn when already roughly facing
+    const TURN_THRESHOLD = 0.3; // ~17° — small corrections are handled by walk steering
 
     if (distance < MIN_DISTANCE_FOR_TURN) {
       logger.debug('animation', 'Turn skipped', { reason: 'distance', distance });
       return;
     }
 
-    let currentFacing = char.model.rotation.y;
-    let angleDiff = targetFacing - currentFacing;
-    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+    const startYaw = getFacing();
+    const target = wrapAngle(targetFacing);
+    const angleDiff = wrapAngle(target - startYaw);
+    const absDeg = Math.abs((angleDiff * 180) / Math.PI);
 
     if (Math.abs(angleDiff) < TURN_THRESHOLD) {
-      logger.debug('animation', 'Turn skipped', {
-        reason: 'already_facing',
-        angleDiffDeg: ((angleDiff * 180) / Math.PI).toFixed(1)
-      });
+      logger.debug('animation', 'Turn skipped', { reason: 'already_facing', angleDiffDeg: absDeg.toFixed(1) });
       return;
     }
-
-    logger.debug('animation', 'Turn to face', {
-      currentFacingDeg: ((currentFacing * 180) / Math.PI).toFixed(1),
-      targetFacingDeg: ((targetFacing * 180) / Math.PI).toFixed(1),
-      angleDiffDeg: ((angleDiff * 180) / Math.PI).toFixed(1),
-      distance
-    });
 
     const turnName = angleDiff > 0 ? 'left-turn' : 'right-turn';
     const turnAction = getAction(CHAR_ID, turnName);
-    if (!turnAction) {
-      logger.debug('animation', 'Turn done', {
-        method: 'snap',
-        reason: 'no_turn_clip',
-        clip: turnName
-      });
-      char.model.rotation.y = targetFacing;
-      return;
-    }
-
-    const clip = turnAction.getClip();
-    const turnDurationSec = clip?.duration ?? 0.8;
-    const trackNames = clip?.tracks?.map((t) => t.name).slice(0, 5) ?? [];
-
-    const CLIP_ROTATION_RAD = Math.PI / 2;
-    const clipRotation = angleDiff > 0 ? CLIP_ROTATION_RAD : -CLIP_ROTATION_RAD;
-    const modelTargetYaw = targetFacing - clipRotation;
-    const startYaw = char.model.rotation.y;
-    const rootBoneStart = getRootBoneYawDeg(char.model);
-
-    const strategy = getStrategy();
-    let modelDelta = modelTargetYaw - startYaw;
-    while (modelDelta > Math.PI) modelDelta -= 2 * Math.PI;
-    while (modelDelta < -Math.PI) modelDelta += 2 * Math.PI;
-    const modelDeltaDeg = Math.abs((modelDelta * 180) / Math.PI);
-    const lerpDurationSec = modelDeltaDeg > 45 ? turnDurationSec : 0.15;
+    const clipDurationSec = turnAction?.getClip()?.duration ?? 0.8;
+    // Scale duration with angle: small turns are quick, 180° turns take a bit longer than the clip.
+    const durationSec = THREE.MathUtils.clamp(clipDurationSec * (absDeg / 90), 0.35, clipDurationSec * 1.6);
 
     logger.info('animation', 'Turn start', {
-      clip: turnName,
-      turnDurationSec,
-      strategy,
-      modelDeltaDeg: modelDeltaDeg.toFixed(1),
-      startLerpDurationSec: strategy === 'snap' ? 'n/a (snap)' : lerpDurationSec,
-      angleDiffDeg: ((angleDiff * 180) / Math.PI).toFixed(1),
+      clip: turnAction ? turnName : 'none (procedural)',
       startYawDeg: ((startYaw * 180) / Math.PI).toFixed(1),
-      modelTargetYawDeg: ((modelTargetYaw * 180) / Math.PI).toFixed(1),
-      targetFacingDeg: ((targetFacing * 180) / Math.PI).toFixed(1),
-      clipRotationDeg: ((clipRotation * 180) / Math.PI).toFixed(1),
-      rootBoneYawDeg: rootBoneStart != null ? rootBoneStart.toFixed(1) : 'n/a',
-      clipTrackSample: trackNames
+      targetFacingDeg: ((target * 180) / Math.PI).toFixed(1),
+      angleDiffDeg: ((angleDiff * 180) / Math.PI).toFixed(1),
+      durationSec: durationSec.toFixed(2)
     });
 
-    turnAction.reset();
-    turnAction.setLoop(THREE.LoopOnce, 0);
-    turnAction.clampWhenFinished = true;
+    // Take ownership of facing; capture rig baseline before the turn clip influences it.
+    if (!ownsFacing && settleSec <= 0) rigYawBaseline = getRigYaw(char.model);
+    facing = startYaw;
+    ownsFacing = true;
 
-    if (strategy === 'snap') {
-      char.model.rotation.y = modelTargetYaw;
-      logger.debug('animation', 'Turn start snap', {
-        modelYawSetDeg: ((modelTargetYaw * 180) / Math.PI).toFixed(1)
-      });
-    } else {
-      turnStartLerpState = {
-        char,
-        startYaw,
-        modelTargetYaw,
-        elapsed: 0,
-        durationSec: lerpDurationSec
-      };
+    if (turnAction) {
+      turnAction.reset();
+      turnAction.setLoop(THREE.LoopOnce, 0);
+      turnAction.clampWhenFinished = true;
+      // Stretch/compress the clip so the steps line up with the eased rotation.
+      turnAction.timeScale = clipDurationSec / durationSec;
+      fadeToAction(char, turnAction, 0.15);
     }
 
-    fadeToAction(char, turnAction, 0.15);
-
-    const midTurnMs = (turnDurationSec * 500) | 0;
-    setTimeout(() => {
-      const rootBoneMid = getRootBoneYawDeg(char.model);
-      const modelYawDeg = (char.model.rotation.y * 180) / Math.PI;
-      const visualDeg =
-        rootBoneMid != null ? modelYawDeg + rootBoneMid : modelYawDeg;
-      logger.info('animation', 'Turn mid', {
-        clip: turnName,
-        modelYawDeg: modelYawDeg.toFixed(1),
-        rootBoneYawDeg: rootBoneMid != null ? rootBoneMid.toFixed(1) : 'n/a',
-        visualDeg: rootBoneMid != null ? visualDeg.toFixed(1) : 'n/a',
-        targetFacingDeg: ((targetFacing * 180) / Math.PI).toFixed(1)
-      });
-    }, midTurnMs);
-
     return new Promise<void>((resolve) => {
-      const onComplete = () => {
-        if (!activeTurn) return;
-        const rootBoneEnd = getRootBoneYawDeg(char.model);
-        const modelYawBeforeSet = (char.model.rotation.y * 180) / Math.PI;
-        const visualBeforeSet =
-          rootBoneEnd != null ? modelYawBeforeSet + rootBoneEnd : modelYawBeforeSet;
-        logger.info('animation', 'Turn done', {
-          clip: turnName,
-          durationSec: turnDurationSec,
-          modelYawBeforeSetDeg: modelYawBeforeSet.toFixed(1),
-          rootBoneYawDeg: rootBoneEnd != null ? rootBoneEnd.toFixed(1) : 'n/a',
-          visualBeforeSetDeg:
-            rootBoneEnd != null ? visualBeforeSet.toFixed(1) : 'n/a',
-          targetFacingDeg: ((targetFacing * 180) / Math.PI).toFixed(1)
-        });
-        logFacingChange('turnToFace (final)', startYaw, targetFacing);
-
-        if (beforeWalk) {
-          // Called from walkTo: lerp model.rotation.y over walk crossfade (0.4s)
-          const WALK_FADE_SEC = 0.4;
-          turnLerpState = {
-            startYaw: modelTargetYaw,
-            targetFacing,
-            remainingSec: WALK_FADE_SEC,
-            totalSec: WALK_FADE_SEC
-          };
-        } else {
-          // Standalone turn: lerp model.rotation.y over idle crossfade (0.3s)
-          // so we don't double-count BonesCharacter rotation
-          const STANDALONE_FADE_SEC = 0.3;
-          turnLerpState = {
-            startYaw: modelTargetYaw,
-            targetFacing,
-            remainingSec: STANDALONE_FADE_SEC,
-            totalSec: STANDALONE_FADE_SEC
-          };
-        }
-        activeTurn.resolvePromise();
-        activeTurn = null;
-      };
       activeTurn = {
-        action: turnAction,
-        clipDurationSec: turnDurationSec,
-        resolvePromise: resolve,
-        onComplete
+        action: turnAction ?? null,
+        startYaw,
+        targetYaw: target,
+        elapsed: 0,
+        durationSec,
+        resolvePromise: () => {
+          logFacingChange('turnToFace (final)', startYaw, target);
+          if (turnAction) turnAction.timeScale = 1;
+          resolve();
+        }
       };
     });
   }
@@ -456,6 +374,13 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     const targetFacing = Math.atan2(end.x - start.x, end.z - start.z);
     await playTurnToFace(char, targetFacing, distance, gen, true);
     if (gen !== sequenceGeneration) return;
+
+    // Walk steering owns facing from here (also keeps cancelling the turn clip as it fades)
+    if (!ownsFacing) {
+      facing = getFacing();
+      rigYawBaseline = getRigYaw(char.model);
+      ownsFacing = true;
+    }
 
     const walkAction = getAction(CHAR_ID, 'walking');
     const startWalkingAction = getAction(CHAR_ID, 'start-walking');
@@ -506,6 +431,8 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
             facingDeg
           });
           if (char.idleAction) fadeToAction(char, char.idleAction!, 0.3);
+          isInWalkTo = false;
+          settleSec = Math.max(settleSec, 0.3);
           resolve();
         }
       };
@@ -591,7 +518,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   function pickWanderWaypoint(): THREE.Vector3 {
     const char = getCharacter(CHAR_ID);
     const bounds = getBounds();
-    const currentFacing = char?.model.rotation.y ?? 0;
+    const currentFacing = getFacing();
     const pos = char?.container.position ?? { x: 0, z: 0 };
 
     if (!bounds) return new THREE.Vector3(0, 0, 0);
@@ -653,49 +580,46 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     }
   }
 
+  /** Turn progress: ease visual facing from start → target. */
+  function tickTurn(deltaSec: number): void {
+    if (!activeTurn) return;
+    const turn = activeTurn;
+    turn.elapsed += deltaSec;
+    const t = Math.min(turn.elapsed / turn.durationSec, 1);
+    facing = lerpAngleRad(turn.startYaw, turn.targetYaw, smoothstep(t));
+    if (t >= 1) {
+      facing = turn.targetYaw;
+      activeTurn = null;
+      settleSec = TURN_SETTLE_SEC;
+      logger.info('animation', 'Turn done', { facingDeg: ((facing * 180) / Math.PI).toFixed(1) });
+      turn.resolvePromise();
+    }
+  }
+
+  /**
+   * Apply facing to the model, cancelling any root yaw the current clips put on BonesCharacter.
+   * Runs after mixer.update so the rig yaw is this frame's value.
+   */
+  function applyFacing(deltaSec: number): void {
+    if (!ownsFacing || facing == null) return;
+    const char = getCharacter(CHAR_ID);
+    if (!char) return;
+    const comp = wrapAngle(getRigYaw(char.model) - rigYawBaseline);
+    char.model.rotation.y = wrapAngle(facing - comp);
+
+    if (!activeTurn && !activeWalk) {
+      settleSec -= deltaSec;
+      if (settleSec <= 0) {
+        // Turn clip has faded out; rig yaw is back at baseline. Hand facing back.
+        settleSec = 0;
+        char.model.rotation.y = facing;
+        ownsFacing = false;
+      }
+    }
+  }
+
   function tick(deltaSec: number) {
-    if (activeTurn && activeTurn.action.time >= activeTurn.clipDurationSec) {
-      activeTurn.onComplete();
-    }
-    if (turnStartLerpState) {
-      turnStartLerpState.elapsed += deltaSec;
-      const t = Math.min(turnStartLerpState.elapsed / turnStartLerpState.durationSec, 1);
-      turnStartLerpState.char.model.rotation.y = lerpAngleRad(
-        turnStartLerpState.startYaw,
-        turnStartLerpState.modelTargetYaw,
-        t
-      );
-      if (logger.isEnabled('animation', 'trace') && (turnStartLerpState.elapsed <= deltaSec * 1.5 || t >= 1)) {
-        logger.trace('animation', 'Turn start lerp', {
-          t: t.toFixed(3),
-          elapsedSec: turnStartLerpState.elapsed.toFixed(3),
-          modelYawDeg: ((turnStartLerpState.char.model.rotation.y * 180) / Math.PI).toFixed(1),
-          done: t >= 1
-        });
-      }
-      if (t >= 1) {
-        turnStartLerpState.char.model.rotation.y = turnStartLerpState.modelTargetYaw;
-        turnStartLerpState = null;
-      }
-    }
-    if (turnLerpState && turnLerpState.remainingSec > 0 && !activeWalk) {
-      const char = getCharacter(CHAR_ID);
-      if (char) {
-        turnLerpState.remainingSec -= deltaSec;
-        const t = 1 - turnLerpState.remainingSec / turnLerpState.totalSec;
-        const tClamped = Math.min(Math.max(t, 0), 1);
-        char.model.rotation.y = lerpAngleRad(
-          turnLerpState.startYaw,
-          turnLerpState.targetFacing,
-          tClamped
-        );
-        if (turnLerpState.remainingSec <= 0) {
-          char.model.rotation.y = turnLerpState.targetFacing;
-          if (getStrategy() === 'reset') resetBonesCharacter(char.model);
-          turnLerpState = null;
-        }
-      }
-    }
+    tickTurn(deltaSec);
     if (activeWalk) {
       const aw = activeWalk;
       const prevElapsed = aw.elapsed;
@@ -753,27 +677,15 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
       const bounds = getBounds();
       if (bounds) clampToTrapezoid(aw.root.position, bounds);
 
-      if (char) {
-        const dx = aw.end.x - aw.root.position.x;
-        const dz = aw.end.z - aw.root.position.z;
-        const walkTargetYaw = dx !== 0 || dz !== 0 ? Math.atan2(dx, dz) : char.model.rotation.y;
-
-        if (turnLerpState && turnLerpState.remainingSec > 0) {
-          turnLerpState.remainingSec -= deltaSec;
-          const tLerp = 1 - turnLerpState.remainingSec / turnLerpState.totalSec;
-          const tClamped = Math.min(Math.max(tLerp, 0), 1);
-          char.model.rotation.y = lerpAngleRad(
-            turnLerpState.startYaw,
-            turnLerpState.targetFacing,
-            tClamped
-          );
-          if (turnLerpState.remainingSec <= 0) {
-            char.model.rotation.y = turnLerpState.targetFacing;
-            if (getStrategy() === 'reset') resetBonesCharacter(char.model);
-            turnLerpState = null;
-          }
-        } else {
-          char.model.rotation.y = walkTargetYaw;
+      if (char && facing != null) {
+        // Steer smoothly toward the walk direction (handles small angles the turn skipped).
+        // Use the full start→end heading, not position→end, so it never jitters near the end.
+        const dx = aw.end.x - aw.start.x;
+        const dz = aw.end.z - aw.start.z;
+        if (dx * dx + dz * dz > 1e-6) {
+          const walkTargetYaw = Math.atan2(dx, dz);
+          const k = 1 - Math.exp(-WALK_STEER_RATE * deltaSec);
+          facing = lerpAngleRad(facing, walkTargetYaw, k);
         }
       }
 
@@ -792,6 +704,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
         resolve();
       }
     }
+    applyFacing(deltaSec);
   }
 
   function setLastActivity() {
@@ -829,8 +742,8 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   function getDebugState(): {
     activeWalk: { t: number; phase: WalkPhase; start: [number, number, number]; end: [number, number, number]; pos: [number, number, number] } | null;
     activeTurn: { actionTime: number; clipDurationSec: number; progress: number } | null;
-    turnStartLerpState: { t: number; elapsed: number; durationSec: number } | null;
-    turnLerpState: { remainingSec: number; totalSec: number } | null;
+    facingDeg: number | null;
+    ownsFacing: boolean;
     isInWalkToPhase: boolean;
     isWalking: boolean;
     isBusy: boolean;
@@ -861,29 +774,17 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
 
     const at = activeTurn
       ? {
-          actionTime: activeTurn.action.time,
-          clipDurationSec: activeTurn.clipDurationSec,
-          progress: activeTurn.clipDurationSec > 0 ? activeTurn.action.time / activeTurn.clipDurationSec : 0
+          actionTime: activeTurn.action?.time ?? 0,
+          clipDurationSec: activeTurn.durationSec,
+          progress: activeTurn.durationSec > 0 ? activeTurn.elapsed / activeTurn.durationSec : 0
         }
-      : null;
-
-    const tsl = turnStartLerpState
-      ? {
-          t: turnStartLerpState.elapsed / turnStartLerpState.durationSec,
-          elapsed: turnStartLerpState.elapsed,
-          durationSec: turnStartLerpState.durationSec
-        }
-      : null;
-
-    const tl = turnLerpState
-      ? { remainingSec: turnLerpState.remainingSec, totalSec: turnLerpState.totalSec }
       : null;
 
     return {
       activeWalk: aw,
       activeTurn: at,
-      turnStartLerpState: tsl,
-      turnLerpState: tl,
+      facingDeg: facing != null ? (facing * 180) / Math.PI : null,
+      ownsFacing,
       isInWalkToPhase: isInWalkTo,
       isWalking: activeWalk !== null,
       isBusy: isPlaying,
@@ -897,6 +798,8 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     playSequence,
     walkTo,
     turnTo,
+    getFacing,
+    setFacing,
     isBusy,
     isWalking,
     isInWalkToPhase,

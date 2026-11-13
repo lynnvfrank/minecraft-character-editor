@@ -43,6 +43,9 @@ export type CharacterAIDeps = {
     startIdleWanderer: () => void;
     stopIdleWanderer: () => void;
     runOneWanderStep?: () => void;
+    /** Visual facing (radians), compensating for root yaw in turn clips */
+    getFacing?: () => number;
+    setFacing?: (yaw: number) => void;
   };
 };
 
@@ -97,9 +100,6 @@ export function createCharacterAI(deps: CharacterAIDeps) {
   /** Current head rotation offset (for procedural look-at, applied each frame) */
   let headLookQuat = new THREE.Quaternion();
   let targetHeadLookQuat = new THREE.Quaternion();
-  /** Body yaw target (radians) for smooth turn toward camera */
-  let targetBodyYaw = 0;
-  let currentBodyYaw = 0;
   /** Store rest-pose head quat (captured on first find; may be overwritten by animations) */
   let headBoneOriginalQuat = new THREE.Quaternion();
   let headBoneInitialized = false;
@@ -168,6 +168,7 @@ export function createCharacterAI(deps: CharacterAIDeps) {
     const flatDir = new THREE.Vector2(dir.x, dir.z).normalize();
     const flatForward = new THREE.Vector2(modelForward.x, modelForward.z).normalize();
     let yaw = Math.atan2(flatDir.x, flatDir.y) - Math.atan2(flatForward.x, flatForward.y);
+    yaw = THREE.MathUtils.euclideanModulo(yaw + Math.PI, 2 * Math.PI) - Math.PI;
     let pitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
 
     // Clamp to natural limits
@@ -203,15 +204,21 @@ export function createCharacterAI(deps: CharacterAIDeps) {
 
     const dx = camPos.x - charPos.x;
     const dz = camPos.z - charPos.z;
-    targetBodyYaw = Math.atan2(dx, dz);
+    const targetBodyYaw = Math.atan2(dx, dz);
+
+    // Always start from the live facing (walks/turns change it), and take the shortest way round.
+    const currentBodyYaw = animationManager.getFacing?.() ?? char.model.rotation.y;
+    let diff = (targetBodyYaw - currentBodyYaw) % (2 * Math.PI);
+    if (diff > Math.PI) diff -= 2 * Math.PI;
+    if (diff < -Math.PI) diff += 2 * Math.PI;
 
     const t = 1 - Math.exp(-BODY_TURN_SMOOTH * 60 * deltaSec);
-    currentBodyYaw += (targetBodyYaw - currentBodyYaw) * t;
+    const nextYaw = currentBodyYaw + diff * t;
 
-    // Apply to model (child of container) — model holds the visual, we rotate it for facing
     const prevYaw = char.model.rotation.y;
-    char.model.rotation.y = currentBodyYaw;
-    logFacingChange('updateBodyTurn', prevYaw, currentBodyYaw);
+    if (animationManager.setFacing) animationManager.setFacing(nextYaw);
+    else char.model.rotation.y = nextYaw;
+    logFacingChange('updateBodyTurn', prevYaw, char.model.rotation.y);
   }
 
   /** Stop whatever the character is doing: animations, movement, wander */
@@ -269,7 +276,6 @@ export function createCharacterAI(deps: CharacterAIDeps) {
     state = 'noticing';
     const char = getCharacter(CHAR_ID);
     if (!char) return;
-    currentBodyYaw = char.model.rotation.y;
 
     const greet = GREETING_EMOTES[Math.floor(Math.random() * GREETING_EMOTES.length)];
     const action = getAction(CHAR_ID, greet);
