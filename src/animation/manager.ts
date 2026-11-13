@@ -131,22 +131,22 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
    * Facing model
    * ------------
    * Turn clips rotate the rig root (BonesCharacter) by a fixed amount (~90°), but real turns
-   * can be anywhere from ~17° to 180°. Instead of guessing the clip's rotation, we keep one
-   * "desired visual facing" and every tick set:
+   * can be anywhere from ~17° to 180°. We keep one "desired visual facing" and every tick set:
    *
-   *     model.rotation.y = facing - (rigYaw - rigYawBaseline)
+   *     model.rotation.y = facing - turnClipYaw * turnClipWeight
    *
-   * where rigYaw is read live from BonesCharacter after the mixer update. The clip's root
-   * rotation (including crossfades into/out of it) is cancelled exactly, so the on-screen
-   * heading follows only the eased curve we choose — the clip just supplies the footwork.
+   * turnClipYaw is how far the turn clip has rotated its root from its own first keyframe,
+   * sampled from the clip's BonesCharacter.quaternion track at the action's current time.
+   * Only the turn clip's contribution is cancelled; other clips (idle, walk) keep whatever
+   * root orientation they have, exactly as before, so model.rotation.y == facing outside turns.
    */
   let facing: number | null = null;
-  /** Rig yaw when no turn clip is influencing it (bind pose offset). */
-  let rigYawBaseline = 0;
   /** Seconds to keep compensating after a turn while the turn clip fades out. */
   let settleSec = 0;
   /** True while manager should write model.rotation.y (turn, walk, settle). */
   let ownsFacing = false;
+  /** Most recent turn action (kept through the fade-out so its weight can be cancelled). */
+  let lastTurnAction: THREE.AnimationAction | null = null;
 
   let activeTurn: {
     action: THREE.AnimationAction | null;
@@ -157,7 +157,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     resolvePromise: () => void;
   } | null = null;
 
-  /** Fade time used when leaving the turn clip; compensation must outlast it. */
+  /** Compensation must outlast the fade out of the turn clip. */
   const TURN_SETTLE_SEC = 0.6;
   /** How quickly facing steers toward the walk direction (higher = snappier). */
   const WALK_STEER_RATE = 8;
@@ -178,19 +178,54 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     return c * c * (3 - 2 * c);
   }
 
-  function getRigYaw(model: THREE.Group): number {
-    const bc = findBonesCharacter(model);
-    if (!bc) return 0;
-    return new THREE.Euler().setFromQuaternion(bc.quaternion, 'YXZ').y;
+  /** Cached root-rotation interpolants per clip. */
+  const rootInterpolants = new WeakMap<THREE.AnimationClip, THREE.Interpolant | null>();
+
+  function getRootInterpolant(clip: THREE.AnimationClip): THREE.Interpolant | null {
+    if (rootInterpolants.has(clip)) return rootInterpolants.get(clip)!;
+    const track = clip.tracks.find((t) => t.name.endsWith('BonesCharacter.quaternion')) ?? null;
+    const interp = track ? track.createInterpolant() : null;
+    rootInterpolants.set(clip, interp);
+    return interp;
+  }
+
+  const _q0 = new THREE.Quaternion();
+  const _qt = new THREE.Quaternion();
+  const _fwd = new THREE.Vector3();
+
+  /**
+   * Yaw (radians, about parent Y) the clip's root has rotated at `time` relative to its first frame.
+   * Measured by rotating a forward vector by the parent-space delta, so it is gimbal-safe even when
+   * the root carries a ±90° X axis-conversion rotation.
+   */
+  function clipRootYaw(clip: THREE.AnimationClip, time: number): number {
+    const interp = getRootInterpolant(clip);
+    if (!interp) return 0;
+    const a = interp.evaluate(0);
+    _q0.set(a[0], a[1], a[2], a[3]);
+    const b = interp.evaluate(time);
+    _qt.set(b[0], b[1], b[2], b[3]);
+    // Parent-space delta: qt * q0^-1
+    _qt.multiply(_q0.invert());
+    _fwd.set(0, 0, 1).applyQuaternion(_qt);
+    if (_fwd.x * _fwd.x + _fwd.z * _fwd.z < 1e-6) return 0;
+    return Math.atan2(_fwd.x, _fwd.z);
+  }
+
+  /** How much yaw the (possibly fading) turn clip currently adds to the visual. */
+  function turnCompensation(): number {
+    const action = lastTurnAction;
+    if (!action) return 0;
+    const weight = action.getEffectiveWeight();
+    if (weight <= 0) return 0;
+    return clipRootYaw(action.getClip(), action.time) * weight;
   }
 
   /** Current visual facing (radians, wrapped). */
   function getFacing(): number {
     const char = getCharacter(CHAR_ID);
     if (!char) return facing ?? 0;
-    if (!ownsFacing || facing == null) {
-      facing = wrapAngle(char.model.rotation.y + wrapAngle(getRigYaw(char.model) - rigYawBaseline));
-    }
+    if (!ownsFacing || facing == null) facing = wrapAngle(char.model.rotation.y);
     return facing;
   }
 
@@ -199,7 +234,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     const char = getCharacter(CHAR_ID);
     facing = wrapAngle(yaw);
     if (!char) return;
-    const comp = ownsFacing ? wrapAngle(getRigYaw(char.model) - rigYawBaseline) : 0;
+    const comp = ownsFacing ? turnCompensation() : 0;
     char.model.rotation.y = wrapAngle(facing - comp);
   }
 
@@ -315,7 +350,6 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     });
 
     // Take ownership of facing; capture rig baseline before the turn clip influences it.
-    if (!ownsFacing && settleSec <= 0) rigYawBaseline = getRigYaw(char.model);
     facing = startYaw;
     ownsFacing = true;
 
@@ -325,6 +359,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
       turnAction.clampWhenFinished = true;
       // Stretch/compress the clip so the steps line up with the eased rotation.
       turnAction.timeScale = clipDurationSec / durationSec;
+      lastTurnAction = turnAction;
       fadeToAction(char, turnAction, 0.15);
     }
 
@@ -349,6 +384,8 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     const char = getCharacter(CHAR_ID);
     if (!char) return;
     await playTurnToFace(char, targetFacingRad, 1, sequenceGeneration, false);
+    // Fade out the clamped turn clip; compensation follows its weight down.
+    if (char.idleAction && !activeWalk) fadeToAction(char, char.idleAction, 0.3);
   }
 
   /** Move character to target over time. Target is clamped to trapezoid bounds. */
@@ -378,7 +415,6 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     // Walk steering owns facing from here (also keeps cancelling the turn clip as it fades)
     if (!ownsFacing) {
       facing = getFacing();
-      rigYawBaseline = getRigYaw(char.model);
       ownsFacing = true;
     }
 
@@ -604,16 +640,18 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     if (!ownsFacing || facing == null) return;
     const char = getCharacter(CHAR_ID);
     if (!char) return;
-    const comp = wrapAngle(getRigYaw(char.model) - rigYawBaseline);
+    const comp = turnCompensation();
     char.model.rotation.y = wrapAngle(facing - comp);
 
     if (!activeTurn && !activeWalk) {
       settleSec -= deltaSec;
-      if (settleSec <= 0) {
-        // Turn clip has faded out; rig yaw is back at baseline. Hand facing back.
+      const turnStillBlended = (lastTurnAction?.getEffectiveWeight() ?? 0) > 0.001;
+      if (settleSec <= 0 && !turnStillBlended) {
+        // Turn clip has faded out completely. Hand facing back.
         settleSec = 0;
         char.model.rotation.y = facing;
         ownsFacing = false;
+        lastTurnAction = null;
       }
     }
   }
