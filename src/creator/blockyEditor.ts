@@ -10,7 +10,6 @@ import {
   LAYER_KEYS,
   isLayerKey,
   isLayerWithParts,
-  WORK_SIZE,
   RESOLUTION_MULTIPLIER,
   snapWorkingToSkinCellCenter,
   type LayerKey,
@@ -29,8 +28,6 @@ import {
 } from '../state/creatorSlices';
 
 const ZOOM = 4;
-const DEFAULT_DISPLAY_SIZE = WORK_SIZE * ZOOM;
-const RULER_SCALE = DEFAULT_DISPLAY_SIZE / WORK_SIZE;
 const BLOCKY_GRID_SIZE = 512;
 const TEMPLATE_LABEL_FONT = '600 14px Inter, system-ui, -apple-system, sans-serif';
 
@@ -181,112 +178,6 @@ type VisibleSkinRegion = {
 /** Focused multi layout: each region’s position in texel packing space (gapTex between adjacent parts). */
 type PackedVisibleSkinRegion = VisibleSkinRegion & { packX: number; packY: number };
 
-const FOCUSED_MULTI_GAP_PX = 8;
-
-/** Max texel gap to try so at least FOCUSED_MULTI_GAP_PX exists between adjacent parts at the chosen cellPx. */
-const FOCUSED_MULTI_MAX_GAP_TEX = 32;
-
-type TexelPlacement = {
-  region: VisibleSkinRegion;
-  packX: number;
-  packY: number;
-};
-
-function bboxTexFromPlacements(placements: TexelPlacement[]): { W: number; H: number } {
-  let W = 0;
-  let H = 0;
-  for (const p of placements) {
-    const r = p.region;
-    W = Math.max(W, p.packX + r.w);
-    H = Math.max(H, p.packY + r.h);
-  }
-  return { W, H };
-}
-
-/**
- * Row-major packing: `ncol` regions per row (ncol=1 → column stack; ncol=n → single row).
- * `g` = texel gap between adjacent part boxes (same for H/V).
- */
-function layoutRowMajorGrid(regions: VisibleSkinRegion[], ncol: number, g: number): TexelPlacement[] {
-  const n = regions.length;
-  if (n === 0) return [];
-  const ncolUse = Math.max(1, Math.min(Math.floor(ncol), n));
-  const out: TexelPlacement[] = [];
-  let y = 0;
-  let idx = 0;
-  while (idx < n) {
-    const rowLen = Math.min(ncolUse, n - idx);
-    let x = 0;
-    let rowH = 0;
-    for (let k = 0; k < rowLen; k++) {
-      const r = regions[idx + k]!;
-      out.push({ region: r, packX: x, packY: y });
-      x += r.w;
-      if (k < rowLen - 1) x += g;
-      rowH = Math.max(rowH, r.h);
-    }
-    idx += rowLen;
-    y += rowH;
-    if (idx < n) y += g;
-  }
-  return out;
-}
-
-function pickBestPlacementsForGapTex(
-  regions: VisibleSkinRegion[],
-  gapTex: number
-): { cellPx: number; placements: TexelPlacement[] } {
-  const n = regions.length;
-  let bestCp = 0;
-  let bestPl: TexelPlacement[] = [];
-  for (let ncol = 1; ncol <= n; ncol++) {
-    const placements = layoutRowMajorGrid(regions, ncol, gapTex);
-    const { W, H } = bboxTexFromPlacements(placements);
-    if (W <= 0 || H <= 0) continue;
-    const cp = Math.min(BLOCKY_GRID_SIZE / W, BLOCKY_GRID_SIZE / H);
-    if (cp > bestCp) {
-      bestCp = cp;
-      bestPl = placements;
-    }
-  }
-  return { cellPx: bestCp, placements: bestPl };
-}
-
-function toPackedRegions(placements: TexelPlacement[]): PackedVisibleSkinRegion[] {
-  return placements.map((p) => ({
-    ...p.region,
-    packX: p.packX,
-    packY: p.packY,
-  }));
-}
-
-/**
- * Chooses row/column/grid packing to maximize cell size (fills the 512×512 slot as squarely as possible).
- * Increases texel gap until the on-screen gap is at least {@link FOCUSED_MULTI_GAP_PX}.
- */
-function computeBestMultiRegionLayout(regions: VisibleSkinRegion[]): {
-  cellPx: number;
-  gapTex: number;
-  packed: PackedVisibleSkinRegion[];
-} {
-  if (regions.length === 0) {
-    return {
-      cellPx: RESOLUTION_MULTIPLIER * ZOOM,
-      gapTex: 1,
-      packed: [],
-    };
-  }
-  for (let gapTex = 1; gapTex <= FOCUSED_MULTI_MAX_GAP_TEX; gapTex++) {
-    const { cellPx, placements } = pickBestPlacementsForGapTex(regions, gapTex);
-    if (placements.length === 0) continue;
-    if (cellPx * gapTex >= FOCUSED_MULTI_GAP_PX - 1e-9) {
-      return { cellPx, gapTex, packed: toPackedRegions(placements) };
-    }
-  }
-  const gapTex = FOCUSED_MULTI_MAX_GAP_TEX;
-  const { cellPx, placements } = pickBestPlacementsForGapTex(regions, gapTex);
-  return { cellPx, gapTex, packed: toPackedRegions(placements) };
-}
 
 function readGridLayout(grid: HTMLElement | null): BlockyGridLayout {
   if (!grid || grid.dataset.blockyLayout !== 'focused') {
@@ -481,65 +372,38 @@ export function rebuildBlockyGrid(ctx: BlockyEditorContext): void {
   let skinMinY = 0;
   let cols = SKIN_SIZE;
   let rows = SKIN_SIZE;
-  let layoutMode: 'full' | 'focused' | 'focused-multi' = 'full';
+  let layoutMode: 'full' | 'focused' = 'full';
+  let visibleRegions: VisibleSkinRegion[] | null = null;
 
   if (shouldUseFocusedBlockyLayout(ctx)) {
-    const regions = computeVisibleSkinRegions(ctx.state);
-    if (regions.length > 1) {
-      const { cellPx, packed } = computeBestMultiRegionLayout(regions);
-      layoutMode = 'focused-multi';
-      grid.dataset.blockyLayout = 'focused-multi';
-      grid.dataset.blockyCellPx = String(cellPx);
-      grid.dataset.blockyRegionsJson = JSON.stringify(packed);
-      grid.classList.add('creator-blocky-grid--multi');
-      grid.innerHTML = '';
-      grid.style.position = 'absolute';
-      for (const r of packed) {
-        const regionEl = document.createElement('div');
-        regionEl.className = 'creator-blocky-region';
-        const dw = Math.round(r.w * cellPx);
-        const dh = Math.round(r.h * cellPx);
-        regionEl.style.position = 'absolute';
-        regionEl.style.left = `${r.packX * cellPx}px`;
-        regionEl.style.top = `${r.packY * cellPx}px`;
-        regionEl.style.width = `${dw}px`;
-        regionEl.style.height = `${dh}px`;
-        regionEl.style.gridTemplateColumns = `repeat(${r.w}, 1fr)`;
-        regionEl.style.gridTemplateRows = `repeat(${r.h}, 1fr)`;
-        regionEl.style.display = 'grid';
-        for (let j = 0; j < r.h; j++) {
-          for (let i = 0; i < r.w; i++) {
-            const cell = document.createElement('div');
-            cell.className = 'creator-blocky-cell';
-            cell.dataset.cx = String(r.x + i);
-            cell.dataset.cy = String(r.y + j);
-            cell.setAttribute('role', 'presentation');
-            regionEl.appendChild(cell);
-          }
-        }
-        grid.appendChild(regionEl);
+    visibleRegions = computeVisibleSkinRegions(ctx.state);
+    if (visibleRegions.length > 0) {
+      // Crop to the bounding box of all visible parts, keeping each part at its real skin
+      // position so cells stay aligned with the (skin-coordinate) rulers.
+      let minX = SKIN_SIZE;
+      let minY = SKIN_SIZE;
+      let maxX = 0;
+      let maxY = 0;
+      for (const r of visibleRegions) {
+        minX = Math.min(minX, r.x);
+        minY = Math.min(minY, r.y);
+        maxX = Math.max(maxX, r.x + r.w);
+        maxY = Math.max(maxY, r.y + r.h);
       }
-      const { w: dispW, h: dispH } = getBlockyDisplayPixels(grid);
-      grid.style.width = `${dispW}px`;
-      grid.style.height = `${dispH}px`;
-      const { padX, padY } = getBlockyGridPaddingInInner(grid);
-      grid.style.left = `${padX}px`;
-      grid.style.top = `${padY}px`;
-      return;
-    }
-    if (regions.length === 1) {
-      const r = regions[0]!;
-      const w = r.w;
-      const h = r.h;
+      const w = maxX - minX;
+      const h = maxY - minY;
       if (w > 0 && h > 0 && (w < SKIN_SIZE || h < SKIN_SIZE)) {
-        skinMinX = r.x;
-        skinMinY = r.y;
+        skinMinX = minX;
+        skinMinY = minY;
         cols = w;
         rows = h;
         layoutMode = 'focused';
       }
     }
   }
+  const isVisibleCell = (sx: number, sy: number): boolean =>
+    visibleRegions == null ||
+    visibleRegions.some((r) => sx >= r.x && sx < r.x + r.w && sy >= r.y && sy < r.y + r.h);
 
   grid.innerHTML = '';
   if (layoutMode === 'focused') {
@@ -565,12 +429,14 @@ export function rebuildBlockyGrid(ctx: BlockyEditorContext): void {
       const sy = skinMinY + j;
       const cell = document.createElement('div');
       cell.className = 'creator-blocky-cell';
+      if (!isVisibleCell(sx, sy)) cell.classList.add('creator-blocky-cell--outside');
       cell.dataset.cx = String(sx);
       cell.dataset.cy = String(sy);
       cell.setAttribute('role', 'presentation');
       grid.appendChild(cell);
     }
   }
+  buildRulers();
 }
 
 /** @deprecated Prefer rebuildBlockyGrid(ctx) after context exists. */
@@ -590,51 +456,61 @@ export function buildBlockyGrid(): void {
   }
 }
 
-/** Build ruler ticks and labels. */
+/**
+ * Build ruler ticks and labels in skin-pixel coordinates, matched to the current grid crop
+ * (full 64×64 or focused bounding box) so ticks line up with the cells below them.
+ */
 export function buildRulers(): void {
   const topRuler = document.getElementById('creator-ruler-top');
   const leftRuler = document.getElementById('creator-ruler-left');
   if (!topRuler || !leftRuler) return;
-  if (topRuler.children.length > 0) return;
 
   topRuler.innerHTML = '';
   leftRuler.innerHTML = '';
 
-  for (let s = 0; s <= WORK_SIZE; s += 2) {
-    const px = Math.round(s * RULER_SCALE);
-    const isMajor = s % 16 === 0;
-    const isMinor = s % 8 === 0 && !isMajor;
-    const tickClass =
-      isMajor ? 'creator-ruler-tick creator-ruler-tick-major' :
-      isMinor ? 'creator-ruler-tick creator-ruler-tick-minor' :
-      'creator-ruler-tick creator-ruler-tick-cell';
+  const grid = document.getElementById('creator-blocky-grid');
+  const { skinMinX, skinMinY, skinCols, skinRows } = readGridLayout(grid);
+  const cellPx = getBlockyPixelsPerSkinPixel(grid);
+  const { padX, padY } = getBlockyGridPaddingInInner(grid);
 
-    const topTick = document.createElement('div');
-    topTick.className = tickClass;
-    topTick.style.left = `${px}px`;
-    topRuler.appendChild(topTick);
+  // Label every 8 skin px normally; every 4 when zoomed in on a small crop.
+  const labelStep = cellPx >= 16 ? 4 : 8;
+  const minorStep = labelStep / 2;
 
-    const leftTick = document.createElement('div');
-    leftTick.className = tickClass;
-    leftTick.style.top = `${px}px`;
-    leftRuler.appendChild(leftTick);
-
-    if (isMajor) {
-      const isLast = s === WORK_SIZE;
-      const labelClass = 'creator-ruler-label' + (isLast ? ' creator-ruler-label-last' : '');
-      const topLabel = document.createElement('span');
-      topLabel.className = labelClass;
-      topLabel.textContent = String(s / 2);
-      topLabel.style.left = `${px}px`;
-      topRuler.appendChild(topLabel);
-
-      const leftLabel = document.createElement('span');
-      leftLabel.className = labelClass;
-      leftLabel.textContent = String(s / 2);
-      leftLabel.style.top = `${px}px`;
-      leftRuler.appendChild(leftLabel);
+  const buildAxis = (
+    ruler: HTMLElement,
+    start: number,
+    count: number,
+    pad: number,
+    prop: 'left' | 'top'
+  ): void => {
+    const end = start + count;
+    for (let s = start; s <= end; s++) {
+      const px = Math.round(pad + (s - start) * cellPx);
+      const isEdge = s === start || s === end;
+      const isMajor = s % labelStep === 0 || isEdge;
+      const isMinor = !isMajor && s % minorStep === 0;
+      const tick = document.createElement('div');
+      tick.className =
+        isMajor ? 'creator-ruler-tick creator-ruler-tick-major' :
+        isMinor ? 'creator-ruler-tick creator-ruler-tick-minor' :
+        'creator-ruler-tick creator-ruler-tick-cell';
+      tick.style[prop] = `${px}px`;
+      ruler.appendChild(tick);
+      if (isMajor) {
+        // Skip an aligned label if an edge label sits right next to it.
+        if (!isEdge && (s - start < 2 || end - s < 2)) continue;
+        const label = document.createElement('span');
+        label.className = 'creator-ruler-label' + (s === end ? ' creator-ruler-label-last' : '');
+        label.textContent = String(s);
+        label.style[prop] = `${px}px`;
+        ruler.appendChild(label);
+      }
     }
-  }
+  };
+
+  buildAxis(topRuler, skinMinX, skinCols, padX, 'left');
+  buildAxis(leftRuler, skinMinY, skinRows, padY, 'top');
 }
 
 /** Render blocky grid cells from skin canvas. */
