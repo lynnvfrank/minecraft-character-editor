@@ -3,19 +3,20 @@
  * and recolors the 3D scene to match.
  */
 
-import * as THREE from 'three';
+import { setSkyTheme, type SkyTheme } from '../viewer/scene';
 
 export type Theme = 'bright' | 'dark';
 
 const STORAGE_KEY = 'app:theme';
 
-export const SCENE_THEME: Record<Theme, { background: number; ground: number; hemiGround: number }> = {
-  bright: { background: 0xcfe6ff, ground: 0x9fcf86, hemiGround: 0x6f8a5a },
-  dark: { background: 0x050710, ground: 0x1b1f3b, hemiGround: 0x202030 },
+/** Sky colors for the neutral lighting presets (see viewer/scene.ts setSkyTheme). */
+export const SCENE_THEME: Record<Theme, SkyTheme> = {
+  bright: { background: 0xcfe6ff, ground: 0x9fcf86 },
+  dark: { background: 0x050710, ground: 0x1b1f3b },
 };
 
 let current: Theme = readStoredTheme();
-let scene: THREE.Scene | null = null;
+let sceneReady = false;
 const listeners = new Set<(t: Theme) => void>();
 
 function readStoredTheme(): Theme {
@@ -33,17 +34,7 @@ export function getTheme(): Theme {
 }
 
 function applySceneColors(): void {
-  if (!scene) return;
-  const c = SCENE_THEME[current];
-  scene.background = new THREE.Color(c.background);
-  scene.traverse((obj) => {
-    if (obj.name === 'ground' && (obj as THREE.Mesh).isMesh) {
-      ((obj as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(c.ground);
-    }
-    if ((obj as THREE.HemisphereLight).isHemisphereLight) {
-      (obj as THREE.HemisphereLight).groundColor.setHex(c.hemiGround);
-    }
-  });
+  if (sceneReady) setSkyTheme(SCENE_THEME[current]);
 }
 
 export function setTheme(theme: Theme): void {
@@ -64,8 +55,8 @@ export function onThemeChange(fn: (t: Theme) => void): () => void {
 }
 
 /** Call once after the scene exists. Applies the stored theme and adds the toggle button. */
-export function initTheme(sceneRef: THREE.Scene): void {
-  scene = sceneRef;
+export function initTheme(): void {
+  sceneReady = true;
   setTheme(current);
 
   if (document.getElementById('theme-toggle-btn')) return;

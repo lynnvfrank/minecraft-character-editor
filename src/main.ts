@@ -1309,7 +1309,7 @@ async function main(): Promise<void> {
   }
 
   sceneContext = initViewerScene(container, params) as AppSceneContext;
-  initTheme(sceneContext.scene);
+  initTheme();
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();
 
