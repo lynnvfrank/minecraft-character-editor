@@ -4,8 +4,8 @@
  */
 
 export type CreatorEditModePayload = {
-  mode: 'wardrobe' | '2d' | '3d';
-  previousMode?: 'wardrobe' | '2d' | '3d';
+  mode: 'wardrobe' | 'style' | '2d' | '3d';
+  previousMode?: 'wardrobe' | 'style' | '2d' | '3d';
   /** True for mode bar / Tab; false for route/hash bootstrap (e.g. deep link to #/creator/3d). */
   fromUserModeNavigation?: boolean;
 };

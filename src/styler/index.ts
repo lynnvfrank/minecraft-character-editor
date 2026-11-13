@@ -1,0 +1,21 @@
+export {
+  styleSkin,
+  makeFaceTemplate,
+  applyFaceTemplate,
+  normalizeSkin,
+  parseHexColor,
+  detectHairMask,
+  detectBodyHairMask,
+  detectSkinMask,
+  detectHairAccessoryMask,
+  detectOutfitMask,
+  detectEyeAnchor,
+  recolorHair,
+  recolorSkinTone,
+  hairPalette,
+  createSkinPixels,
+  getPixel,
+  setPixel,
+  key as pixelKey,
+} from './skinStyler';
+export type { StyleSkinOptions, StyleSkinResult, FaceTemplate, SkinPixels, RGB, RGBA, PixelSet } from './skinStyler';

@@ -6,7 +6,8 @@
 export const EDIT_MODE_2D = '2d';
 export const EDIT_MODE_3D = '3d';
 export const EDIT_MODE_WARDROBE = 'wardrobe';
-export type EditMode = typeof EDIT_MODE_2D | typeof EDIT_MODE_3D | typeof EDIT_MODE_WARDROBE;
+export const EDIT_MODE_STYLE = 'style';
+export type EditMode = typeof EDIT_MODE_2D | typeof EDIT_MODE_3D | typeof EDIT_MODE_WARDROBE | typeof EDIT_MODE_STYLE;
 
 export type DrawingTool = 'pencil' | 'eraser' | 'paintBrush' | 'fill' | 'eyedropper' | 'navigate';
 

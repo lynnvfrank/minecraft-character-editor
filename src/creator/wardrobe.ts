@@ -53,7 +53,7 @@ export type WardrobeDeps = {
   getCapture3DThumbnail: () => ((size: number) => Promise<string | null>) | null;
   getCreatorCanvasPopulated: () => boolean;
   getCreatorCurrentSkinPath: () => string | null;
-  getEditMode: () => 'wardrobe' | '2d' | '3d';
+  getEditMode: () => 'wardrobe' | 'style' | '2d' | '3d';
   updateAllUndoRedoButtons: () => void;
   renderToDisplay: () => void;
   animateModePanelIn: (el: HTMLElement, dir: 'left' | 'right' | 'top' | 'bottom') => void;

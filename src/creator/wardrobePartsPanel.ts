@@ -109,7 +109,7 @@ export function unregisterWardrobeShortcuts(): void {
 }
 
 export type WardrobePartsPanelContext = {
-  getEditMode: () => 'wardrobe' | '2d' | '3d';
+  getEditMode: () => 'wardrobe' | 'style' | '2d' | '3d';
   getSelectedLayer: () => WardrobeLayerKey;
   setSelectedLayer: (layer: WardrobeLayerKey) => void;
 };

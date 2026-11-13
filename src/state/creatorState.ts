@@ -41,8 +41,8 @@ export interface CreatorState {
   activeSwatchPalette: 'history' | 'skin';
   /** Active drawing tool. */
   activeTool: DrawingTool;
-  /** Edit mode: 'wardrobe' | '2d' | '3d'. */
-  editMode: 'wardrobe' | '2d' | '3d';
+  /** Edit mode: 'wardrobe' | 'style' | '2d' | '3d'. */
+  editMode: 'wardrobe' | 'style' | '2d' | '3d';
   /** Per-layer visibility (hidden = not rendered, pencil ignored). */
   layer3DVisible: Record<string, boolean>;
   /** Per-layer, per-side visibility overrides (L/R). When undefined, part follows layer visibility. */

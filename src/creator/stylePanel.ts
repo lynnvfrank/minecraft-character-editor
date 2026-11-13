@@ -1,0 +1,412 @@
+/**
+ * Creator.Style ("Make it me") panel.
+ *
+ * Captures the current skin as a base when the mode is entered, then live-restyles it
+ * with the user's saved look (hair / skin tone / outfit / accessory tints + their face),
+ * using the Daily Dress styler port in `src/styler`. Edits preview directly on the skin
+ * canvas; one 'load' undo entry is pushed when the look is applied or the mode is left.
+ */
+
+import { SKIN_SIZE, RESOLUTION_MULTIPLIER, WORK_SIZE } from '../skin';
+import { creatorCanvasSlice, creatorModeSlice } from '../state/creatorSlices';
+import { styleSkin, makeFaceTemplate, type FaceTemplate, type StyleSkinOptions } from '../styler';
+import { createEl } from './dom';
+import { creatorScope } from './lifecycle';
+import { EDIT_MODE_STYLE } from './api';
+
+const STORAGE_KEY = 'blockygotchi.makeItMe.v1';
+const PREVIEW_DEBOUNCE_MS = 60;
+
+type ColorSetting = { on: boolean; color: string };
+export type MyLook = {
+  hair: ColorSetting;
+  skin: ColorSetting;
+  outfit: ColorSetting;
+  accessory: ColorSetting;
+  bodyHair: boolean;
+  tolerance: number;
+  face: { on: boolean; reference: string | null };
+  eyesOverBangs: boolean;
+};
+
+const DEFAULT_LOOK: MyLook = {
+  hair: { on: true, color: '#8b4a2b' },
+  skin: { on: false, color: '#e0ac8a' },
+  outfit: { on: false, color: '#4a6fd1' },
+  accessory: { on: false, color: '#e05a9a' },
+  bodyHair: true,
+  tolerance: 42,
+  face: { on: false, reference: null },
+  eyesOverBangs: true,
+};
+
+export type StylePanelContext = {
+  getSkinCanvas: () => HTMLCanvasElement;
+  onCanvasChange: () => void;
+  pushUndoLoad: (beforeData: Uint8ClampedArray, afterData: Uint8ClampedArray) => void;
+  updateUndoRedoButtons: () => void;
+};
+
+function loadLook(): MyLook {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return structuredClone(DEFAULT_LOOK);
+    const parsed = JSON.parse(raw) as Partial<MyLook>;
+    return {
+      ...structuredClone(DEFAULT_LOOK),
+      ...parsed,
+      face: { ...DEFAULT_LOOK.face, ...(parsed.face ?? {}) },
+    };
+  } catch {
+    return structuredClone(DEFAULT_LOOK);
+  }
+}
+
+function saveLook(look: MyLook): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(look));
+  } catch {
+    // storage unavailable: look still works for this visit
+  }
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = Number.parseInt(hex.replace('#', ''), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Sample the 128x128 working canvas down to a 64x64 skin (top-left texel of each block). */
+function downsample(work: Uint8ClampedArray): ImageData {
+  const out = new ImageData(SKIN_SIZE, SKIN_SIZE);
+  for (let y = 0; y < SKIN_SIZE; y++) {
+    for (let x = 0; x < SKIN_SIZE; x++) {
+      const src = ((y * RESOLUTION_MULTIPLIER) * WORK_SIZE + x * RESOLUTION_MULTIPLIER) * 4;
+      const dst = (y * SKIN_SIZE + x) * 4;
+      out.data.set(work.subarray(src, src + 4), dst);
+    }
+  }
+  return out;
+}
+
+/**
+ * Write a styled 64x64 result back over the working-resolution base. Only skin texels the
+ * styler actually changed are overwritten, so untouched hi-res detail survives.
+ */
+function upsampleChanged(base: Uint8ClampedArray, before: ImageData, after: ImageData): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(base);
+  for (let y = 0; y < SKIN_SIZE; y++) {
+    for (let x = 0; x < SKIN_SIZE; x++) {
+      const i = (y * SKIN_SIZE + x) * 4;
+      const a = before.data;
+      const b = after.data;
+      if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2] && a[i + 3] === b[i + 3]) continue;
+      for (let dy = 0; dy < RESOLUTION_MULTIPLIER; dy++) {
+        for (let dx = 0; dx < RESOLUTION_MULTIPLIER; dx++) {
+          const o = ((y * RESOLUTION_MULTIPLIER + dy) * WORK_SIZE + x * RESOLUTION_MULTIPLIER + dx) * 4;
+          out[o] = b[i]!;
+          out[o + 1] = b[i + 1]!;
+          out[o + 2] = b[i + 2]!;
+          out[o + 3] = b[i + 3]!;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function imageDataToDataUrl(img: ImageData): string {
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  c.getContext('2d')?.putImageData(img, 0, 0);
+  return c.toDataURL('image/png');
+}
+
+async function dataUrlToImageData(url: string): Promise<ImageData | null> {
+  const img = new Image();
+  img.src = url;
+  try {
+    await img.decode();
+  } catch {
+    return null;
+  }
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0);
+  return ctx.getImageData(0, 0, c.width, c.height);
+}
+
+/** Draw the front face (inner head + hat overlay) of a 64x64 skin into a small canvas. */
+function drawFaceThumb(canvas: HTMLCanvasElement, url: string | null): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!url) return;
+  const img = new Image();
+  img.onload = () => {
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 8, 8, 8, 8, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 40, 8, 8, 8, 0, 0, canvas.width, canvas.height);
+  };
+  img.src = url;
+}
+
+export function buildStylePanel(ctx: StylePanelContext): void {
+  const host = document.getElementById('creator-view-wrapper');
+  if (!host) return;
+  document.getElementById('creator-style-panel')?.remove();
+
+  const look = loadLook();
+  let baseWork: Uint8ClampedArray | null = null;
+  let base64: ImageData | null = null;
+  let previewDirty = false;
+  /** Last pixels this panel wrote; anything else on the canvas means the skin changed underneath us. */
+  let lastWritten: Uint8ClampedArray | null = null;
+  let faceTemplate: FaceTemplate | null = null;
+  let faceTemplateFor: string | null = null;
+  let debounce: number | undefined;
+  let renderToken = 0;
+
+  const status = createEl('div', { className: 'creator-style-status', role: 'status' });
+
+  const colorRow = (key: 'hair' | 'skin' | 'outfit' | 'accessory', label: string, hint: string) => {
+    const check = createEl('input', { type: 'checkbox', id: `creator-style-${key}-on` });
+    check.checked = look[key].on;
+    const color = createEl('input', { type: 'color', id: `creator-style-${key}-color`, 'aria-label': `${label} color` });
+    color.value = look[key].color;
+    color.disabled = !look[key].on;
+    check.addEventListener('change', () => {
+      look[key].on = check.checked;
+      color.disabled = !check.checked;
+      onLookChanged();
+    });
+    color.addEventListener('input', () => {
+      look[key].color = color.value;
+      onLookChanged();
+    });
+    return createEl('div', { className: 'creator-style-row', title: hint },
+      createEl('label', { className: 'creator-style-row-label', for: check.id }, check, ` ${label}`),
+      color,
+    );
+  };
+
+  const bodyHair = createEl('input', { type: 'checkbox', id: 'creator-style-body-hair' });
+  bodyHair.checked = look.bodyHair;
+  bodyHair.addEventListener('change', () => { look.bodyHair = bodyHair.checked; onLookChanged(); });
+
+  const tolerance = createEl('input', { type: 'range', min: '16', max: '80', step: '1', id: 'creator-style-tolerance' });
+  tolerance.value = String(look.tolerance);
+  const toleranceValue = createEl('span', { className: 'creator-style-value' }, String(look.tolerance));
+  tolerance.addEventListener('input', () => {
+    look.tolerance = Number(tolerance.value);
+    toleranceValue.textContent = tolerance.value;
+    onLookChanged();
+  });
+
+  const faceOn = createEl('input', { type: 'checkbox', id: 'creator-style-face-on' });
+  faceOn.checked = look.face.on;
+  const faceThumb = createEl('canvas', { className: 'creator-style-face-thumb', width: '48', height: '48', 'aria-label': 'Your saved face' });
+  const faceUse = createEl('button', { type: 'button', className: 'creator-tools-panel-btn', title: "Save this base skin's face and eyes as yours" }, 'Use this face');
+  const eyesOverBangs = createEl('input', { type: 'checkbox', id: 'creator-style-eyes-over-bangs' });
+  eyesOverBangs.checked = look.eyesOverBangs;
+  const syncFaceUi = () => {
+    faceOn.disabled = !look.face.reference;
+    if (!look.face.reference) faceOn.checked = false;
+    eyesOverBangs.disabled = !faceOn.checked;
+    drawFaceThumb(faceThumb, look.face.reference);
+  };
+  faceOn.addEventListener('change', () => { look.face.on = faceOn.checked; syncFaceUi(); onLookChanged(); });
+  eyesOverBangs.addEventListener('change', () => { look.eyesOverBangs = eyesOverBangs.checked; onLookChanged(); });
+  faceUse.addEventListener('click', () => {
+    if (previewDirty) {
+      setStatus('Click Original first, then use the face from the unstyled skin.');
+      return;
+    }
+    syncBaseWithCanvas();
+    if (!base64) return;
+    look.face.reference = imageDataToDataUrl(base64);
+    look.face.on = true;
+    faceOn.checked = true;
+    faceTemplate = null;
+    faceTemplateFor = null;
+    syncFaceUi();
+    onLookChanged();
+  });
+
+  const applyBtn = createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-style-primary', title: 'Keep this look on the skin (undoable)' }, 'Apply');
+  const resetBtn = createEl('button', { type: 'button', className: 'creator-tools-panel-btn', title: 'Show the base skin again' }, 'Original');
+  applyBtn.addEventListener('click', () => commitPreview(true));
+  resetBtn.addEventListener('click', () => {
+    if (!baseWork) return;
+    writeCanvas(baseWork);
+    previewDirty = false;
+    setStatus('Showing the original. Change a setting to restyle.');
+  });
+
+  const panel = createEl('div', { id: 'creator-style-panel', className: 'creator-style-panel', role: 'region', 'aria-label': 'Make it me' },
+    createEl('div', { className: 'creator-style-title' }, 'Make it me'),
+    createEl('p', { className: 'creator-style-intro' }, 'Restyle any skin to your look. Your settings are remembered.'),
+    createEl('div', { className: 'creator-style-section' },
+      createEl('div', { className: 'creator-style-section-title' }, 'Colors'),
+      colorRow('hair', 'Hair', 'Recolor detected hair, keeping its shading'),
+      createEl('div', { className: 'creator-style-row creator-style-sub' },
+        createEl('label', { for: bodyHair.id }, bodyHair, ' Include hair on shoulders/back'),
+      ),
+      colorRow('skin', 'Skin tone', 'Shift exposed skin to this tone'),
+      colorRow('outfit', 'Outfit tint', 'Tint the clothing'),
+      colorRow('accessory', 'Accessory tint', 'Tint bows, clips and other hair accessories'),
+      createEl('div', { className: 'creator-style-row', title: 'How loosely colors count as hair. Raise it if hair is missed; lower it if other parts change.' },
+        createEl('label', { for: tolerance.id, className: 'creator-style-row-label' }, 'Detection'),
+        tolerance,
+        toleranceValue,
+      ),
+    ),
+    createEl('div', { className: 'creator-style-section' },
+      createEl('div', { className: 'creator-style-section-title' }, 'Face'),
+      createEl('div', { className: 'creator-style-face' },
+        faceThumb,
+        createEl('div', { className: 'creator-style-face-controls' },
+          createEl('label', { for: faceOn.id }, faceOn, ' Use my face'),
+          createEl('label', { for: eyesOverBangs.id }, eyesOverBangs, ' Eyes over bangs'),
+          faceUse,
+        ),
+      ),
+    ),
+    createEl('div', { className: 'creator-style-actions' }, resetBtn, applyBtn),
+    status,
+  );
+  host.appendChild(panel);
+  syncFaceUi();
+  creatorScope.track(() => {
+    window.clearTimeout(debounce);
+    panel.remove();
+  });
+
+  function setStatus(text: string): void {
+    status.textContent = text;
+  }
+
+  function writeCanvas(data: Uint8ClampedArray): void {
+    const canvas = ctx.getSkinCanvas();
+    const c2d = canvas.getContext('2d', { willReadFrequently: true });
+    if (!c2d) return;
+    const img = c2d.createImageData(WORK_SIZE, WORK_SIZE);
+    img.data.set(data);
+    c2d.putImageData(img, 0, 0);
+    lastWritten = new Uint8ClampedArray(data);
+    ctx.onCanvasChange();
+  }
+
+  function captureBase(): void {
+    const canvas = ctx.getSkinCanvas();
+    const c2d = canvas.getContext('2d', { willReadFrequently: true });
+    if (!c2d) return;
+    baseWork = new Uint8ClampedArray(c2d.getImageData(0, 0, WORK_SIZE, WORK_SIZE).data);
+    base64 = downsample(baseWork);
+    lastWritten = baseWork;
+    previewDirty = false;
+  }
+
+  function sameData(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  /** Re-capture the base if the skin was loaded, undone or painted since we last touched it. */
+  function syncBaseWithCanvas(): void {
+    const c2d = ctx.getSkinCanvas().getContext('2d', { willReadFrequently: true });
+    if (!c2d) return;
+    const current = c2d.getImageData(0, 0, WORK_SIZE, WORK_SIZE).data;
+    if (!lastWritten || !sameData(current, lastWritten)) captureBase();
+  }
+
+  async function ensureFaceTemplate(): Promise<FaceTemplate | null> {
+    const ref = look.face.on ? look.face.reference : null;
+    if (!ref) return null;
+    if (faceTemplate && faceTemplateFor === ref) return faceTemplate;
+    const img = await dataUrlToImageData(ref);
+    if (!img) return null;
+    faceTemplate = makeFaceTemplate(img, look.tolerance);
+    faceTemplateFor = ref;
+    return faceTemplate;
+  }
+
+  async function renderPreview(): Promise<void> {
+    syncBaseWithCanvas();
+    if (!baseWork || !base64) return;
+    const token = ++renderToken;
+    const template = await ensureFaceTemplate();
+    if (token !== renderToken) return;
+    const options: StyleSkinOptions = {
+      targetHairColor: look.hair.on ? hexToRgb(look.hair.color) : null,
+      tolerance: look.tolerance,
+      faceTemplate: template,
+      targetSkinColor: look.skin.on ? hexToRgb(look.skin.color) : null,
+      includeBodyHair: look.bodyHair,
+      eyesOverBangs: look.eyesOverBangs,
+      targetOutfitColor: look.outfit.on ? hexToRgb(look.outfit.color) : null,
+      targetAccessoryColor: look.accessory.on ? hexToRgb(look.accessory.color) : null,
+    };
+    try {
+      const started = performance.now();
+      const result = styleSkin(base64, options);
+      const styled = upsampleChanged(baseWork, base64, result.image as ImageData);
+      writeCanvas(styled);
+      previewDirty = true;
+      const ms = Math.round(performance.now() - started);
+      setStatus(`Preview (${result.hairMask.size} hair pixels found, ${ms} ms). Apply to keep it.`);
+    } catch (err) {
+      console.error('[make-it-me] styling failed', err);
+      setStatus("Couldn't style this skin. Try another base skin.");
+    }
+  }
+
+  function onLookChanged(): void {
+    saveLook(look);
+    window.clearTimeout(debounce);
+    debounce = window.setTimeout(() => void renderPreview(), PREVIEW_DEBOUNCE_MS);
+  }
+
+  /** Turn the current preview into a single undo step; optionally make it the new base. */
+  function commitPreview(rebase: boolean): void {
+    if (!baseWork || !previewDirty) return;
+    const canvas = ctx.getSkinCanvas();
+    const c2d = canvas.getContext('2d', { willReadFrequently: true });
+    if (!c2d) return;
+    const after = new Uint8ClampedArray(c2d.getImageData(0, 0, WORK_SIZE, WORK_SIZE).data);
+    ctx.pushUndoLoad(baseWork, after);
+    ctx.updateUndoRedoButtons();
+    previewDirty = false;
+    if (rebase) {
+      captureBase();
+      setStatus('Applied. You can keep tweaking, or undo with Ctrl+Z.');
+    }
+  }
+
+  function enter(): void {
+    captureBase();
+    setStatus('Base skin captured. Adjust your look to preview.');
+    void renderPreview();
+  }
+
+  creatorScope.track(creatorModeSlice.subscribe((detail) => {
+    if (detail.mode === EDIT_MODE_STYLE && detail.previousMode !== EDIT_MODE_STYLE) enter();
+    else if (detail.previousMode === EDIT_MODE_STYLE && detail.mode !== EDIT_MODE_STYLE) commitPreview(false);
+  }));
+
+  // A skin loaded (or undo/redo) while in this mode: restyle the new skin.
+  creatorScope.track(creatorCanvasSlice.subscribe(() => {
+    if (document.body.dataset.editMode !== EDIT_MODE_STYLE) return;
+    const c2d = ctx.getSkinCanvas().getContext('2d', { willReadFrequently: true });
+    if (!c2d || !lastWritten) return;
+    if (sameData(c2d.getImageData(0, 0, WORK_SIZE, WORK_SIZE).data, lastWritten)) return;
+    onLookChanged();
+  }));
+
+  if (document.body.dataset.editMode === EDIT_MODE_STYLE) enter();
+}

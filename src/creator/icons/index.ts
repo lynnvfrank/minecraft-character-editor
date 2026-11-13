@@ -21,6 +21,7 @@ import modeCreatorToolsDropperRaw from './mode.creator.tools.dropper.svg?raw';
 import modeCreatorToolsUndoRaw from './mode.creator.tools.undo.svg?raw';
 import modeCreatorToolsRedoRaw from './mode.creator.tools.redo.svg?raw';
 import modeCreatorWardrobeRaw from './mode.creator.wardrobe.svg?raw';
+import modeCreatorStyleRaw from './mode.creator.style.svg?raw';
 import modeCreator2DRaw from './mode.creator.2D.svg?raw';
 import modeCreator3DRaw from './mode.creator.3D.svg?raw';
 
@@ -42,6 +43,7 @@ const ICONS_RAW = {
   modeCreatorToolsUndo: modeCreatorToolsUndoRaw,
   modeCreatorToolsRedo: modeCreatorToolsRedoRaw,
   modeCreatorWardrobe: modeCreatorWardrobeRaw,
+  modeCreatorStyle: modeCreatorStyleRaw,
   modeCreator2D: modeCreator2DRaw,
   modeCreator3D: modeCreator3DRaw,
 } as const;

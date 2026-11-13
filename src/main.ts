@@ -942,7 +942,7 @@ function updateCreator3DViewPlacement() {
   const slot = document.getElementById('creator-3d-preview-slot');
   if (!app || !wrapper || !slot) return;
   const mode = getEditMode();
-  const show3DInMainArea = mode === '3d' || mode === 'wardrobe';
+  const show3DInMainArea = mode === '3d' || mode === 'wardrobe' || mode === 'style';
   if (show3DInMainArea) {
     const ctx = sceneContext;
     if (app.parentElement !== wrapper) {

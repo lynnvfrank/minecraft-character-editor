@@ -31,6 +31,7 @@ import {
 } from './creator/index';
 import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
 import { buildArmModelPanel } from './creator/armModelPanel';
+import { buildStylePanel } from './creator/stylePanel';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
@@ -384,6 +385,19 @@ function buildCreatorPanels(): void {
     onDownload: skinGalleryApi.downloadCurrentSkin,
   });
   buildArmModelPanel();
+  buildStylePanel({
+    getSkinCanvas,
+    onCanvasChange: () => {
+      if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
+      creatorCanvasSlice.notify();
+    },
+    pushUndoLoad: (beforeData, afterData) => {
+      state.redoStack = [];
+      state.undoStack.push({ type: 'load', beforeData, afterData });
+      if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
+    },
+    updateUndoRedoButtons: updateAllUndoRedoButtons,
+  });
   buildTexturePositionPanel();
   buildCameraControls({
     getFocusedCreationEnabled: () => state.focusedCreationEnabled,

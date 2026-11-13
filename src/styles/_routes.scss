@@ -57,7 +57,8 @@ body[data-route="creator"][data-edit-mode="2d"] .creator-blocky-grid:not(.creato
 body[data-route="creator"][data-edit-mode="2d"] .creator-blocky-grid.creator-blocky-grid--multi {
   display: block !important;
 }
-body[data-route="creator"][data-edit-mode="wardrobe"] .creator-canvas-area {
+body[data-route="creator"][data-edit-mode="wardrobe"] .creator-canvas-area,
+body[data-route="creator"][data-edit-mode="style"] .creator-canvas-area {
   display: none !important;
 }
 

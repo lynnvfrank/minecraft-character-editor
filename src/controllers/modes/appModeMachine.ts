@@ -1,6 +1,6 @@
 /**
  * XState machine for application mode (route + creator submode).
- * Mirrors hash routing: home, creator (wardrobe|3d|2d), preview.
+ * Mirrors hash routing: home, creator (wardrobe|style|3d|2d), preview.
  */
 
 import { createMachine, createActor, fromCallback } from 'xstate';
@@ -60,7 +60,8 @@ export const appModeMachine = createMachine({
             guard: ({ event }) => (event.editMode ?? 'wardrobe') === 'wardrobe'
           },
           { target: 'creator.3d', guard: ({ event }) => event.editMode === '3d' },
-          { target: 'creator.2d', guard: ({ event }) => event.editMode === '2d' }
+          { target: 'creator.2d', guard: ({ event }) => event.editMode === '2d' },
+          { target: 'creator.style', guard: ({ event }) => event.editMode === 'style' }
         ],
         GO_PREVIEW: 'preview'
       }
@@ -77,7 +78,8 @@ export const appModeMachine = createMachine({
           on: {
             SET_EDIT_MODE: [
               { target: '3d', guard: ({ event }) => event.editMode === '3d' },
-              { target: '2d', guard: ({ event }) => event.editMode === '2d' }
+              { target: '2d', guard: ({ event }) => event.editMode === '2d' },
+              { target: 'style', guard: ({ event }) => event.editMode === 'style' }
             ]
           }
         },
@@ -88,7 +90,8 @@ export const appModeMachine = createMachine({
           on: {
             SET_EDIT_MODE: [
               { target: 'wardrobe', guard: ({ event }) => event.editMode === 'wardrobe' },
-              { target: '2d', guard: ({ event }) => event.editMode === '2d' }
+              { target: '2d', guard: ({ event }) => event.editMode === '2d' },
+              { target: 'style', guard: ({ event }) => event.editMode === 'style' }
             ]
           }
         },
@@ -99,7 +102,20 @@ export const appModeMachine = createMachine({
           on: {
             SET_EDIT_MODE: [
               { target: 'wardrobe', guard: ({ event }) => event.editMode === 'wardrobe' },
-              { target: '3d', guard: ({ event }) => event.editMode === '3d' }
+              { target: '3d', guard: ({ event }) => event.editMode === '3d' },
+              { target: 'style', guard: ({ event }) => event.editMode === 'style' }
+            ]
+          }
+        },
+        style: {
+          entry: ({ event }) => {
+            if (event && 'routeInfo' in event && event.routeInfo) applyRouteFromEvent(event.routeInfo);
+          },
+          on: {
+            SET_EDIT_MODE: [
+              { target: 'wardrobe', guard: ({ event }) => event.editMode === 'wardrobe' },
+              { target: '3d', guard: ({ event }) => event.editMode === '3d' },
+              { target: '2d', guard: ({ event }) => event.editMode === '2d' }
             ]
           }
         }
@@ -121,7 +137,8 @@ export const appModeMachine = createMachine({
             guard: ({ event }) => (event.editMode ?? 'wardrobe') === 'wardrobe'
           },
           { target: 'creator.3d', guard: ({ event }) => event.editMode === '3d' },
-          { target: 'creator.2d', guard: ({ event }) => event.editMode === '2d' }
+          { target: 'creator.2d', guard: ({ event }) => event.editMode === '2d' },
+          { target: 'creator.style', guard: ({ event }) => event.editMode === 'style' }
         ]
       }
     }
@@ -143,7 +160,7 @@ function getEditModeFromSnapshot(snapshot: { value: unknown }): EditMode {
   const val = snapshot.value;
   if (typeof val === 'object' && val !== null && 'creator' in val) {
     const child = (val as { creator: string }).creator;
-    if (child === 'wardrobe' || child === '3d' || child === '2d') return child;
+    if (child === 'wardrobe' || child === '3d' || child === '2d' || child === 'style') return child;
   }
   return 'wardrobe';
 }
@@ -179,7 +196,9 @@ export function parseHashToRouteInfo(): RouteInfo {
   if (hash === '#/creator' || hash.startsWith('#/creator/')) {
     const modeSegment = hash.slice('#/creator/'.length);
     const creatorMode: EditMode =
-      modeSegment === '2d' || modeSegment === 'wardrobe' || modeSegment === '3d' ? modeSegment : 'wardrobe';
+      modeSegment === '2d' || modeSegment === 'wardrobe' || modeSegment === '3d' || modeSegment === 'style'
+        ? modeSegment
+         : 'wardrobe';
     return { route: 'creator', creatorMode };
   }
   return { route: 'viewer', creatorMode: null };
