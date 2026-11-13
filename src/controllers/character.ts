@@ -212,6 +212,9 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
           const container = new THREE.Group();
           container.position.copy(config.position);
           container.add(model);
+          // Hide until the idle pose is applied: otherwise the raw bind pose renders
+          // while animation clips load, then snaps down — reads as a "jump" on startup.
+          container.visible = false;
           getSceneContext().scene.add(container);
 
           const mixer = new THREE.AnimationMixer(model);
@@ -267,6 +270,10 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
                 getCreatorPoseController()?.applyCreatorCharacterPose();
               }
 
+              // Evaluate the pose now so the first visible frame is already posed.
+              mixer.update(0);
+              container.visible = true;
+
               if (Object.keys(getSceneContext().characters).length === 1) {
                 onFirstCharacterReady(skins, animationsList, getSequencesList());
               }
@@ -283,7 +290,10 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
               path,
               (animFbx) => onClipLoaded(animFbx, key),
               undefined,
-              (err) => logger.error('general', 'FBX load failed', { path, error: String(err) })
+              (err) => {
+                logger.error('general', 'FBX load failed', { path, error: String(err) });
+                container.visible = true; // don't leave the character invisible forever
+              }
             );
           }
         },
