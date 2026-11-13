@@ -31,7 +31,7 @@ import {
 } from './creator/index';
 import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
 import { buildArmModelPanel } from './creator/armModelPanel';
-import { buildStylePanel } from './creator/stylePanel';
+import { buildStylePanel, noteStyleUndoRedo } from './creator/stylePanel';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
@@ -243,6 +243,7 @@ function updateCanvasCursor(): void {
 
 function performUndo(): void {
   if (!blockyCtx) return;
+  noteStyleUndoRedo();
   undo.performUndo({
     undoStack: state.undoStack,
     redoStack: state.redoStack,
@@ -258,6 +259,7 @@ function updateAllUndoRedoButtons(): void {
 
 function performRedo(): void {
   if (!blockyCtx) return;
+  noteStyleUndoRedo();
   undo.performRedo({
     undoStack: state.undoStack,
     redoStack: state.redoStack,

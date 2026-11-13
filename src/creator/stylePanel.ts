@@ -123,13 +123,15 @@ function imageDataToDataUrl(img: ImageData): string {
 }
 
 async function dataUrlToImageData(url: string): Promise<ImageData | null> {
+  // Note: img.decode() can hang indefinitely for data URLs in some Chromium embeds; use load events.
   const img = new Image();
-  img.src = url;
-  try {
-    await img.decode();
-  } catch {
-    return null;
-  }
+  const loaded = await new Promise<boolean>((resolve) => {
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+    if (img.complete && img.naturalWidth > 0) resolve(true);
+  });
+  if (!loaded) return null;
   const c = document.createElement('canvas');
   c.width = img.naturalWidth;
   c.height = img.naturalHeight;
@@ -153,6 +155,13 @@ function drawFaceThumb(canvas: HTMLCanvasElement, url: string | null): void {
     ctx.drawImage(img, 40, 8, 8, 8, 0, 0, canvas.width, canvas.height);
   };
   img.src = url;
+}
+
+let undoRedoPending = false;
+
+/** Called by the creator right before an undo/redo rewrites the skin canvas. */
+export function noteStyleUndoRedo(): void {
+  undoRedoPending = document.body.dataset.editMode === EDIT_MODE_STYLE;
 }
 
 export function buildStylePanel(ctx: StylePanelContext): void {
@@ -228,6 +237,13 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     }
     syncBaseWithCanvas();
     if (!base64) return;
+    // Front face lives at (8..15, 8..15); refuse a blank one (e.g. skin still loading).
+    let faceOpaque = 0;
+    for (let y = 8; y < 16; y++) for (let x = 8; x < 16; x++) if (base64.data[(y * SKIN_SIZE + x) * 4 + 3]! > 0) faceOpaque++;
+    if (faceOpaque < 32) {
+      setStatus('This skin has no face to copy yet. Wait for it to load, or pick another skin.');
+      return;
+    }
     look.face.reference = imageDataToDataUrl(base64);
     look.face.on = true;
     faceOn.checked = true;
@@ -405,7 +421,16 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     const c2d = ctx.getSkinCanvas().getContext('2d', { willReadFrequently: true });
     if (!c2d || !lastWritten) return;
     if (sameData(c2d.getImageData(0, 0, WORK_SIZE, WORK_SIZE).data, lastWritten)) return;
-    onLookChanged();
+    // A newly loaded skin gets styled. Undo/redo is respected as-is (adopted as the new
+    // base), otherwise the undo would be immediately re-styled away.
+    if (!undoRedoPending) {
+      onLookChanged();
+      return;
+    }
+    undoRedoPending = false;
+    window.clearTimeout(debounce);
+    captureBase();
+    setStatus('Showing the skin as it is now. Change a setting to restyle it.');
   }));
 
   if (document.body.dataset.editMode === EDIT_MODE_STYLE) enter();
