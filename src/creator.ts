@@ -30,6 +30,7 @@ import {
   unregisterWardrobeShortcuts,
 } from './creator/index';
 import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
+import { buildArmModelPanel } from './creator/armModelPanel';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
@@ -50,6 +51,7 @@ import {
 import type { WardrobeLayerKey } from './creator/wardrobeLayers';
 import { createColorActions, extractColorsFromSkin } from './creator/swatches';
 import { createSkinGalleryApi } from './creator/skinGallery';
+import { creatorScope } from './creator/lifecycle';
 
 // --- Imports: events, state, lib, viewer ---
 import { createCreatorState } from './state';
@@ -381,12 +383,13 @@ function buildCreatorPanels(): void {
     onSave: skinGalleryApi.saveCurrentSkinToOutfits,
     onDownload: skinGalleryApi.downloadCurrentSkin,
   });
+  buildArmModelPanel();
   buildTexturePositionPanel();
   buildCameraControls({
     getFocusedCreationEnabled: () => state.focusedCreationEnabled,
     setFocusedCreationEnabled,
     subscribeFocusedCreationChanged: (cb) =>
-      creatorFocusedCreationSlice.subscribe(() => cb()),
+      creatorScope.track(creatorFocusedCreationSlice.subscribe(() => cb())),
   });
   modePanelTransitions.applyModePanelsImmediate(state.editMode);
 }
@@ -400,21 +403,21 @@ function setupCanvasAreaResize(): void {
   };
   blockyEditor.fitCanvasAreaScale();
   updateCanvasCursor();
-  new ResizeObserver(update).observe(area);
+  const observer = new ResizeObserver(update);
+  observer.observe(area);
   const bottomPanels = document.getElementById('creator-bottom-center-panels');
-  if (bottomPanels) {
-    new ResizeObserver(update).observe(bottomPanels);
-  }
-  window.addEventListener('resize', update);
+  if (bottomPanels) observer.observe(bottomPanels);
+  creatorScope.track(() => observer.disconnect());
+  creatorScope.listen(window, 'resize', update);
   requestAnimationFrame(update);
-  creatorModeSlice.subscribe((detail) => {
+  creatorScope.track(creatorModeSlice.subscribe((detail) => {
     if ((detail.mode ?? state.editMode) === EDIT_MODE_2D) {
       requestAnimationFrame(() => requestAnimationFrame(update));
       // Bottom toolbar slides in over MODE_TRANSITION_MS; early fit uses a stale `panelsRect.top`
       // and scales the canvas too large until something refits (e.g. mousemove → renderRulersAndGrid).
       window.setTimeout(update, MODE_TRANSITION_MS + 50);
     }
-  });
+  }));
 }
 
 // --- Public API: initialization ---
@@ -424,6 +427,9 @@ export function initCreator(): void {
   const skin = getSkinCanvas();
   const ctx = skin.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;
+
+  // Tear down listeners/subscriptions from the previous creator visit before rebuilding.
+  creatorScope.dispose();
 
   if (!creatorCanvasPopulated) {
     ctx.clearRect(0, 0, WORK_SIZE, WORK_SIZE);
@@ -512,7 +518,7 @@ export function initCreator(): void {
   void wardrobeApi.ensureWardrobeLibrariesLoaded();
 
   const downloadBtn = document.getElementById('creator-download-btn');
-  downloadBtn?.addEventListener('click', () => skinGalleryApi.downloadCurrentSkin());
+  if (downloadBtn) creatorScope.listen(downloadBtn, 'click', () => skinGalleryApi.downloadCurrentSkin());
 
   const { keyBindings, ctrlKeyBindings } = createEditorToolKeyBindings({
     getEditMode: () => state.editMode,
@@ -525,7 +531,7 @@ export function initCreator(): void {
     updateAllUndoRedoButtons,
   });
 
-  document.addEventListener('keydown', (e) => {
+  creatorScope.listen(document, 'keydown', (e) => {
     if (document.body.dataset.route !== 'creator') return;
     const target = e.target as HTMLElement;
     const inInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);

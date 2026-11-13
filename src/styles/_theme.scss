@@ -1,0 +1,74 @@
+// Theme tokens. Components use these via rgba(var(--fg-rgb), a) etc.
+// Switch by setting <html data-theme="bright|dark"> (see src/ui/theme.ts).
+//
+// --fg-rgb      : ink used for text, borders, hover tints (white on dark, navy on bright)
+// --panel-rgb   : floating panel fill
+// --shadow-rgb  : drop shadows / scrims
+// --text        : body text
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --app-bg: #050710;
+  --text: #f5f5f5;
+  --fg-rgb: 255, 255, 255;
+  --panel-rgb: 20, 25, 40;
+  --shadow-rgb: 0, 0, 0;
+  --surface-solid: #1a1a2e;
+  --canvas-empty: #1a1a2e;
+  --btn-grad-end: #1b1f3b;
+}
+
+:root[data-theme='bright'] {
+  color-scheme: light;
+  --app-bg: #d9ecff;
+  --text: #1f2747;
+  --fg-rgb: 31, 39, 71;
+  --panel-rgb: 255, 255, 255;
+  --shadow-rgb: 64, 92, 150;
+  --surface-solid: #f4f7fd;
+  // Mid-tone so both white and near-black skin pixels read against empty texels.
+  --canvas-empty: #9eabc4;
+  --btn-grad-end: #2b56c4;
+}
+
+// Text on saturated buttons stays light in both themes.
+:root[data-theme='bright'] {
+  #enter-viewer-btn,
+  #enter-creator-btn,
+  .creator-tools-panel-btn.active,
+  .creator-tools-panel-mode-btn.active {
+    color: #fff;
+  }
+}
+
+.theme-toggle-btn {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 50;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  background: rgba(var(--panel-rgb), 0.92);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    transform: scale(1.08);
+  }
+}
+
+// Creator fills the right edge with panels; use the empty strip right of the left panel column.
+body[data-route='creator'] .theme-toggle-btn {
+  right: auto;
+  left: 284px;
+  bottom: 16px;
+}

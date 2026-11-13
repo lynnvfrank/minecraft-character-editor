@@ -8,6 +8,7 @@ import { isValidHex, normalizeHex, rgbToHex, hexToRgb } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { SwatchesContext, SwatchPaletteId } from './api';
 import type { CreatorState } from '../state';
+import { creatorScope } from './lifecycle';
 
 /** Squared RGB distance between two hex colors (faster than sqrt). */
 export function colorDistanceSq(a: string, b: string): number {
@@ -266,19 +267,19 @@ export function buildSwatchesPanel(ctx: SwatchesContext): void {
     if (swatchesMinimized) updateHeaderCollapsedDisplay();
   };
 
-  creatorSwatchHistorySlice.subscribe(() => {
+  creatorScope.track(creatorSwatchHistorySlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     refreshSlots();
-  });
-  creatorSwatchPaletteSlice.subscribe(() => {
+  }));
+  creatorScope.track(creatorSwatchPaletteSlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     updateTabsActive();
     refreshSlots();
-  });
-  creatorSkinLoadSlice.subscribe(() => {
+  }));
+  creatorScope.track(creatorSkinLoadSlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     refreshSlots();
-  });
+  }));
 
   container.appendChild(panel);
   updateTabsActive();

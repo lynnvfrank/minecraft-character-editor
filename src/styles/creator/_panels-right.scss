@@ -39,11 +39,11 @@ body[data-route="preview"] .preview-lower-right-panels {
   align-items: stretch;
   width: var(--creator-right-panel-width);
   gap: 0.5rem;
-  background: rgba(12, 16, 28, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.12);
   border-radius: 10px;
   padding: 0.5rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 20px rgba(var(--shadow-rgb), 0.5);
 }
 
 .preview-right-panels-group {
@@ -51,11 +51,11 @@ body[data-route="preview"] .preview-lower-right-panels {
   flex-direction: column;
   align-items: stretch;
   gap: 0.5rem;
-  background: rgba(12, 16, 28, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.12);
   border-radius: 10px;
   padding: 0.5rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 20px rgba(var(--shadow-rgb), 0.5);
   width: 260px;
 }
 
@@ -64,17 +64,17 @@ body[data-route="preview"] .preview-lower-right-panels {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  background: rgba(20, 25, 40, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
 }
 
 .preview-camera-panel-title,
 .preview-camera-info-title {
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--fg-rgb), 0.9);
   font-size: 0.8rem;
   margin-bottom: 0.5rem;
 }
@@ -89,9 +89,9 @@ body[data-route="preview"] .preview-lower-right-panels {
   width: 100%;
   padding: 0.4rem 0.55rem;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  background: rgba(var(--fg-rgb), 0.06);
+  color: rgba(var(--fg-rgb), 0.9);
   font-size: 0.8rem;
   text-align: left;
   cursor: pointer;
@@ -99,8 +99,8 @@ body[data-route="preview"] .preview-lower-right-panels {
 }
 
 .preview-camera-preset-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(var(--fg-rgb), 0.12);
+  border-color: rgba(var(--fg-rgb), 0.3);
 }
 
 .preview-camera-preset-btn.active {
@@ -126,13 +126,13 @@ body[data-route="preview"] .preview-lower-right-panels {
 }
 
 .preview-camera-info-label {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(var(--fg-rgb), 0.55);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .preview-camera-info-value {
-  color: rgba(255, 255, 255, 0.94);
+  color: rgba(var(--fg-rgb), 0.94);
   word-break: break-word;
 }

@@ -2,6 +2,7 @@ import type { CreatorTexturePositionDetail } from '../events/appEvents';
 import { creatorTexturePositionSlice } from '../state/creatorSlices';
 import { TOOL_LABELS, type DrawingTool } from './api';
 import { getCreatorPanelsContainer } from './container';
+import { creatorScope } from './lifecycle';
 
 export function buildTexturePositionPanel(): void {
   const container = getCreatorPanelsContainer();
@@ -47,7 +48,7 @@ export function buildTexturePositionPanel(): void {
     textSpan.textContent = '—';
   };
 
-  creatorTexturePositionSlice.subscribe((detail: CreatorTexturePositionDetail) => {
+  creatorScope.track(creatorTexturePositionSlice.subscribe((detail: CreatorTexturePositionDetail) => {
     if (document.body.dataset.route !== 'creator') return;
     const { skinX, skinY, tool, currentColor, hoverColor } = detail;
 
@@ -77,7 +78,7 @@ export function buildTexturePositionPanel(): void {
     }
 
     coordsSpan.textContent = `(${skinX},${skinY})`;
-  });
+  }));
 
   container.appendChild(panel);
 }

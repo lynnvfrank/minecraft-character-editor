@@ -35,7 +35,7 @@ export type FakeChatUICallbacks = {
 };
 
 export function createFakeChatUI(callbacks: FakeChatUICallbacks) {
-  const { onPlaySequence, getExampleSequences, setLastActivity, checkIdleTimers } =
+  const { onPlaySequence, getExampleSequences, checkIdleTimers } =
     callbacks;
 
   const container = document.createElement('div');

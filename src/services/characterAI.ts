@@ -358,7 +358,6 @@ export function createCharacterAI(deps: CharacterAIDeps) {
     if (!char) return;
 
     const now = Date.now();
-    const idleSec = (now - lastInteractionTime) / 1000;
     const explicitIdleSec = (now - lastExplicitActivityTime) / 1000;
 
     // --- State transitions ---

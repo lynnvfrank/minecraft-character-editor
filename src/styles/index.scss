@@ -1,6 +1,7 @@
 // Main styles entry — modular SCSS partials
 // Order matters for cascade; matches original style.css structure
 
+@use 'theme';
 @use 'reset';
 @use 'routes';
 @use 'creator/layout';

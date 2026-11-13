@@ -113,6 +113,7 @@ export function addGround(scene: THREE.Scene): void {
     roughness: 0.8
   });
   const ground = new THREE.Mesh(geo, mat);
+  ground.name = 'ground';
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);

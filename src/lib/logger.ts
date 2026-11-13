@@ -42,7 +42,6 @@ const RELAY_STORAGE_KEY = 'viewer-log-relay';
 type LogConfig = Record<LogSystem, LogLevel>;
 type ThrottleKey = string;
 
-let startTime: number;
 let config: LogConfig;
 let relayEnabled: boolean;
 let throttleMap: Map<ThrottleKey, number> = new Map();
@@ -124,7 +123,6 @@ function buildConfig(): { config: LogConfig; relay: boolean } {
 }
 
 function init() {
-  startTime = typeof performance !== 'undefined' ? performance.now() / 1000 : 0;
   const { config: c, relay } = buildConfig();
   config = c;
   relayEnabled = relay;

@@ -4,12 +4,12 @@
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  background: rgba(20, 25, 40, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -21,7 +21,7 @@
 }
 .creator-layers-panel-title {
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--fg-rgb), 0.9);
   font-size: 0.8rem;
 }
 .creator-layers-panel-solo-indicator {
@@ -44,7 +44,7 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(var(--fg-rgb), 0.8);
   cursor: pointer;
   font-size: 0.7rem;
   transition: background 0.15s ease;
@@ -72,7 +72,7 @@
   display: none !important;
 }
 .creator-layers-panel-toggle:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--fg-rgb), 0.12);
 }
 .creator-layers-panel-icon {
   display: inline-block;
@@ -110,7 +110,7 @@
 }
 /* Compact mode hides separators; limb grids use one top border instead. */
 .creator-layers-panel-focused-compact .creator-layers-panel-limb-parts {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(var(--fg-rgb), 0.1);
 }
 /* Non-visible layers removed from layout while list is collapsed (overrides .creator-layers-panel-row flex). */
 .creator-layers-panel-row.creator-layers-panel-row--focus-collapsed-hidden {
@@ -119,7 +119,7 @@
 .creator-layers-panel-separator {
   height: 0;
   margin: 0.2rem 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid rgba(var(--fg-rgb), 0.12);
 }
 .creator-layers-panel-row {
   display: flex;
@@ -184,10 +184,10 @@
   padding: 0.15rem 0.35rem 0.15rem 0.4rem;
   font-size: 0.7rem;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(var(--fg-rgb), 0.25);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(var(--fg-rgb), 0.08);
+  color: rgba(var(--fg-rgb), 0.9);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, opacity 0.15s;
 }
@@ -200,8 +200,8 @@
   flex-shrink: 0;
 }
 .creator-layer-part-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(var(--fg-rgb), 0.14);
+  border-color: rgba(var(--fg-rgb), 0.35);
 }
 .creator-layer-part-btn.creator-layer-part-visible {
   border-color: rgba(63, 140, 255, 0.55);
@@ -223,9 +223,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(var(--fg-rgb), 0.4);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--fg-rgb), 0.08);
   transition: filter 0.14s ease, opacity 0.14s ease, transform 0.08s ease, box-shadow 0.14s ease, border-color 0.14s ease;
   cursor: pointer;
 }
@@ -242,9 +242,9 @@
   gap: 0.45rem;
   min-height: 36px;
   padding: 0.5rem 0.6rem;
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: rgba(var(--fg-rgb), 0.06);
+  border-color: rgba(var(--fg-rgb), 0.2);
+  box-shadow: inset 0 0 0 1px rgba(var(--fg-rgb), 0.08);
 }
 /* Inner label: checkbox + eye + name */
 .creator-layers-panel-visibility-toggle {
@@ -267,15 +267,15 @@
   background: rgba(63, 140, 255, 0.3);
 }
 .creator-layers-panel-row.creator-layer-unlocked .creator-layers-panel-lock {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(var(--fg-rgb), 0.28);
+  background: rgba(var(--fg-rgb), 0.06);
 }
 .creator-layers-panel-row.creator-layer-unlocked .creator-layer-lock {
   opacity: 0.78;
 }
 .creator-layers-panel-visibility:hover,
 .creator-layers-panel-lock:hover {
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 0 1px rgba(var(--fg-rgb), 0.22);
 }
 .creator-layers-panel-visibility:active,
 .creator-layers-panel-lock:active {
@@ -289,7 +289,7 @@
   opacity: 0.7;
 }
 .creator-layers-panel-row.creator-layer-hidden .creator-layers-panel-name {
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(var(--fg-rgb), 0.75);
 }
 .creator-layers-panel-row.creator-layer-visible .creator-layers-panel-visibility {
   border-color: rgba(63, 140, 255, 0.6);
@@ -337,7 +337,7 @@
 }
 .creator-layers-panel-name {
   min-width: 4.5em;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(var(--fg-rgb), 0.95);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
