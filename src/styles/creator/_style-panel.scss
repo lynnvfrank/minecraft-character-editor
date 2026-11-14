@@ -7,18 +7,76 @@
   overflow-y: auto;
   scrollbar-width: thin;
   box-sizing: border-box;
-  background: rgba(var(--panel-rgb), 0.92);
-  border: 1px solid rgba(var(--fg-rgb), 0.15);
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
   color: var(--text);
   font-size: 0.85rem;
 }
 body[data-route="creator"] .creator-style-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.5rem;
+}
+
+/* Each part of the Me tab is its own panel: the intro, then My hair / My skin tone / My face. */
+.creator-style-card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  box-sizing: border-box;
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+}
+.creator-style-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.6rem;
+  margin: -0.15rem -0.35rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.creator-style-card-header:hover {
+  background: rgba(var(--fg-rgb), 0.06);
+}
+.creator-style-card-header:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.7);
+  outline-offset: 1px;
+}
+.creator-style-card-title {
+  flex: 1 1 auto;
+}
+.creator-style-card-caret {
+  font-size: 0.75rem;
+  color: rgba(var(--fg-rgb), 0.55);
+  transition: transform 0.15s ease;
+}
+.creator-style-card.open {
+  border-color: rgba(59, 130, 246, 0.55);
+}
+.creator-style-card.open .creator-style-card-caret {
+  transform: rotate(90deg);
+}
+.creator-style-card-body {
+  display: none;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.creator-style-card.open .creator-style-card-body {
+  display: flex;
+}
+.creator-style-chip-off {
+  opacity: 0.4;
+}
+
+/* The right-side color picker only edits hair and skin tone; hide it for My face or nothing open. */
+body[data-route="creator"][data-edit-mode="style"][data-style-focus="face"] #creator-right-panels-group,
+body[data-route="creator"][data-edit-mode="style"][data-style-focus="none"] #creator-right-panels-group {
+  display: none !important;
 }
 body[data-route="creator"] .creator-style-panel.creator-mode-panel-hidden {
   display: none;
@@ -57,7 +115,7 @@ body[data-route="creator"] .creator-style-panel.creator-mode-panel-hidden {
   gap: 0.35rem;
 }
 .creator-style-sub {
-  padding-left: 1.4rem;
+  padding-left: 0;
   font-size: 0.78rem;
   color: rgba(var(--fg-rgb), 0.75);
   min-height: 1.2rem;
@@ -179,7 +237,7 @@ body[data-route="creator"][data-edit-mode="style"] #creator-hover-info-panel {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  padding: 0.2rem 0.4rem 0.35rem 1.4rem;
+  padding: 0.2rem 0 0.1rem;
 }
 .creator-style-detection .creator-style-row {
   min-height: 1.4rem;

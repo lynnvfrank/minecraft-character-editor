@@ -39,7 +39,8 @@ import {
   setLayersPanelFocusedListExpanded,
   flushDeferredWardrobeLibraryPanelsAfterCamera,
 } from './creator';
-import { EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
+import { EDIT_MODE_STYLE, EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
+import { getStyleFocus, onStyleFocusChanged } from './creator/stylePanel';
 import { createIcon } from './creator/icons';
 import { createCharacterController } from './controllers/character';
 import {
@@ -989,6 +990,32 @@ function updateCreatorPreviewTexture() {
   applyCreatorLayerVisibility(char.model, layerVisible);
 }
 
+/** Me tab: opening My hair / My face frames the head; My skin tone (or nothing open) the full body. */
+function setupStyleFocusCamera(): void {
+  const focusCamera = (section: ReturnType<typeof getStyleFocus>) => {
+    if (getRoute() !== 'creator' || getEditMode() !== EDIT_MODE_STYLE) return;
+    const char = getCharacter(getPrimaryCharacterId());
+    if (!char) return;
+    // Hair needs shoulders/back in view; the face wants a close-up.
+    const preset = getPreviewPreset(section === 'face' ? 'head' : section === 'hair' ? 'top' : 'fullOutfit');
+    const origin = char.container.position;
+    const position = new THREE.Vector3(
+      preset.cameraPosition.x + origin.x,
+      preset.cameraPosition.y + origin.y,
+      preset.cameraPosition.z + origin.z
+    );
+    const target = new THREE.Vector3(
+      preset.cameraTarget.x + origin.x,
+      preset.cameraTarget.y + origin.y,
+      preset.cameraTarget.z + origin.z
+    );
+    void creatorPoseController.animateCameraToCreatorView({ position, target, fov: preset.fov ?? 35 });
+  };
+  onStyleFocusChanged(focusCamera);
+  // Loaded straight into the Me tab: the panel announced its section before this hook existed.
+  window.setTimeout(() => focusCamera(getStyleFocus()), 300);
+}
+
 function setupCreatorPreviewDirtySubscription(): void {
   const markDirty = () => { creatorPreviewDirty = true; };
 
@@ -1586,6 +1613,7 @@ async function main(): Promise<void> {
   window.addEventListener('resize', onWindowResize);
   initElectronStatus();
   setupCreatorPreviewDirtySubscription();
+  setupStyleFocusCamera();
   installPreviewCaptureRuntimeApi();
   animationLoopController.animate();
 }

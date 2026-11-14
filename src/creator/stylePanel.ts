@@ -224,6 +224,27 @@ let undoRedoPending = false;
 
 export type ColorTargetKey = 'hair' | 'skin' | 'outfit' | 'accessory';
 let activeTarget: ColorTargetKey = 'hair';
+
+/** Outfit/accessory tints are hidden for now; while hidden they are never applied. */
+const SHOW_TINTS = false;
+
+/** Me tab sections; the open one sets the camera focus and what the right-side panels edit. */
+export type StyleSection = 'hair' | 'skin' | 'face';
+let openSection: StyleSection | null = 'hair';
+const focusListeners = new Set<(section: StyleSection | null) => void>();
+
+export function getStyleFocus(): StyleSection | null {
+  return document.body.dataset.editMode === EDIT_MODE_STYLE ? openSection : null;
+}
+/** Notified when a Me tab section opens/closes (and when the Me tab is entered). */
+export function onStyleFocusChanged(fn: (section: StyleSection | null) => void): () => void {
+  focusListeners.add(fn);
+  return () => focusListeners.delete(fn);
+}
+function emitStyleFocus(): void {
+  document.body.dataset.styleFocus = openSection ?? 'none';
+  focusListeners.forEach((fn) => fn(openSection));
+}
 let setTargetColor: ((hex: string) => void) | null = null;
 let getTargetColor: (() => string) | null = null;
 let targetListener: ((hex: string) => void) | null = null;
@@ -277,49 +298,87 @@ export function buildStylePanel(ctx: StylePanelContext): void {
   const status = createEl('div', { className: 'creator-style-status', role: 'status' });
 
   const rowEls = new Map<ColorTargetKey, { row: HTMLElement; chip: HTMLElement; check: HTMLInputElement }>();
+  const cards = new Map<StyleSection, HTMLElement>();
 
   const selectTarget = (key: ColorTargetKey): void => {
     activeTarget = key;
-    for (const [k, els] of rowEls) {
-      els.row.classList.toggle('active', k === key);
-      els.row.setAttribute('aria-selected', String(k === key));
-    }
     targetListener?.(look[key].color);
   };
 
-  const colorRow = (key: ColorTargetKey, label: string, hint: string) => {
+  const syncCards = (): void => {
+    for (const [k, card] of cards) {
+      const open = k === openSection;
+      card.classList.toggle('open', open);
+      card.querySelector('.creator-style-card-header')?.setAttribute('aria-expanded', String(open));
+    }
+  };
+
+  /** Open one section (accordion). Hair/skin also point the right-side picker at that color. */
+  const openCard = (key: StyleSection | null): void => {
+    openSection = key;
+    if (key !== 'hair') setHairBrushMode(null);
+    if (key === 'hair' || key === 'skin') selectTarget(key);
+    syncCards();
+    emitStyleFocus();
+  };
+
+  /**
+   * A collapsible section panel. The header shows the on/off switch (and color chip for
+   * colors); clicking the header opens the section and closes the others.
+   */
+  const sectionCard = (
+    key: StyleSection,
+    title: string,
+    hint: string,
+    toggle: HTMLInputElement,
+    chip: HTMLElement | null,
+    ...body: (Node | string)[]
+  ): HTMLElement => {
+    const header = createEl('div', {
+      className: 'creator-style-card-header',
+      role: 'button',
+      tabindex: '0',
+      'aria-expanded': 'false',
+      title: hint,
+    },
+      toggle,
+      createEl('span', { className: 'creator-layers-panel-title creator-panel-title creator-style-card-title' }, title),
+      ...(chip ? [chip] : []),
+      createEl('span', { className: 'creator-style-card-caret', 'aria-hidden': 'true' }, '▸'),
+    );
+    const card = createEl('section', { className: 'creator-style-card', 'data-section': key, 'aria-label': title },
+      header,
+      createEl('div', { className: 'creator-style-card-body' }, ...body),
+    );
+    toggle.addEventListener('click', (e) => e.stopPropagation());
+    const onHeader = () => openCard(openSection === key ? null : key);
+    header.addEventListener('click', onHeader);
+    header.addEventListener('keydown', (e) => {
+      if (e.target !== header) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onHeader();
+      }
+    });
+    cards.set(key, card);
+    return card;
+  };
+
+  /** On/off switch + color chip for a color section header (hair, skin tone). */
+  const colorToggle = (key: 'hair' | 'skin', label: string) => {
     const check = createEl('input', { type: 'checkbox', id: `creator-style-${key}-on`, 'aria-label': `Use ${label}` });
     check.checked = look[key].on;
     const chip = createEl('span', { className: 'creator-style-chip', id: `creator-style-${key}-chip`, 'aria-hidden': 'true' });
     chip.style.backgroundColor = look[key].color;
-    const row = createEl('div', {
-      className: 'creator-style-row creator-style-target',
-      role: 'option',
-      tabindex: '0',
-      title: `${hint}. Click to pick its color on the right.`,
-      'data-target': key,
-    },
-      check,
-      createEl('span', { className: 'creator-style-row-label' }, label),
-      chip,
-    );
-    row.classList.toggle('creator-style-target-off', !look[key].on);
-    check.addEventListener('click', (e) => e.stopPropagation());
     check.addEventListener('change', () => {
       look[key].on = check.checked;
-      row.classList.toggle('creator-style-target-off', !check.checked);
-      if (check.checked) selectTarget(key);
+      chip.classList.toggle('creator-style-chip-off', !check.checked);
+      if (check.checked && openSection !== key) openCard(key);
       onLookChanged();
     });
-    row.addEventListener('click', () => selectTarget(key));
-    row.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        selectTarget(key);
-      }
-    });
-    rowEls.set(key, { row, chip, check });
-    return row;
+    chip.classList.toggle('creator-style-chip-off', !look[key].on);
+    rowEls.set(key, { row: chip, chip, check });
+    return { check, chip };
   };
 
   /** Picker on the right changed the active target's color: turn it on and restyle. */
@@ -328,12 +387,12 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     look[activeTarget].color = hex;
     if (!look[activeTarget].on) {
       look[activeTarget].on = true;
-      if (els) {
-        els.check.checked = true;
-        els.row.classList.remove('creator-style-target-off');
-      }
+      if (els) els.check.checked = true;
     }
-    if (els) els.chip.style.backgroundColor = hex;
+    if (els) {
+      els.chip.style.backgroundColor = hex;
+      els.chip.classList.remove('creator-style-chip-off');
+    }
     onLookChanged();
   };
   getTargetColor = () => look[activeTarget].color;
@@ -471,55 +530,59 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     setHairBrushMode(null);
   });
 
-  const panel = createEl('div', { id: 'creator-style-panel', className: 'creator-style-panel', role: 'region', 'aria-label': 'Make it me' },
+  const hairToggle = colorToggle('hair', 'my hair');
+  const skinToggle = colorToggle('skin', 'my skin tone');
+  faceOn.setAttribute('aria-label', 'Use my face');
+
+  const intro = createEl('section', { className: 'creator-style-card creator-style-intro-card', 'aria-label': 'Make it me' },
     createEl('div', { className: 'creator-layers-panel-title creator-panel-title' }, 'Make it me'),
-    createEl('p', { className: 'creator-style-intro' }, 'Restyle any skin to your look. Your settings are remembered.'),
-    createEl('div', { className: 'creator-style-section' },
-      createEl('div', { className: 'creator-style-section-title' }, 'Colors'),
-      createEl('p', { className: 'creator-style-hint' }, 'Select a part, then pick its color on the right.'),
-      createEl('div', { className: 'creator-style-targets', role: 'listbox', 'aria-label': 'Body part to color' },
-        colorRow('hair', 'Hair', 'Recolor detected hair, keeping its shading'),
-        createEl('div', { className: 'creator-style-row creator-style-sub' },
-          createEl('label', { for: bodyHair.id }, bodyHair, ' Include shoulders & back'),
-        ),
-        createEl('div', { className: 'creator-style-detection' },
-          createEl('div', { className: 'creator-style-row', title: 'Raise it if hair is missed. Lower it if other parts change.' },
-            createEl('label', { for: tolerance.id, className: 'creator-style-row-label' }, 'Hair detection'),
-            toleranceValue,
-          ),
-          tolerance,
-          createEl('div', { className: 'creator-style-scale-ends', 'aria-hidden': 'true' },
-            createEl('span', {}, 'Stricter'),
-            createEl('span', {}, 'Looser'),
-          ),
-          fixHairBlock,
-        ),
-        colorRow('skin', 'Skin tone', 'Shift exposed skin to this tone'),
-      ),
-      createEl('div', { className: 'creator-style-divider', role: 'separator' }),
-      createEl('div', { className: 'creator-style-targets', role: 'listbox', 'aria-label': 'Clothing to tint' },
-        colorRow('outfit', 'Outfit tint', 'Tint the clothing'),
-        colorRow('accessory', 'Accessory tint', 'Tint bows, clips and other hair accessories'),
-      ),
-    ),
-    createEl('div', { className: 'creator-style-section' },
-      createEl('div', { className: 'creator-style-section-title' }, 'Face'),
-      createEl('div', { className: 'creator-style-face' },
-        faceThumb,
-        createEl('div', { className: 'creator-style-face-controls' },
-          createEl('label', { for: faceOn.id }, faceOn, ' Use my face'),
-          createEl('label', { for: eyesOverBangs.id }, eyesOverBangs, ' Eyes over bangs'),
-          faceUse,
-        ),
-      ),
-    ),
+    createEl('p', { className: 'creator-style-intro' },
+      'Restyle any skin to your look. Open a part below to change it; its color is on the right. Your settings are remembered.'),
     createEl('div', { className: 'creator-style-actions' }, resetBtn, applyBtn),
     status,
+  );
+
+  const hairCard = sectionCard('hair', 'My hair', 'Recolor detected hair, keeping its shading', hairToggle.check, hairToggle.chip,
+    createEl('div', { className: 'creator-style-row creator-style-sub' },
+      createEl('label', { for: bodyHair.id }, bodyHair, ' Include shoulders & back'),
+    ),
+    createEl('div', { className: 'creator-style-detection' },
+      createEl('div', { className: 'creator-style-row', title: 'Raise it if hair is missed. Lower it if other parts change.' },
+        createEl('label', { for: tolerance.id, className: 'creator-style-row-label' }, 'Hair detection'),
+        toleranceValue,
+      ),
+      tolerance,
+      createEl('div', { className: 'creator-style-scale-ends', 'aria-hidden': 'true' },
+        createEl('span', {}, 'Stricter'),
+        createEl('span', {}, 'Looser'),
+      ),
+      fixHairBlock,
+    ),
+  );
+
+  const skinCard = sectionCard('skin', 'My skin tone', 'Shift exposed skin to this tone', skinToggle.check, skinToggle.chip,
+    createEl('p', { className: 'creator-style-hint' }, 'Pick your skin tone on the right. Shading on the skin is kept.'),
+  );
+
+  const faceCard = sectionCard('face', 'My face', 'Put your eyes on every skin you style', faceOn, null,
+    createEl('div', { className: 'creator-style-face' },
+      faceThumb,
+      createEl('div', { className: 'creator-style-face-controls' },
+        createEl('label', { for: eyesOverBangs.id }, eyesOverBangs, ' Eyes over bangs'),
+        faceUse,
+      ),
+    ),
+  );
+
+  const panel = createEl('div', { id: 'creator-style-panel', className: 'creator-style-panel', role: 'region', 'aria-label': 'Make it me' },
+    intro, hairCard, skinCard, faceCard,
   );
   host.appendChild(panel);
   syncFaceUi();
   syncFixUi();
-  selectTarget(activeTarget);
+  if (activeTarget !== 'hair' && activeTarget !== 'skin') activeTarget = 'hair';
+  syncCards();
+  if (openSection === 'hair' || openSection === 'skin') selectTarget(openSection);
 
   // Keep/Save sits absolutely at the bottom of the left column; stop above it and scroll inside.
   const fitHeight = (): void => {
@@ -625,8 +688,8 @@ export function buildStylePanel(ctx: StylePanelContext): void {
       targetSkinColor: look.skin.on ? hexToRgb(look.skin.color) : null,
       includeBodyHair: look.bodyHair,
       eyesOverBangs: look.eyesOverBangs,
-      targetOutfitColor: look.outfit.on ? hexToRgb(look.outfit.color) : null,
-      targetAccessoryColor: look.accessory.on ? hexToRgb(look.accessory.color) : null,
+      targetOutfitColor: SHOW_TINTS && look.outfit.on ? hexToRgb(look.outfit.color) : null,
+      targetAccessoryColor: SHOW_TINTS && look.accessory.on ? hexToRgb(look.accessory.color) : null,
       hairAdd: fixes.add,
       hairRemove: fixes.remove,
     };
@@ -673,6 +736,7 @@ export function buildStylePanel(ctx: StylePanelContext): void {
 
   function enter(): void {
     targetListener?.(look[activeTarget].color);
+    emitStyleFocus();
     captureBase();
     setStatus('Base skin captured. Adjust your look to preview.');
     void renderPreview();
