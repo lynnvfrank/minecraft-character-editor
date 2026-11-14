@@ -37,7 +37,7 @@ export function initScene(
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   // Filmic tone mapping: richer contrast and soft highlight roll-off (like shader packs).
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.3;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
@@ -80,12 +80,13 @@ type LightingPreset = {
 export const LIGHTING_PRESETS: Record<LightingPresetId, LightingPreset> = {
   shader: {
     label: 'Shader', title: 'Shader-pack look: warm sun, soft self-shadows, blue rim light',
-    toneMapping: THREE.ACESFilmicToneMapping, exposure: 1.05, envIntensity: 0.35, selfShadow: true,
+    // Brightened 2026-11-13: more ambient + under-fill so feet, chin and arm undersides stay readable.
+    toneMapping: THREE.ACESFilmicToneMapping, exposure: 1.3, envIntensity: 0.7, selfShadow: true,
     background: 0x050710,
-    hemi: [0xbfd8ff, 0x3a2a1e, 0.55],
-    sun: [0xfff1d6, 2.4, 2.5, 5, 3],
-    rim: [0x9ab8ff, 1.6],
-    fill: [0xffe6cc, 0.25],
+    hemi: [0xdfeaff, 0x8a7a68, 1.1],
+    sun: [0xfff1d6, 2.6, 2.5, 5, 3],
+    rim: [0x9ab8ff, 1.4],
+    fill: [0xfff0e0, 0.9],
   },
   sunset: {
     label: 'Sunset', title: 'Golden hour: low orange sun, long shadows, purple rim',
@@ -193,12 +194,12 @@ export function addLights(scene: THREE.Scene, renderer?: THREE.WebGLRenderer): v
   if (renderer) {
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.35;
+    scene.environmentIntensity = 0.7;
     pmrem.dispose();
   }
 
   // Sky (cool) / ground bounce (warm) ambient.
-  const hemiLight = new THREE.HemisphereLight(0xbfd8ff, 0x3a2a1e, 0.55);
+  const hemiLight = new THREE.HemisphereLight(0xdfeaff, 0x8a7a68, 1.1);
   hemiLight.position.set(0, 4, 0);
   scene.add(hemiLight);
 
@@ -229,7 +230,7 @@ export function addLights(scene: THREE.Scene, renderer?: THREE.WebGLRenderer): v
   scene.add(rim);
 
   // Gentle fill from below so undersurfaces (chin, soles) stay readable while painting.
-  const fillLight = new THREE.DirectionalLight(0xffe6cc, 0.25);
+  const fillLight = new THREE.DirectionalLight(0xfff0e0, 0.9);
   fillLight.position.set(0, -4, 2);
   scene.add(fillLight);
 

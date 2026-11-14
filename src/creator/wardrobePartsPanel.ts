@@ -1,19 +1,19 @@
 import { creatorModeSlice, creatorWardrobeFocusSlice } from '../state/creatorSlices';
-import modeWardrobeFullOutfit from './icons/mode.wardrobe.fullOutfit.svg';
-import modeWardrobeTop from './icons/mode.wardrobe.top.svg';
-import modeWardrobeHead from './icons/mode.wardrobe.head.svg';
-import modeWardrobeHat from './icons/mode.wardrobe.hat.svg';
-import modeWardrobeCenter from './icons/mode.wardrobe.center.svg';
-import modeWardrobeJacketGroup from './icons/mode.wardrobe.jacketGroup.svg';
-import modeWardrobeJacket from './icons/mode.wardrobe.jacket.svg';
-import modeWardrobeSleeves from './icons/mode.wardrobe.sleeves.svg';
-import modeWardrobeTorso from './icons/mode.wardrobe.torso.svg';
-import modeWardrobeBody from './icons/mode.wardrobe.body.svg';
-import modeWardrobeArms from './icons/mode.wardrobe.arms.svg';
-import modeWardrobeBottom from './icons/mode.wardrobe.bottom.svg';
-import modeWardrobePants from './icons/mode.wardrobe.pants.svg';
-import modeWardrobeLegs from './icons/mode.wardrobe.legs.svg';
-import modeWardrobeAll from './icons/mode.wardrobe.all.svg';
+import modeWardrobeFullOutfit from './icons/mode.wardrobe.fullOutfit.svg?raw';
+import modeWardrobeTop from './icons/mode.wardrobe.top.svg?raw';
+import modeWardrobeHead from './icons/mode.wardrobe.head.svg?raw';
+import modeWardrobeHat from './icons/mode.wardrobe.hat.svg?raw';
+import modeWardrobeCenter from './icons/mode.wardrobe.center.svg?raw';
+import modeWardrobeJacketGroup from './icons/mode.wardrobe.jacketGroup.svg?raw';
+import modeWardrobeJacket from './icons/mode.wardrobe.jacket.svg?raw';
+import modeWardrobeSleeves from './icons/mode.wardrobe.sleeves.svg?raw';
+import modeWardrobeTorso from './icons/mode.wardrobe.torso.svg?raw';
+import modeWardrobeBody from './icons/mode.wardrobe.body.svg?raw';
+import modeWardrobeArms from './icons/mode.wardrobe.arms.svg?raw';
+import modeWardrobeBottom from './icons/mode.wardrobe.bottom.svg?raw';
+import modeWardrobePants from './icons/mode.wardrobe.pants.svg?raw';
+import modeWardrobeLegs from './icons/mode.wardrobe.legs.svg?raw';
+import modeWardrobeAll from './icons/mode.wardrobe.all.svg?raw';
 import {
   getWardrobeLibraryPanelIdsForLayer,
   getWardrobePanelIdForLayer,
@@ -29,7 +29,7 @@ import {
   type WardrobeLayerTreeNode,
 } from './wardrobeLayers';
 
-const LAYER_PLACEHOLDER_URLS: Record<WardrobeLayerKey, string> = {
+const LAYER_ICON_SVGS: Record<WardrobeLayerKey, string> = {
   fullOutfit: modeWardrobeFullOutfit,
   top: modeWardrobeTop,
   head: modeWardrobeHead,
@@ -46,6 +46,27 @@ const LAYER_PLACEHOLDER_URLS: Record<WardrobeLayerKey, string> = {
   legs: modeWardrobeLegs,
   all: modeWardrobeAll,
 };
+
+/**
+ * Icon(s) for a tree row. Group rows show their direct children's icons side by side
+ * (e.g. Head = hat + head); the root row shows its own full-outfit icon.
+ */
+function buildLayerIcons(node: WardrobeLayerTreeNode): HTMLElement {
+  const wrap = document.createElement('span');
+  wrap.className = 'creator-wardrobe-layer-icons';
+  wrap.setAttribute('aria-hidden', 'true');
+  const keys =
+    node.children?.length && node.key !== 'fullOutfit'
+      ? node.children.map((c) => c.key)
+      : [node.key];
+  for (const key of keys) {
+    const icon = document.createElement('span');
+    icon.className = 'creator-wardrobe-layer-icon';
+    icon.innerHTML = LAYER_ICON_SVGS[key] ?? LAYER_ICON_SVGS.fullOutfit;
+    wrap.appendChild(icon);
+  }
+  return wrap;
+}
 
 const WARDROBE_EXPANDED_KEY = 'creator-wardrobe-expanded';
 
@@ -196,12 +217,7 @@ function buildTreeRec(
   label.className = 'creator-wardrobe-layer-label';
   label.textContent = node.label;
 
-  const img = document.createElement('img');
-  img.src = LAYER_PLACEHOLDER_URLS[node.key] ?? LAYER_PLACEHOLDER_URLS.fullOutfit;
-  img.alt = '';
-  img.className = 'creator-wardrobe-layer-placeholder';
-
-  layerBtn.append(label, img);
+  layerBtn.append(label, buildLayerIcons(node));
 
   layerBtn.addEventListener('click', (e) => {
     e.stopPropagation();

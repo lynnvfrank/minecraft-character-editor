@@ -48,7 +48,9 @@ const PANEL_SELECTORS = [
   '#creator-panel',
   '#creator-view-wrapper .creator-left-panels',
   '#creator-upper-right-panels-root',
-  '#preview-lower-right-panels'
+  '#preview-lower-right-panels',
+  '#theme-toggle-btn',
+  '#about-btn'
 ];
 const previewConfigCache = new Map();
 
@@ -160,6 +162,10 @@ function getCaptureViewport(part = null) {
 
 async function openPreviewRoute(page) {
   await page.setViewport(getCaptureViewport());
+  // Always capture with the bright theme so thumbnails have a light, readable background.
+  await page.evaluateOnNewDocument(() => {
+    try { localStorage.setItem('app:theme', 'bright'); } catch {}
+  });
   await page.goto(buildPreviewUrl(), {
     waitUntil: 'networkidle2',
     timeout: 30000
