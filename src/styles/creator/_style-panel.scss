@@ -286,3 +286,11 @@ body[data-route="creator"][data-edit-mode="style"] #creator-hover-info-panel {
 .creator-style-fix-hint[hidden] {
   display: none;
 }
+
+/* "Lock my look for the Wardrobe" sits above Original / Apply in the intro card. */
+.creator-style-lock {
+  gap: 0.35rem;
+  min-height: 1.4rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}

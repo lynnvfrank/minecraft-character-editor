@@ -59,6 +59,8 @@ export type WardrobeDeps = {
   animateModePanelIn: (el: HTMLElement, dir: 'left' | 'right' | 'top' | 'bottom') => void;
   animateModePanelOut: (el: HTMLElement, dir: 'left' | 'right' | 'top' | 'bottom') => void;
   getFocusedCreationEnabled: () => boolean;
+  /** Optional last pass over the composed outfit (e.g. the locked "Make it me" look). */
+  finalizeComposite?: (data: ImageData) => ImageData | null;
 };
 
 export type WardrobeApi = {
@@ -441,7 +443,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     if (!isHoverPreviewPass) {
       wardrobeBaseSkinData = cloneImageData(composed);
     }
-    applyProgrammaticCanvasImage(composed);
+    applyProgrammaticCanvasImage(deps.finalizeComposite?.(composed) ?? composed);
     renderToDisplay();
     updateAllUndoRedoButtons();
   }

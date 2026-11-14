@@ -28,6 +28,8 @@ export type MyLook = {
   tolerance: number;
   face: { on: boolean; reference: string | null };
   eyesOverBangs: boolean;
+  /** Re-apply this look to every outfit picked in the Wardrobe. */
+  locked: boolean;
 };
 
 const DEFAULT_LOOK: MyLook = {
@@ -39,6 +41,7 @@ const DEFAULT_LOOK: MyLook = {
   tolerance: 42,
   face: { on: false, reference: null },
   eyesOverBangs: true,
+  locked: false,
 };
 
 export type StylePanelContext = {
@@ -245,6 +248,27 @@ function emitStyleFocus(): void {
   document.body.dataset.styleFocus = openSection ?? 'none';
   focusListeners.forEach((fn) => fn(openSection));
 }
+/** Styles a working-res skin with the locked look; null when the look isn't locked. */
+let lockedStyler: ((work: ImageData) => ImageData | null) | null = null;
+const lockListeners = new Set<() => void>();
+
+/**
+ * Wardrobe final pass: the composed outfit restyled with "my look" (hair, skin tone, face),
+ * or null when the look isn't locked. Hair is found by the styler's detection, so it works
+ * on any wardrobe part without the parts having to be tagged.
+ */
+export function styleWithLockedLook(work: ImageData): ImageData | null {
+  return lockedStyler?.(work) ?? null;
+}
+/** Notified when the lock is toggled or the locked look changes. */
+export function onLockedLookChanged(fn: () => void): () => void {
+  lockListeners.add(fn);
+  return () => lockListeners.delete(fn);
+}
+function emitLockedLook(): void {
+  lockListeners.forEach((fn) => fn());
+}
+
 let setTargetColor: ((hex: string) => void) | null = null;
 let getTargetColor: (() => string) | null = null;
 let targetListener: ((hex: string) => void) | null = null;
@@ -534,10 +558,28 @@ export function buildStylePanel(ctx: StylePanelContext): void {
   const skinToggle = colorToggle('skin', 'my skin tone');
   faceOn.setAttribute('aria-label', 'Use my face');
 
+  const lockLook = createEl('input', { type: 'checkbox', id: 'creator-style-lock' });
+  lockLook.checked = look.locked;
+  const syncLockUi = () => {
+    document.body.dataset.lookLocked = String(look.locked);
+  };
+  lockLook.addEventListener('change', () => {
+    look.locked = lockLook.checked;
+    syncLockUi();
+    setStatus(look.locked
+      ? 'Locked. Outfits you pick in the Wardrobe get your hair, skin tone and face.'
+      : 'Unlocked. The Wardrobe shows outfits as they are.');
+    if (look.locked) void ensureFaceTemplate().then(emitLockedLook);
+    else emitLockedLook();
+    saveLook(look);
+  });
+
   const intro = createEl('section', { className: 'creator-style-card creator-style-intro-card', 'aria-label': 'Make it me' },
     createEl('div', { className: 'creator-layers-panel-title creator-panel-title' }, 'Make it me'),
     createEl('p', { className: 'creator-style-intro' },
       'Restyle any skin to your look. Open a part below to change it; its color is on the right. Your settings are remembered.'),
+    createEl('label', { for: lockLook.id, className: 'creator-style-row creator-style-lock', title: 'Keep my hair, skin tone and face on every outfit I pick in the Wardrobe' },
+      lockLook, ' Lock my look for the Wardrobe'),
     createEl('div', { className: 'creator-style-actions' }, resetBtn, applyBtn),
     status,
   );
@@ -681,18 +723,7 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     const token = ++renderToken;
     const template = await ensureFaceTemplate();
     if (token !== renderToken) return;
-    const options: StyleSkinOptions = {
-      targetHairColor: look.hair.on ? hexToRgb(look.hair.color) : null,
-      tolerance: look.tolerance,
-      faceTemplate: template,
-      targetSkinColor: look.skin.on ? hexToRgb(look.skin.color) : null,
-      includeBodyHair: look.bodyHair,
-      eyesOverBangs: look.eyesOverBangs,
-      targetOutfitColor: SHOW_TINTS && look.outfit.on ? hexToRgb(look.outfit.color) : null,
-      targetAccessoryColor: SHOW_TINTS && look.accessory.on ? hexToRgb(look.accessory.color) : null,
-      hairAdd: fixes.add,
-      hairRemove: fixes.remove,
-    };
+    const options = lookOptions(template, fixes);
     try {
       const started = performance.now();
       const result = styleSkin(base64, options);
@@ -708,7 +739,23 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     }
   }
 
+  function lookOptions(template: FaceTemplate | null, hairFixes: HairFixes | null): StyleSkinOptions {
+    return {
+      targetHairColor: look.hair.on ? hexToRgb(look.hair.color) : null,
+      tolerance: look.tolerance,
+      faceTemplate: template,
+      targetSkinColor: look.skin.on ? hexToRgb(look.skin.color) : null,
+      includeBodyHair: look.bodyHair,
+      eyesOverBangs: look.eyesOverBangs,
+      targetOutfitColor: SHOW_TINTS && look.outfit.on ? hexToRgb(look.outfit.color) : null,
+      targetAccessoryColor: SHOW_TINTS && look.accessory.on ? hexToRgb(look.accessory.color) : null,
+      hairAdd: hairFixes?.add,
+      hairRemove: hairFixes?.remove,
+    };
+  }
+
   function onLookChanged(): void {
+    if (look.locked) void ensureFaceTemplate().then(emitLockedLook);
     saveLook(look);
     window.clearTimeout(debounce);
     debounce = window.setTimeout(() => void renderPreview(), PREVIEW_DEBOUNCE_MS);
@@ -768,6 +815,26 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     captureBase();
     setStatus('Showing the skin as it is now. Change a setting to restyle it.');
   }));
+
+  lockedStyler = (work) => {
+    if (!look.locked) return null;
+    const ref = look.face.on ? look.face.reference : null;
+    const template = ref && faceTemplateFor === ref ? faceTemplate : null;
+    const small = downsample(work.data);
+    try {
+      const result = styleSkin(small, lookOptions(template, loadFixes(skinKey(small))));
+      const out = new ImageData(WORK_SIZE, WORK_SIZE);
+      out.data.set(upsampleChanged(work.data, small, result.image as ImageData));
+      return out;
+    } catch (err) {
+      console.error('[make-it-me] locked look failed', err);
+      return null;
+    }
+  };
+  creatorScope.track(() => { lockedStyler = null; });
+  syncLockUi();
+  // The face template loads async; restyle the wardrobe once it's ready.
+  if (look.locked && look.face.on) void ensureFaceTemplate().then(emitLockedLook);
 
   if (document.body.dataset.editMode === EDIT_MODE_STYLE) enter();
 }

@@ -992,12 +992,10 @@ function updateCreatorPreviewTexture() {
 
 /** Me tab: opening My hair / My face frames the head; My skin tone (or nothing open) the full body. */
 function setupStyleFocusCamera(): void {
-  const focusCamera = (section: ReturnType<typeof getStyleFocus>) => {
-    if (getRoute() !== 'creator' || getEditMode() !== EDIT_MODE_STYLE) return;
+  const moveCamera = (presetKey: 'head' | 'top' | 'fullOutfit') => {
     const char = getCharacter(getPrimaryCharacterId());
     if (!char) return;
-    // Hair needs shoulders/back in view; the face wants a close-up.
-    const preset = getPreviewPreset(section === 'face' ? 'head' : section === 'hair' ? 'top' : 'fullOutfit');
+    const preset = getPreviewPreset(presetKey);
     const origin = char.container.position;
     const position = new THREE.Vector3(
       preset.cameraPosition.x + origin.x,
@@ -1011,7 +1009,17 @@ function setupStyleFocusCamera(): void {
     );
     void creatorPoseController.animateCameraToCreatorView({ position, target, fov: preset.fov ?? 35 });
   };
+  const focusCamera = (section: ReturnType<typeof getStyleFocus>) => {
+    if (getRoute() !== 'creator' || getEditMode() !== EDIT_MODE_STYLE) return;
+    // Hair needs shoulders/back in view; the face wants a close-up.
+    moveCamera(section === 'face' ? 'head' : section === 'hair' ? 'top' : 'fullOutfit');
+  };
   onStyleFocusChanged(focusCamera);
+  // Leaving the Me tab: don't strand the other modes on a hair/face close-up.
+  creatorModeSlice.subscribe((detail) => {
+    if (getRoute() !== 'creator') return;
+    if (detail.previousMode === EDIT_MODE_STYLE && detail.mode !== EDIT_MODE_STYLE) moveCamera('fullOutfit');
+  });
   // Loaded straight into the Me tab: the panel announced its section before this hook existed.
   window.setTimeout(() => focusCamera(getStyleFocus()), 300);
 }

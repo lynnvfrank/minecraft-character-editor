@@ -36,8 +36,10 @@ import {
   getStyleTargetColor,
   isStyleColorTargetActive,
   noteStyleUndoRedo,
+  onLockedLookChanged,
   onStyleTargetChanged,
   setStyleTargetColor,
+  styleWithLockedLook,
 } from './creator/stylePanel';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
@@ -168,6 +170,7 @@ const wardrobeApi = createWardrobeApi({
   animateModePanelIn: modePanelTransitions.animateModePanelIn,
   animateModePanelOut: modePanelTransitions.animateModePanelOut,
   getFocusedCreationEnabled: () => state.focusedCreationEnabled,
+  finalizeComposite: (data) => styleWithLockedLook(data),
 });
 
 const skinGalleryApi = createSkinGalleryApi({
@@ -413,6 +416,10 @@ function buildCreatorPanels(): void {
   });
   buildArmModelPanel();
   onStyleTargetChanged((hex) => creatorColorSlice.notify({ color: hex }));
+  // Locked look toggled or its face finished loading: refresh the outfit shown in the Wardrobe.
+  creatorScope.track(onLockedLookChanged(() => {
+    if (state.editMode === 'wardrobe') void wardrobeApi.resolveWardrobeComposite();
+  }));
   buildStylePanel({
     getSkinCanvas,
     onCanvasChange: () => {
