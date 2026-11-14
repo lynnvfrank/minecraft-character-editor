@@ -295,6 +295,10 @@ body[data-creator-exiting="1"] .creator-lower-left-panels .creator-save-download
   font-size: 0.85rem;
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
 }
+/* Panel title on its own row in wrapping/flex panels */
+.creator-canvas-overlays-panel .creator-panel-title {
+  flex-basis: 100%;
+}
 .creator-canvas-overlays-panel .creator-tools-panel-btn {
   flex: 1;
   min-width: 0;
