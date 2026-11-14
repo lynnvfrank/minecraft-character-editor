@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { logger } from '../lib';
 import { loadRig } from '../viewer/rigLoader';
 import { PREFERRED_IDLE_KEYS } from '../config/scene.config';
@@ -12,6 +13,20 @@ import type { TexturePreset, AlphaMode } from '../viewer';
 import type { CharacterState, CharacterConfig } from './characterTypes';
 import type { SkinEntry, AnimationEntry } from '../domain';
 import type { CharacterStateLike } from '../animation';
+
+/** Packed animation GLBs (scripts/pack-animations.mjs), fetched once and shared by all characters. */
+const packedClipCache = new Map<string, Promise<Map<string, THREE.AnimationClip>>>();
+function loadPackedClips(path: string): Promise<Map<string, THREE.AnimationClip>> {
+  let pending = packedClipCache.get(path);
+  if (!pending) {
+    pending = new GLTFLoader()
+      .loadAsync(path)
+      .then((gltf) => new Map(gltf.animations.map((clip) => [clip.name, clip])));
+    pending.catch(() => packedClipCache.delete(path));
+    packedClipCache.set(path, pending);
+  }
+  return pending;
+}
 
 export type CharacterControllerDeps = {
   getSceneContext: () => { scene: THREE.Scene; characters: Record<string, CharacterState> };
@@ -379,7 +394,28 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
           };
 
           const anims = config.animations;
+          // Packed clips: one GLB holds every clip, named by manifest key. Load each GLB once.
+          const glbKeys = new Map<string, string[]>();
           for (const { path, key } of anims) {
+            if (/\.glb$/i.test(path)) glbKeys.set(path, [...(glbKeys.get(path) ?? []), key]);
+          }
+          for (const [path, keys] of glbKeys) {
+            loadPackedClips(path).then(
+              (byName) => {
+                for (const key of keys) {
+                  const clip = byName.get(key);
+                  if (!clip) logger.error('general', 'Packed clip missing', { path, key });
+                  onClipLoaded({ animations: clip ? [clip] : [] } as unknown as THREE.Group, key);
+                }
+              },
+              (err) => {
+                logger.error('general', 'GLB animation load failed', { path, error: String(err) });
+                container.visible = true;
+              },
+            );
+          }
+          for (const { path, key } of anims) {
+            if (/\.glb$/i.test(path)) continue;
             fbxLoader.load(
               path,
               (animFbx) => onClipLoaded(animFbx, key),
