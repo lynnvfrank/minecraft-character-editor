@@ -159,13 +159,37 @@ function drawFaceThumb(canvas: HTMLCanvasElement, url: string | null): void {
 
 let undoRedoPending = false;
 
+export type ColorTargetKey = 'hair' | 'skin' | 'outfit' | 'accessory';
+let activeTarget: ColorTargetKey = 'hair';
+let setTargetColor: ((hex: string) => void) | null = null;
+let getTargetColor: (() => string) | null = null;
+let targetListener: ((hex: string) => void) | null = null;
+
+/**
+ * Color bridge for the shared right-side picker/swatches: while in the Me tab they edit the
+ * selected look target (hair, skin tone, ...) instead of the paint color.
+ */
+export function isStyleColorTargetActive(): boolean {
+  return document.body.dataset.editMode === EDIT_MODE_STYLE && setTargetColor != null;
+}
+export function getStyleTargetColor(): string | null {
+  return getTargetColor?.() ?? null;
+}
+export function setStyleTargetColor(hex: string): void {
+  setTargetColor?.(hex);
+}
+/** Notified with the target's color whenever a different target is selected. */
+export function onStyleTargetChanged(fn: (hex: string) => void): void {
+  targetListener = fn;
+}
+
 /** Called by the creator right before an undo/redo rewrites the skin canvas. */
 export function noteStyleUndoRedo(): void {
   undoRedoPending = document.body.dataset.editMode === EDIT_MODE_STYLE;
 }
 
 export function buildStylePanel(ctx: StylePanelContext): void {
-  const host = document.getElementById('creator-view-wrapper');
+  const host = document.getElementById('creator-upper-left-panels');
   if (!host) return;
   document.getElementById('creator-style-panel')?.remove();
 
@@ -182,32 +206,73 @@ export function buildStylePanel(ctx: StylePanelContext): void {
 
   const status = createEl('div', { className: 'creator-style-status', role: 'status' });
 
-  const colorRow = (key: 'hair' | 'skin' | 'outfit' | 'accessory', label: string, hint: string) => {
-    const check = createEl('input', { type: 'checkbox', id: `creator-style-${key}-on` });
+  const rowEls = new Map<ColorTargetKey, { row: HTMLElement; chip: HTMLElement; check: HTMLInputElement }>();
+
+  const selectTarget = (key: ColorTargetKey): void => {
+    activeTarget = key;
+    for (const [k, els] of rowEls) {
+      els.row.classList.toggle('active', k === key);
+      els.row.setAttribute('aria-selected', String(k === key));
+    }
+    targetListener?.(look[key].color);
+  };
+
+  const colorRow = (key: ColorTargetKey, label: string, hint: string) => {
+    const check = createEl('input', { type: 'checkbox', id: `creator-style-${key}-on`, 'aria-label': `Use ${label}` });
     check.checked = look[key].on;
-    const color = createEl('input', { type: 'color', id: `creator-style-${key}-color`, 'aria-label': `${label} color` });
-    color.value = look[key].color;
-    color.disabled = !look[key].on;
+    const chip = createEl('span', { className: 'creator-style-chip', id: `creator-style-${key}-chip`, 'aria-hidden': 'true' });
+    chip.style.backgroundColor = look[key].color;
+    const row = createEl('div', {
+      className: 'creator-style-row creator-style-target',
+      role: 'option',
+      tabindex: '0',
+      title: `${hint}. Click to pick its color on the right.`,
+      'data-target': key,
+    },
+      check,
+      createEl('span', { className: 'creator-style-row-label' }, label),
+      chip,
+    );
+    row.classList.toggle('creator-style-target-off', !look[key].on);
+    check.addEventListener('click', (e) => e.stopPropagation());
     check.addEventListener('change', () => {
       look[key].on = check.checked;
-      color.disabled = !check.checked;
+      row.classList.toggle('creator-style-target-off', !check.checked);
+      if (check.checked) selectTarget(key);
       onLookChanged();
     });
-    color.addEventListener('input', () => {
-      look[key].color = color.value;
-      onLookChanged();
+    row.addEventListener('click', () => selectTarget(key));
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectTarget(key);
+      }
     });
-    return createEl('div', { className: 'creator-style-row', title: hint },
-      createEl('label', { className: 'creator-style-row-label', for: check.id }, check, ` ${label}`),
-      color,
-    );
+    rowEls.set(key, { row, chip, check });
+    return row;
   };
+
+  /** Picker on the right changed the active target's color: turn it on and restyle. */
+  setTargetColor = (hex: string): void => {
+    const els = rowEls.get(activeTarget);
+    look[activeTarget].color = hex;
+    if (!look[activeTarget].on) {
+      look[activeTarget].on = true;
+      if (els) {
+        els.check.checked = true;
+        els.row.classList.remove('creator-style-target-off');
+      }
+    }
+    if (els) els.chip.style.backgroundColor = hex;
+    onLookChanged();
+  };
+  getTargetColor = () => look[activeTarget].color;
 
   const bodyHair = createEl('input', { type: 'checkbox', id: 'creator-style-body-hair' });
   bodyHair.checked = look.bodyHair;
   bodyHair.addEventListener('change', () => { look.bodyHair = bodyHair.checked; onLookChanged(); });
 
-  const tolerance = createEl('input', { type: 'range', min: '16', max: '80', step: '1', id: 'creator-style-tolerance' });
+  const tolerance = createEl('input', { type: 'range', min: '16', max: '80', step: '1', id: 'creator-style-tolerance', title: 'Raise it if hair is missed. Lower it if other parts change.' });
   tolerance.value = String(look.tolerance);
   const toleranceValue = createEl('span', { className: 'creator-style-value' }, String(look.tolerance));
   tolerance.addEventListener('input', () => {
@@ -264,21 +329,33 @@ export function buildStylePanel(ctx: StylePanelContext): void {
   });
 
   const panel = createEl('div', { id: 'creator-style-panel', className: 'creator-style-panel', role: 'region', 'aria-label': 'Make it me' },
-    createEl('div', { className: 'creator-style-title' }, 'Make it me'),
+    createEl('div', { className: 'creator-layers-panel-title creator-panel-title' }, 'Make it me'),
     createEl('p', { className: 'creator-style-intro' }, 'Restyle any skin to your look. Your settings are remembered.'),
     createEl('div', { className: 'creator-style-section' },
       createEl('div', { className: 'creator-style-section-title' }, 'Colors'),
-      colorRow('hair', 'Hair', 'Recolor detected hair, keeping its shading'),
-      createEl('div', { className: 'creator-style-row creator-style-sub' },
-        createEl('label', { for: bodyHair.id }, bodyHair, ' Include hair on shoulders/back'),
+      createEl('p', { className: 'creator-style-hint' }, 'Select a part, then pick its color on the right.'),
+      createEl('div', { className: 'creator-style-targets', role: 'listbox', 'aria-label': 'Body part to color' },
+        colorRow('hair', 'Hair', 'Recolor detected hair, keeping its shading'),
+        createEl('div', { className: 'creator-style-row creator-style-sub' },
+          createEl('label', { for: bodyHair.id }, bodyHair, ' Include shoulders & back'),
+        ),
+        createEl('div', { className: 'creator-style-detection' },
+          createEl('div', { className: 'creator-style-row', title: 'Raise it if hair is missed. Lower it if other parts change.' },
+            createEl('label', { for: tolerance.id, className: 'creator-style-row-label' }, 'Hair detection'),
+            toleranceValue,
+          ),
+          tolerance,
+          createEl('div', { className: 'creator-style-scale-ends', 'aria-hidden': 'true' },
+            createEl('span', {}, 'Stricter'),
+            createEl('span', {}, 'Looser'),
+          ),
+        ),
+        colorRow('skin', 'Skin tone', 'Shift exposed skin to this tone'),
       ),
-      colorRow('skin', 'Skin tone', 'Shift exposed skin to this tone'),
-      colorRow('outfit', 'Outfit tint', 'Tint the clothing'),
-      colorRow('accessory', 'Accessory tint', 'Tint bows, clips and other hair accessories'),
-      createEl('div', { className: 'creator-style-row', title: 'How loosely colors count as hair. Raise it if hair is missed; lower it if other parts change.' },
-        createEl('label', { for: tolerance.id, className: 'creator-style-row-label' }, 'Detection'),
-        tolerance,
-        toleranceValue,
+      createEl('div', { className: 'creator-style-divider', role: 'separator' }),
+      createEl('div', { className: 'creator-style-targets', role: 'listbox', 'aria-label': 'Clothing to tint' },
+        colorRow('outfit', 'Outfit tint', 'Tint the clothing'),
+        colorRow('accessory', 'Accessory tint', 'Tint bows, clips and other hair accessories'),
       ),
     ),
     createEl('div', { className: 'creator-style-section' },
@@ -297,8 +374,30 @@ export function buildStylePanel(ctx: StylePanelContext): void {
   );
   host.appendChild(panel);
   syncFaceUi();
+  selectTarget(activeTarget);
+
+  // Keep/Save sits absolutely at the bottom of the left column; stop above it and scroll inside.
+  const fitHeight = (): void => {
+    const lower = document.getElementById('creator-lower-left-panels');
+    if (!lower || panel.classList.contains('creator-mode-panel-hidden')) return;
+    const limit = lower.getBoundingClientRect().top - 8 - panel.getBoundingClientRect().top;
+    panel.style.maxHeight = limit > 120 ? `${Math.floor(limit)}px` : '';
+  };
+  const lowerEl = document.getElementById('creator-lower-left-panels');
+  const fitObserver = new ResizeObserver(() => fitHeight());
+  fitObserver.observe(document.body);
+  if (lowerEl) fitObserver.observe(lowerEl);
+  creatorScope.track(() => fitObserver.disconnect());
+  creatorScope.track(creatorModeSlice.subscribe(() => {
+    requestAnimationFrame(fitHeight);
+    window.setTimeout(fitHeight, 800); // after the slide-in animation settles
+  }));
+  window.setTimeout(fitHeight, 800);
+  requestAnimationFrame(fitHeight);
   creatorScope.track(() => {
     window.clearTimeout(debounce);
+    setTargetColor = null;
+    getTargetColor = null;
     panel.remove();
   });
 
@@ -405,6 +504,7 @@ export function buildStylePanel(ctx: StylePanelContext): void {
   }
 
   function enter(): void {
+    targetListener?.(look[activeTarget].color);
     captureBase();
     setStatus('Base skin captured. Adjust your look to preview.');
     void renderPreview();

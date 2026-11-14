@@ -31,7 +31,14 @@ import {
 } from './creator/index';
 import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
 import { buildArmModelPanel } from './creator/armModelPanel';
-import { buildStylePanel, noteStyleUndoRedo } from './creator/stylePanel';
+import {
+  buildStylePanel,
+  getStyleTargetColor,
+  isStyleColorTargetActive,
+  noteStyleUndoRedo,
+  onStyleTargetChanged,
+  setStyleTargetColor,
+} from './creator/stylePanel';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
@@ -63,8 +70,9 @@ import {
   creatorSwatchPaletteSlice,
   creatorTexturePositionSlice,
   creatorToolsSlice,
+  creatorColorSlice,
 } from './state/creatorSlices';
-import { EDIT_MODE_2D, EDIT_MODE_3D, type DrawingTool, type EditMode, type PartSide } from './creator/api';
+import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_STYLE, type DrawingTool, type EditMode, type PartSide } from './creator/api';
 import {
   PAINT_BRUSH_SCHEMA_VERSION,
   PAINT_BRUSH_TOOL_CONFIG,
@@ -303,28 +311,45 @@ export function updateHoverInfo(part: string | null, skinX: number, skinY: numbe
   reportTexturePosition(part, skinX, skinY, hoverColor);
 }
 
+/** Current color for the shared picker/swatches: the selected look part in the Me tab, else the paint color. */
+function getPickerColor(): string {
+  return (isStyleColorTargetActive() && getStyleTargetColor()) || state.currentColor;
+}
+
+/** Apply a color from the shared picker/swatches; in the Me tab it recolors the selected look part. */
+function applyPickerColor(hex: string, addToSwatchList = true, markAsUserSelected = true): void {
+  if (!isStyleColorTargetActive()) {
+    applyColorToUI(hex, addToSwatchList, markAsUserSelected);
+    return;
+  }
+  const normalized = hex.slice(0, 7).toLowerCase();
+  setStyleTargetColor(normalized);
+  if (addToSwatchList) addToSwatch(normalized);
+  creatorColorSlice.notify({ color: normalized });
+}
+
 function buildCreatorPanels(): void {
   const colorToolbarCtx = {
     getCurrentColor: () => state.currentColor,
     applyColor: applyColorToUI,
   };
   const colorPickerCtx = {
-    getCurrentColor: () => state.currentColor,
-    applyColor: applyColorToUI,
+    getCurrentColor: getPickerColor,
+    applyColor: applyPickerColor,
   };
   const swatchesCtx = {
     getSwatchColors: () =>
       state.activeSwatchPalette === 'history' ? state.swatchColors : state.skinSwatchColors,
     getSwatchColorsForPalette: (paletteId: 'history' | 'skin') =>
       paletteId === 'history' ? state.swatchColors : state.skinSwatchColors,
-    getCurrentColor: () => state.currentColor,
+    getCurrentColor: getPickerColor,
     getMaxSwatchCount: () => SWATCH_MAX,
     getActivePalette: () => state.activeSwatchPalette,
     setActivePalette: (paletteId: 'history' | 'skin') => {
       state.activeSwatchPalette = paletteId;
       creatorSwatchPaletteSlice.notify();
     },
-    applyColor: applyColorToUI,
+    applyColor: applyPickerColor,
     setSwatchColor: setSwatchAt,
   };
   const skinLayersCtx = {
@@ -387,6 +412,7 @@ function buildCreatorPanels(): void {
     onDownload: skinGalleryApi.downloadCurrentSkin,
   });
   buildArmModelPanel();
+  onStyleTargetChanged((hex) => creatorColorSlice.notify({ color: hex }));
   buildStylePanel({
     getSkinCanvas,
     onCanvasChange: () => {
@@ -657,6 +683,10 @@ export function setEditMode(
     previousMode,
     fromUserModeNavigation: options.fromUserModeNavigation === true,
   });
+  // The shared color picker edited the Me tab's look while there; show the paint color again.
+  if (previousMode === EDIT_MODE_STYLE && mode !== EDIT_MODE_STYLE) {
+    creatorColorSlice.notify({ color: state.currentColor });
+  }
 
   if (mode === 'wardrobe') {
     wardrobeApi.resetWardrobeSelections();

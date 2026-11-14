@@ -143,6 +143,9 @@ const FALLBACK_SKINS: SkinEntry[] = [
   { path: '/wardrobe/skins/RunningboyRig.png', label: 'Default' }
 ];
 
+/** Skin shown on page load (temporary: a good base for testing Make it me). */
+const DEFAULT_SKIN_PATH = '/wardrobe/skins/2024_03_25_sasha-base--updated--22427415.png';
+
 const FALLBACK_ANIMATIONS: AnimationEntry[] = [
   { path: '/animations/animations.glb', key: 'bored', label: 'Bored' },
   { path: '/animations/animations.glb', key: 'crying', label: 'Crying' }
@@ -1549,7 +1552,10 @@ async function main(): Promise<void> {
     });
   }
 
-  const initialSkin = skins.find((skin) => skin.path === FALLBACK_SKINS[0]?.path) ?? skins[0]!;
+  const initialSkin =
+    skins.find((skin) => skin.path === DEFAULT_SKIN_PATH) ??
+    skins.find((skin) => skin.path === FALLBACK_SKINS[0]?.path) ??
+    skins[0]!;
   detectedArmModel = (await detectArmModelFromPath(initialSkin.path)) ?? detectedArmModel;
   armModelSlice.notify(); // the creator panel may already be showing the pre-detection default
   const config = buildCharacterConfig(

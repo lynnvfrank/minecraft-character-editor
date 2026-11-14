@@ -1,18 +1,16 @@
-/* Creator.Style ("Make it me") panel — right side, over the 3D view. */
+/* Creator.Style ("Make it me") panel — main panel in the left column, under the mode bar. */
 .creator-style-panel {
   display: none;
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  z-index: 20;
-  width: var(--creator-right-panel-width, 280px);
-  max-height: calc(100% - 1.5rem);
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
   box-sizing: border-box;
   background: rgba(var(--panel-rgb), 0.92);
   border: 1px solid rgba(var(--fg-rgb), 0.15);
   border-radius: 8px;
-  padding: 0.75rem;
+  padding: 0.5rem 0.75rem;
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
   color: var(--text);
   font-size: 0.85rem;
@@ -24,11 +22,6 @@ body[data-route="creator"] .creator-style-panel {
 }
 body[data-route="creator"] .creator-style-panel.creator-mode-panel-hidden {
   display: none;
-}
-
-.creator-style-title {
-  font-weight: 700;
-  font-size: 1rem;
 }
 .creator-style-intro {
   margin: 0;
@@ -128,4 +121,77 @@ body[data-route="creator"] .creator-style-panel.creator-mode-panel-hidden {
   min-height: 1.1em;
   font-size: 0.75rem;
   color: rgba(var(--fg-rgb), 0.65);
+}
+
+/* Me tab: the shared right-side picker + swatches edit the selected part; hover info is paint-only. */
+body[data-route="creator"][data-edit-mode="style"] #creator-hover-info-panel {
+  display: none !important;
+}
+
+.creator-style-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: rgba(var(--fg-rgb), 0.6);
+}
+.creator-style-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.creator-style-target {
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+}
+.creator-style-target:hover {
+  background: rgba(var(--fg-rgb), 0.06);
+}
+.creator-style-target:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.7);
+  outline-offset: 1px;
+}
+.creator-style-target.active {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.55);
+}
+.creator-style-target-off .creator-style-row-label,
+.creator-style-target-off .creator-style-chip {
+  opacity: 0.45;
+}
+.creator-style-chip {
+  width: 2rem;
+  height: 1.2rem;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  border: 1px solid rgba(var(--fg-rgb), 0.25);
+}
+
+.creator-style-divider {
+  height: 1px;
+  margin: 0.25rem 0;
+  background: rgba(var(--fg-rgb), 0.12);
+}
+
+/* Hair detection: sits under the hair rows, indented like the shoulders/back option. */
+.creator-style-detection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.2rem 0.4rem 0.35rem 1.4rem;
+}
+.creator-style-detection .creator-style-row {
+  min-height: 1.4rem;
+  font-size: 0.8rem;
+}
+.creator-style-detection input[type="range"] {
+  width: 100%;
+  margin: 0.15rem 0 0;
+}
+.creator-style-scale-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: rgba(var(--fg-rgb), 0.55);
 }

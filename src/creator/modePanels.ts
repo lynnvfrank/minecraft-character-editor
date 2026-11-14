@@ -24,10 +24,10 @@ export const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
   { id: 'creator-layers-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-tools-panel', modes: ['2d', '3d'], enterFrom: 'bottom', exitTo: 'bottom' },
   { id: 'creator-undo-redo-panel', modes: ['2d', '3d'], enterFrom: 'bottom', exitTo: 'bottom' },
-  { id: 'creator-right-panels-group', modes: ['2d', '3d'], enterFrom: 'right', exitTo: 'right' },
+  { id: 'creator-right-panels-group', modes: ['style', '2d', '3d'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-3d-preview-slot', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-top-center-panels', modes: ['wardrobe', '3d'], enterFrom: 'top', exitTo: 'top' },
-  { id: 'creator-style-panel', modes: ['style'], enterFrom: 'right', exitTo: 'right' },
+  { id: 'creator-style-panel', modes: ['style'], enterFrom: 'left', exitTo: 'left' },
 ];
 
 /** Must match mode panel exit duration in `_animations.scss` (`$creator-mode-panel-enter-duration`). */
