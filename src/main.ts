@@ -144,8 +144,8 @@ const FALLBACK_SKINS: SkinEntry[] = [
 ];
 
 const FALLBACK_ANIMATIONS: AnimationEntry[] = [
-  { path: '/animations/Bored-RunningboyRig.fbx', key: 'bored', label: 'Bored' },
-  { path: '/animations/Crying-RunningboyRig.fbx', key: 'crying', label: 'Crying' }
+  { path: '/animations/animations.glb', key: 'bored', label: 'Bored' },
+  { path: '/animations/animations.glb', key: 'crying', label: 'Crying' }
 ];
 
 const USE_DEBUG_TEXTURE = false;

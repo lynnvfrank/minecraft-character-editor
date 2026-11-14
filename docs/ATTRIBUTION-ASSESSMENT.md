@@ -10,7 +10,7 @@ Scope: everything bundled into or used to build the app **except player skins** 
 |------|--------|---------------------------|
 | npm libraries (runtime + build) | All permissive (MIT / BSD / ISC-style / Apache-2.0) | **Low** — just needs notices (done in the in-app About panel) |
 | Electron / Chromium | MIT, plus Chromium's bundled third-party licenses | **Low** — electron-builder ships `LICENSES.chromium.html` |
-| Mixamo animations (43 FBX clips) | Adobe Mixamo terms | **Medium** — free for use in projects, but raw FBX files sit unprotected in `public/animations/` |
+| Mixamo animations (42 clips) | Adobe Mixamo terms | **Low–Medium** — packed into one GLB; raw FBX no longer shipped |
 | Running Boy character rig (3 FBX) | Downloaded from a free model site (owner recalls a permissive / MIT-style license), auto-rigged on Mixamo | **Low–Medium** — record the source URL and license text |
 | UI icons | Lucide (ISC); wardrobe icons original | **Low** |
 | Schematic props | **Removed** (purchased schematics, not redistributable; also used Minecraft textures) | None — reverted |
@@ -44,12 +44,13 @@ vite (MIT), sass (MIT), typescript (Apache-2.0), tsx (MIT), electron-builder (MI
 
 ## 2. Animations — Adobe Mixamo
 
-- **What:** 43 FBX clips in `public/animations/` (idle, walk, turns, emotes, sit/stand, etc.), downloaded "Without Skin" and retargeted to the Running Boy rig.
+- **What:** 42 FBX clips, sources now in `assets-src/animations/` (idle, walk, turns, emotes, sit/stand, etc.), downloaded "Without Skin" and retargeted to the Running Boy rig.
 - **Terms:** Mixamo characters and animations are royalty-free for personal, commercial and non-profit projects (games, films, apps). You **may not** redistribute or sell the animation files themselves as standalone assets.
-- **Issue:** The Electron build copies these as plain `.fbx` files anyone can pull out of the app folder. That's common practice for Mixamo games, but it's the main gray area.
+- **Was:** the build copied these as plain `.fbx` files anyone could pull out of the app folder.
+- **Now:** `scripts/pack-animations.mjs` (run by `npm run assets:generate`) packs every clip into `public/animations/animations.glb` (~2.3 MB vs ~9 MB of FBX), with clips on a bare node set and no mesh. Only the GLB ships; `assets-src/` is outside `public/` and never reaches `dist`.
 - **Actions:**
   1. Credit "Animations by Adobe Mixamo" in the About panel (done).
-  2. **Planned:** convert the clips into one packed GLB (all clips on one file, optionally meshopt-compressed) so they aren't drop-in reusable FBX assets.
+  2. Pack the clips into one GLB so they aren't drop-in reusable FBX assets (done).
   3. Requires an Adobe account in good standing for whoever downloaded them; keep a note of which account.
 
 ## 3. Character model — Running Boy rig
@@ -88,6 +89,6 @@ Bundled skins are for testing only and must be removed or replaced with legally 
 - [x] Look up SVG Repo icon licenses (8 likely CC BY, 12 unidentified)
 - [x] Replace the SVG Repo icons with Lucide (ISC)
 - [x] Remove schematic props
-- [ ] Pack the Mixamo clips into a single GLB
+- [x] Pack the Mixamo clips into a single GLB
 - [ ] Move script-only packages to `devDependencies`
 - [ ] Remove test skins
