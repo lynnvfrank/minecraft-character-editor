@@ -256,8 +256,17 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
   const panel = document.createElement('div');
   panel.id = 'creator-wardrobe-parts-panel';
   panel.className = 'creator-wardrobe-parts-panel creator-wardrobe-parts-panel-tree';
-  panel.setAttribute('role', 'tree');
-  panel.setAttribute('aria-label', 'Wardrobe parts');
+  panel.setAttribute('role', 'group');
+  panel.setAttribute('aria-label', 'Wardrobe');
+
+  const title = document.createElement('div');
+  title.className = 'creator-layers-panel-title creator-panel-title';
+  title.textContent = 'Wardrobe';
+  const tree = document.createElement('div');
+  tree.className = 'creator-wardrobe-parts-tree';
+  tree.setAttribute('role', 'tree');
+  tree.setAttribute('aria-label', 'Wardrobe parts');
+  panel.append(title, tree);
 
   const selectedLayer = ctx.getSelectedLayer();
   expandAncestorsOf(selectedLayer, WARDROBE_LAYER_TREE);
@@ -265,12 +274,12 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
   const onClick = (layer: WardrobeLayerKey) => {
     ctx.setSelectedLayer(layer);
     expandAncestorsOf(layer, WARDROBE_LAYER_TREE);
-    rebuildTree(panel, ctx, onClick, layer);
+    rebuildTree(tree, ctx, onClick, layer);
   };
 
   const onExpandClick = (key: string) => {
     setExpanded(key, !isExpanded(key));
-    rebuildTree(panel, ctx, onClick, ctx.getSelectedLayer());
+    rebuildTree(tree, ctx, onClick, ctx.getSelectedLayer());
   };
 
   function rebuildTree(
@@ -288,7 +297,7 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
     renderActive(p, c.getSelectedLayer());
   }
 
-  rebuildTree(panel, ctx, onClick, selectedLayer);
+  rebuildTree(tree, ctx, onClick, selectedLayer);
   panel.addEventListener('pointerleave', (e) => {
     if (document.body.dataset.route !== 'creator') return;
     if (document.body.dataset.editMode !== 'wardrobe') return;
@@ -348,12 +357,12 @@ export function buildWardrobePartsPanel(ctx: WardrobePartsPanelContext): void {
   const uMode = creatorModeSlice.subscribe((detail) => {
     if (detail.mode !== 'wardrobe') return;
     expandAncestorsOf(ctx.getSelectedLayer(), WARDROBE_LAYER_TREE);
-    rebuildTree(panel, ctx, onClick, ctx.getSelectedLayer());
+    rebuildTree(tree, ctx, onClick, ctx.getSelectedLayer());
   });
   const uFocus = creatorWardrobeFocusSlice.subscribe(() => {
     if (ctx.getEditMode() !== 'wardrobe') return;
     expandAncestorsOf(ctx.getSelectedLayer(), WARDROBE_LAYER_TREE);
-    rebuildTree(panel, ctx, onClick, ctx.getSelectedLayer());
+    rebuildTree(tree, ctx, onClick, ctx.getSelectedLayer());
   });
   unbindWardrobePanelSubs = () => {
     uMode();

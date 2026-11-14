@@ -33,7 +33,8 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   const oldOverlaysPanel = document.getElementById('creator-canvas-overlays-panel');
   if (oldOverlaysPanel) oldOverlaysPanel.remove();
 
-  const overlaysPanel = createEl('div', { id: 'creator-canvas-overlays-panel', className: 'creator-canvas-overlays-panel', role: 'group', 'aria-label': 'Canvas overlays' },
+  const overlaysPanel = createEl('div', { id: 'creator-canvas-overlays-panel', className: 'creator-canvas-overlays-panel', role: 'group', 'aria-label': 'Guides' },
+    createEl('div', { className: 'creator-layers-panel-title creator-panel-title' }, 'Guides'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'rulers', title: 'Toggle rulers' }, 'Rulers'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'template', title: 'Show template overlay' }, 'Template')
   );

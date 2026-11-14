@@ -18,6 +18,7 @@ export const MODE_PANEL_HIDDEN_CLASS = 'creator-mode-panel-hidden';
 export const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
   { id: 'creator-save-download-panel', modes: ['wardrobe', 'style', '2d', '3d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-wardrobe-parts-panel', modes: ['wardrobe'], enterFrom: 'left', exitTo: 'left' },
+  { id: 'creator-arm-model-panel', modes: ['wardrobe', '2d', '3d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-upper-right-panels-root', modes: ['wardrobe'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-canvas-overlays-panel', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-layers-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },

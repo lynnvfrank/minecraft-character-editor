@@ -300,6 +300,11 @@ body[data-route="preview"] .app-lower-left-panels {
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
   font-size: 0.8rem;
 }
+.creator-wardrobe-parts-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
 .creator-arm-model-header {
   display: flex;
   justify-content: space-between;
