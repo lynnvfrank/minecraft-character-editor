@@ -13,6 +13,7 @@ import { styleSkin, makeFaceTemplate, type FaceTemplate, type StyleSkinOptions }
 import { createEl } from './dom';
 import { creatorScope } from './lifecycle';
 import { EDIT_MODE_STYLE } from './api';
+import { onHairBrushModeChanged, registerHairBrushHandlers, setHairBrushMode, getHairBrushMode, type HairBrushMode } from './hairFixBrush';
 
 const STORAGE_KEY = 'blockygotchi.makeItMe.v1';
 const PREVIEW_DEBOUNCE_MS = 60;
@@ -157,6 +158,68 @@ function drawFaceThumb(canvas: HTMLCanvasElement, url: string | null): void {
   img.src = url;
 }
 
+const FIXES_KEY = 'blockygotchi.hairFixes.v1';
+const FIXES_MAX_SKINS = 200;
+type StoredFixes = Record<string, { a: number[]; r: number[] }>;
+type HairFixes = { add: Set<number>; remove: Set<number> };
+
+/** Stable key for a 64x64 skin (FNV-1a over its pixels), so fixes follow the skin, not its file name. */
+function skinKey(img: ImageData): string {
+  let h = 0x811c9dc5;
+  const d = img.data;
+  for (let i = 0; i < d.length; i++) {
+    h ^= d[i]!;
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+function readFixesStore(): StoredFixes {
+  try {
+    return JSON.parse(localStorage.getItem(FIXES_KEY) ?? '{}') as StoredFixes;
+  } catch {
+    return {};
+  }
+}
+
+function loadFixes(key: string): HairFixes {
+  const entry = readFixesStore()[key];
+  return { add: new Set(entry?.a ?? []), remove: new Set(entry?.r ?? []) };
+}
+
+function saveFixes(key: string, fixes: HairFixes): void {
+  try {
+    const store = readFixesStore();
+    delete store[key];
+    if (fixes.add.size || fixes.remove.size) store[key] = { a: [...fixes.add], r: [...fixes.remove] };
+    const keys = Object.keys(store);
+    for (const k of keys.slice(0, Math.max(0, keys.length - FIXES_MAX_SKINS))) delete store[k];
+    localStorage.setItem(FIXES_KEY, JSON.stringify(store));
+  } catch {
+    // storage unavailable: fixes still apply for this visit
+  }
+}
+
+const HAIR_TINT: [number, number, number] = [255, 43, 214];
+const HAIR_TINT_MIX = 0.55;
+
+/** Working-res copy of `styled` with the 64x64 `mask` pixels tinted so detected hair stands out. */
+function tintMask(styled: Uint8ClampedArray, mask: Set<number>): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(styled);
+  for (const k of mask) {
+    const sx = k % SKIN_SIZE;
+    const sy = Math.floor(k / SKIN_SIZE);
+    for (let dy = 0; dy < RESOLUTION_MULTIPLIER; dy++) {
+      for (let dx = 0; dx < RESOLUTION_MULTIPLIER; dx++) {
+        const o = ((sy * RESOLUTION_MULTIPLIER + dy) * WORK_SIZE + sx * RESOLUTION_MULTIPLIER + dx) * 4;
+        if (out[o + 3] === 0) continue;
+        for (let c = 0; c < 3; c++) out[o + c] = Math.round(out[o + c]! * (1 - HAIR_TINT_MIX) + HAIR_TINT[c]! * HAIR_TINT_MIX);
+      }
+    }
+  }
+  return out;
+}
+
 let undoRedoPending = false;
 
 export type ColorTargetKey = 'hair' | 'skin' | 'outfit' | 'accessory';
@@ -203,6 +266,13 @@ export function buildStylePanel(ctx: StylePanelContext): void {
   let faceTemplateFor: string | null = null;
   let debounce: number | undefined;
   let renderToken = 0;
+  /** Clean styled result (working res) and its hair mask; the canvas may show it tinted. */
+  let lastStyled: Uint8ClampedArray | null = null;
+  let lastHairMask: Set<number> = new Set();
+  let fixesKey: string | null = null;
+  let fixes: HairFixes = { add: new Set(), remove: new Set() };
+  let showHair = false;
+  const overlayOn = () => showHair || getHairBrushMode() != null;
 
   const status = createEl('div', { className: 'creator-style-status', role: 'status' });
 
@@ -324,8 +394,81 @@ export function buildStylePanel(ctx: StylePanelContext): void {
   resetBtn.addEventListener('click', () => {
     if (!baseWork) return;
     writeCanvas(baseWork);
+    lastStyled = null;
     previewDirty = false;
     setStatus('Showing the original. Change a setting to restyle.');
+  });
+
+  const showHairBtn = createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-style-fix-btn', 'aria-pressed': 'false', title: 'Highlight the pixels counted as hair (pink)' }, 'Show');
+  const addBtn = createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-style-fix-btn', 'aria-pressed': 'false', title: 'Paint on the model to mark missed pixels as hair' }, '+ Add');
+  const removeBtn = createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-style-fix-btn', 'aria-pressed': 'false', title: 'Paint on the model to unmark pixels that are not hair' }, '− Remove');
+  const clearFixesBtn = createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-style-fix-btn', title: 'Forget the hair fixes for this skin' }, 'Clear');
+  const fixCount = createEl('span', { className: 'creator-style-fix-count' });
+  const fixHint = createEl('p', { className: 'creator-style-hint creator-style-fix-hint' }, 'Paint on the model. Right-drag to turn it.');
+  const fixHairBlock = createEl('div', { className: 'creator-style-fix', role: 'group', 'aria-label': 'Fix hair' },
+    createEl('div', { className: 'creator-style-row' },
+      createEl('span', { className: 'creator-style-row-label' }, 'Fix hair'),
+      fixCount,
+    ),
+    createEl('div', { className: 'creator-style-fix-buttons' }, showHairBtn, addBtn, removeBtn, clearFixesBtn),
+    fixHint,
+  );
+
+  const syncFixUi = () => {
+    const brush = getHairBrushMode();
+    showHairBtn.setAttribute('aria-pressed', String(overlayOn()));
+    showHairBtn.classList.toggle('active', overlayOn());
+    addBtn.setAttribute('aria-pressed', String(brush === 'add'));
+    addBtn.classList.toggle('active', brush === 'add');
+    removeBtn.setAttribute('aria-pressed', String(brush === 'remove'));
+    removeBtn.classList.toggle('active', brush === 'remove');
+    const n = fixes.add.size + fixes.remove.size;
+    fixCount.textContent = n ? `${n} fixed` : '';
+    clearFixesBtn.disabled = n === 0;
+    fixHint.hidden = brush == null;
+  };
+  const toggleBrush = (m: HairBrushMode) => setHairBrushMode(getHairBrushMode() === m ? null : m);
+  showHairBtn.addEventListener('click', () => {
+    showHair = !overlayOn();
+    if (!showHair) setHairBrushMode(null);
+    syncFixUi();
+    showResult();
+  });
+  addBtn.addEventListener('click', () => toggleBrush('add'));
+  removeBtn.addEventListener('click', () => toggleBrush('remove'));
+  clearFixesBtn.addEventListener('click', () => {
+    fixes = { add: new Set(), remove: new Set() };
+    if (fixesKey) saveFixes(fixesKey, fixes);
+    syncFixUi();
+    onLookChanged();
+  });
+  creatorScope.track(onHairBrushModeChanged(() => {
+    syncFixUi();
+    showResult();
+  }));
+  registerHairBrushHandlers({
+    paint: (x, y) => {
+      const mode = getHairBrushMode();
+      if (!mode || x < 0 || y < 0 || x >= SKIN_SIZE || y >= SKIN_SIZE) return;
+      const k = y * SKIN_SIZE + x;
+      const into = mode === 'add' ? fixes.add : fixes.remove;
+      const from = mode === 'add' ? fixes.remove : fixes.add;
+      if (into.has(k)) return;
+      // Skip pixels that are already what the brush says (and weren't overridden the other way).
+      const hadOpposite = from.delete(k);
+      if (!hadOpposite && lastHairMask.has(k) === (mode === 'add')) return;
+      into.add(k);
+      syncFixUi();
+      window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => void renderPreview(), 16);
+    },
+    end: () => {
+      if (fixesKey) saveFixes(fixesKey, fixes);
+    },
+  });
+  creatorScope.track(() => {
+    registerHairBrushHandlers(null);
+    setHairBrushMode(null);
   });
 
   const panel = createEl('div', { id: 'creator-style-panel', className: 'creator-style-panel', role: 'region', 'aria-label': 'Make it me' },
@@ -349,6 +492,7 @@ export function buildStylePanel(ctx: StylePanelContext): void {
             createEl('span', {}, 'Stricter'),
             createEl('span', {}, 'Looser'),
           ),
+          fixHairBlock,
         ),
         colorRow('skin', 'Skin tone', 'Shift exposed skin to this tone'),
       ),
@@ -374,6 +518,7 @@ export function buildStylePanel(ctx: StylePanelContext): void {
   );
   host.appendChild(panel);
   syncFaceUi();
+  syncFixUi();
   selectTarget(activeTarget);
 
   // Keep/Save sits absolutely at the bottom of the left column; stop above it and scroll inside.
@@ -416,14 +561,30 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     ctx.onCanvasChange();
   }
 
-  function captureBase(): void {
-    const canvas = ctx.getSkinCanvas();
-    const c2d = canvas.getContext('2d', { willReadFrequently: true });
-    if (!c2d) return;
-    baseWork = new Uint8ClampedArray(c2d.getImageData(0, 0, WORK_SIZE, WORK_SIZE).data);
+  function captureBase(from?: Uint8ClampedArray): void {
+    if (from) {
+      baseWork = new Uint8ClampedArray(from);
+    } else {
+      const c2d = ctx.getSkinCanvas().getContext('2d', { willReadFrequently: true });
+      if (!c2d) return;
+      baseWork = new Uint8ClampedArray(c2d.getImageData(0, 0, WORK_SIZE, WORK_SIZE).data);
+    }
     base64 = downsample(baseWork);
     lastWritten = baseWork;
+    lastStyled = null;
     previewDirty = false;
+    const key = skinKey(base64);
+    if (key !== fixesKey) {
+      fixesKey = key;
+      fixes = loadFixes(key);
+      syncFixUi();
+    }
+  }
+
+  /** Put the latest styled result on the canvas, tinted where hair was found if the overlay is on. */
+  function showResult(): void {
+    if (!lastStyled) return;
+    writeCanvas(overlayOn() ? tintMask(lastStyled, lastHairMask) : lastStyled);
   }
 
   function sameData(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
@@ -466,12 +627,15 @@ export function buildStylePanel(ctx: StylePanelContext): void {
       eyesOverBangs: look.eyesOverBangs,
       targetOutfitColor: look.outfit.on ? hexToRgb(look.outfit.color) : null,
       targetAccessoryColor: look.accessory.on ? hexToRgb(look.accessory.color) : null,
+      hairAdd: fixes.add,
+      hairRemove: fixes.remove,
     };
     try {
       const started = performance.now();
       const result = styleSkin(base64, options);
-      const styled = upsampleChanged(baseWork, base64, result.image as ImageData);
-      writeCanvas(styled);
+      lastStyled = upsampleChanged(baseWork, base64, result.image as ImageData);
+      lastHairMask = result.hairMask;
+      showResult();
       previewDirty = true;
       const ms = Math.round(performance.now() - started);
       setStatus(`Preview (${result.hairMask.size} hair pixels found, ${ms} ms). Apply to keep it.`);
@@ -489,17 +653,21 @@ export function buildStylePanel(ctx: StylePanelContext): void {
 
   /** Turn the current preview into a single undo step; optionally make it the new base. */
   function commitPreview(rebase: boolean): void {
-    if (!baseWork || !previewDirty) return;
-    const canvas = ctx.getSkinCanvas();
-    const c2d = canvas.getContext('2d', { willReadFrequently: true });
-    if (!c2d) return;
-    const after = new Uint8ClampedArray(c2d.getImageData(0, 0, WORK_SIZE, WORK_SIZE).data);
+    if (!baseWork || !previewDirty || !lastStyled) return;
+    const after = lastStyled;
+    if (overlayOn() || !rebase) writeCanvas(after); // never leave the pink overlay baked in
     ctx.pushUndoLoad(baseWork, after);
     ctx.updateUndoRedoButtons();
     previewDirty = false;
     if (rebase) {
-      captureBase();
+      // Fixes are per skin; carry them over to the applied result so tweaking continues.
+      const carried = fixes;
+      captureBase(after);
+      fixes = carried;
+      if (fixesKey) saveFixes(fixesKey, fixes);
+      syncFixUi();
       setStatus('Applied. You can keep tweaking, or undo with Ctrl+Z.');
+      if (overlayOn()) void renderPreview();
     }
   }
 
@@ -512,7 +680,11 @@ export function buildStylePanel(ctx: StylePanelContext): void {
 
   creatorScope.track(creatorModeSlice.subscribe((detail) => {
     if (detail.mode === EDIT_MODE_STYLE && detail.previousMode !== EDIT_MODE_STYLE) enter();
-    else if (detail.previousMode === EDIT_MODE_STYLE && detail.mode !== EDIT_MODE_STYLE) commitPreview(false);
+    else if (detail.previousMode === EDIT_MODE_STYLE && detail.mode !== EDIT_MODE_STYLE) {
+      setHairBrushMode(null);
+      showHair = false;
+      commitPreview(false);
+    }
   }));
 
   // A skin loaded (or undo/redo) while in this mode: restyle the new skin.

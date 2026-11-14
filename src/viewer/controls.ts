@@ -4,7 +4,8 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { snapWorkingToSkinCellCenter, uvToWorkingCoords } from '../skin';
+import { snapWorkingToSkinCellCenter, uvToWorkingCoords, RESOLUTION_MULTIPLIER } from '../skin';
+import { getHairBrushMode, hairBrushEnd, hairBrushPaint, onHairBrushModeChanged } from '../creator/hairFixBrush';
 import {
   getEditMode3D,
   getActiveTool,
@@ -86,6 +87,34 @@ function sampleColorFromRaycast(
     if (layerLocked[info.layer] === true) continue;
     const sample = sampleColorAtWithAlpha(x, y);
     if (sample && sample.alpha >= EYEDROPPER_ALPHA_THRESHOLD) return sample.hex;
+  }
+  return null;
+}
+
+/** First visible, non-transparent skin texel under the pointer (skips see-through overlay pixels). */
+function raycastToVisibleSkinPixel(
+  deps: Creator3DPaintDeps,
+  clientX: number,
+  clientY: number
+): { x: number; y: number } | null {
+  const { camera, renderer, getCharacterModel } = deps;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(getCharacterMeshes(getCharacterModel), false);
+  const layerVisible = getLayer3DVisible();
+  for (const hit of intersects) {
+    const uv = (hit as THREE.Intersection<THREE.Object3D> & { uv?: THREE.Vector2 }).uv;
+    if (!uv) continue;
+    const { x, y } = uvToWorkingCoords(uv.x, uv.y);
+    const info = getLayerAndPartAtCoords(x, y);
+    if (!info) continue;
+    const visible =
+      info.side !== undefined ? getPartVisible(info.layer, info.side) : layerVisible[info.layer] !== false;
+    if (!visible) continue;
+    const sample = sampleColorAtWithAlpha(x, y);
+    if (sample && sample.alpha >= EYEDROPPER_ALPHA_THRESHOLD) return { x, y };
   }
   return null;
 }
@@ -223,7 +252,21 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
   const { getControls, renderer } = deps;
   const canvas = renderer.domElement;
   let is3DPainting = false;
+  let isHairBrushing = false;
   let controlsTemporarilyDisabled = false;
+
+  /** Me tab hair spot-correction: paint the hair mask on the model instead of colors. */
+  const hairBrushAt = (clientX: number, clientY: number): boolean => {
+    const hit = raycastToVisibleSkinPixel(deps, clientX, clientY);
+    if (!hit) return false;
+    hairBrushPaint(Math.floor(hit.x / RESOLUTION_MULTIPLIER), Math.floor(hit.y / RESOLUTION_MULTIPLIER));
+    return true;
+  };
+  const updateHairBrushCursor = () => {
+    if (deps.getRoute() === 'creator' && getHairBrushMode()) canvas.style.cursor = 'crosshair';
+    else updateCreator3DCanvasCursor(renderer, deps.getRoute);
+  };
+  onHairBrushModeChanged(updateHairBrushCursor);
 
   const refreshControls = () => {
     if (controlsTemporarilyDisabled) return;
@@ -242,6 +285,14 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
   };
 
   function handlePointerDown(e: MouseEvent) {
+    if (deps.getRoute() === 'creator' && getHairBrushMode() && e.button === 0) {
+      controlsTemporarilyDisabled = true;
+      getControls().enabled = false;
+      isHairBrushing = true;
+      hairBrushAt(e.clientX, e.clientY);
+      e.preventDefault();
+      return;
+    }
     if (deps.getRoute() !== 'creator' || !getEditMode3D()) return;
     if (e.button !== 0) return;
     const activeTool = getActiveTool();
@@ -272,6 +323,11 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
   }
 
   function handlePointerMove(e: MouseEvent) {
+    if (isHairBrushing) {
+      hairBrushAt(e.clientX, e.clientY);
+      e.preventDefault();
+      return;
+    }
     if (deps.getRoute() !== 'creator' || !getEditMode3D()) return;
     const activeTool = getActiveTool();
     const eyedropperHoverColor = activeTool === 'eyedropper'
@@ -323,6 +379,14 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
 
   function handlePointerUp(e: MouseEvent) {
     if (e.button !== 0) return;
+    if (isHairBrushing) {
+      isHairBrushing = false;
+      hairBrushEnd();
+      controlsTemporarilyDisabled = false;
+      getControls().enabled = true;
+      updateHairBrushCursor();
+      return;
+    }
     if (is3DPainting) {
       paintEndFrom3D();
       is3DPainting = false;
@@ -340,11 +404,12 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     handlePointerUp(e);
   });
   canvas.addEventListener('mouseenter', () => {
-    updateCreator3DCanvasCursor(renderer, deps.getRoute);
+    updateHairBrushCursor();
   });
 
   creatorModeSlice.subscribe(() => {
     refreshControls();
+    updateHairBrushCursor();
   });
   creatorToolsSlice.subscribe(() => {
     refreshControls();

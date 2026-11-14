@@ -519,3 +519,27 @@ describe('skin styler (ported from test_skin_styler.py)', () => {
     assert.deepEqual([...image.data], [...original.data]);
   });
 });
+
+describe('manual hair corrections', () => {
+  test('hairAdd forces pixels into the hair mask and hairRemove takes them out', () => {
+    const img = createSkinPixels(64, 64);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 32; x++) setPixel(img, x, y, [120, 70, 40, 255]);
+    const plain = styleSkin(img, {});
+    const someHair = [...plain.hairMask][0];
+    const notHair = 63 * 64 + 63; // transparent corner, never detected
+    const fixed = styleSkin(img, {
+      hairAdd: [notHair],
+      hairRemove: someHair === undefined ? [] : [someHair],
+    });
+    assert.ok(fixed.hairMask.has(notHair));
+    if (someHair !== undefined) assert.ok(!fixed.hairMask.has(someHair));
+  });
+
+  test('empty corrections leave the result identical', () => {
+    const img = createSkinPixels(64, 64);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 32; x++) setPixel(img, x, y, [120, 70, 40, 255]);
+    const a = styleSkin(img, { targetHairColor: [200, 30, 30] });
+    const b = styleSkin(img, { targetHairColor: [200, 30, 30], hairAdd: [], hairRemove: [] });
+    assert.deepEqual([...a.image.data], [...b.image.data]);
+  });
+});

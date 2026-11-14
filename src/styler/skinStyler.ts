@@ -41,6 +41,13 @@ export interface StyleSkinOptions {
   targetOutfitColor?: RGB | null;
   targetAccessoryColor?: RGB | null;
   preserveHatLayerLashes?: boolean;
+  /**
+   * Manual hair corrections (keys = y*64+x, 64x64 space), applied on top of detection.
+   * `hairAdd` pixels are always hair (and never skin/accessory); `hairRemove` pixels never are.
+   * Not part of the Python styler; empty/omitted sets leave results identical to it.
+   */
+  hairAdd?: Iterable<number> | null;
+  hairRemove?: Iterable<number> | null;
 }
 
 export interface StyleSkinResult {
@@ -1700,16 +1707,29 @@ export function styleSkin(image: SkinPixels, options: StyleSkinOptions): StyleSk
     targetOutfitColor = null,
     targetAccessoryColor = null,
     preserveHatLayerLashes = true,
+    hairAdd = null,
+    hairRemove = null,
   } = options;
+  const add = new Set<number>(hairAdd ?? []);
+  const remove = new Set<number>(hairRemove ?? []);
+  for (const k of remove) add.delete(k);
+  const hasFixes = add.size > 0 || remove.size > 0;
   const { image: normalized, wasNormalized } = normalizeSkin(image);
   const originalHairMask = detectHairMask(normalized, tolerance);
   const anatomicalSkinMask = detectSkinMask(normalized, originalHairMask, skinTolerance);
   const bodyHairMask = includeBodyHair ? detectBodyHairMask(normalized, tolerance) : new Set<number>();
   const combinedHairMask = union(originalHairMask, bodyHairMask);
-  const skinMask = union(detectSkinMask(normalized, combinedHairMask, skinTolerance), anatomicalSkinMask);
-  const accessoryMask = detectHairAccessoryMask(normalized, originalHairMask, bodyHairMask, skinMask);
-  const effectiveHeadHairMask = difference(originalHairMask, skinMask, accessoryMask);
-  const effectiveHairMask = difference(combinedHairMask, skinMask, accessoryMask);
+  let skinMask = union(detectSkinMask(normalized, combinedHairMask, skinTolerance), anatomicalSkinMask);
+  let accessoryMask = detectHairAccessoryMask(normalized, originalHairMask, bodyHairMask, skinMask);
+  let effectiveHeadHairMask = difference(originalHairMask, skinMask, accessoryMask);
+  let effectiveHairMask = difference(combinedHairMask, skinMask, accessoryMask);
+  if (hasFixes) {
+    const isHead = (k: number) => keyY(k) < 16 && keyX(k) < 64;
+    skinMask = difference(skinMask, add);
+    accessoryMask = difference(accessoryMask, add);
+    effectiveHairMask = difference(union(effectiveHairMask, add), remove);
+    effectiveHeadHairMask = difference(union(effectiveHeadHairMask, [...add].filter(isHead)), remove);
+  }
   const outfitMask = detectOutfitMask(normalized, effectiveHairMask, skinMask, accessoryMask);
   const base =
     targetSkinColor != null

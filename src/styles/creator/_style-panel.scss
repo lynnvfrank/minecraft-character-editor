@@ -195,3 +195,36 @@ body[data-route="creator"][data-edit-mode="style"] #creator-hover-info-panel {
   font-size: 0.7rem;
   color: rgba(var(--fg-rgb), 0.55);
 }
+
+/* Fix hair: spot-correct the detected hair mask by painting on the model. */
+.creator-style-fix {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+}
+.creator-style-fix .creator-style-row {
+  min-height: 1.3rem;
+  font-size: 0.8rem;
+}
+.creator-style-fix-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.25rem;
+}
+.creator-style-fix-btn {
+  padding: 0.2rem 0.1rem;
+  font-size: 0.75rem;
+  min-width: 0;
+}
+.creator-style-fix-btn.active {
+  background: rgba(255, 43, 214, 0.22);
+  border-color: rgba(255, 43, 214, 0.6);
+}
+.creator-style-fix-count {
+  font-size: 0.72rem;
+  color: rgba(var(--fg-rgb), 0.6);
+}
+.creator-style-fix-hint[hidden] {
+  display: none;
+}
