@@ -218,7 +218,9 @@ export function applySkinToModel(
             mat.transparent = true;
             mat.alphaTest = 0.1;
             mat.depthWrite = true;
-            mat.side = THREE.DoubleSide;
+            // Front faces only: with DoubleSide, the inside of the oversized hat/jacket box
+            // shows through transparent overlay pixels as a dark ghost outline.
+            mat.side = THREE.FrontSide;
             break;
           case 'cutout':
             mat.alphaTest = 0.01;
