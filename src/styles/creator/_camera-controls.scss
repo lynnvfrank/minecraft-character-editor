@@ -51,3 +51,39 @@ body[data-route="creator"] .creator-top-center-panels {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Icon + label buttons */
+.creator-camera-controls-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.creator-camera-controls-btn svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+/* Leading camera badge: marks the bar as camera controls */
+.creator-camera-controls-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.45rem 0 0.15rem;
+  margin-right: 0.1rem;
+  border-right: 1px solid rgba(var(--fg-rgb), 0.15);
+  color: rgba(var(--fg-rgb), 0.7);
+}
+
+/* Lighting sits apart from the camera moves */
+.creator-camera-controls-btn-lighting {
+  margin-left: 0.35rem;
+  position: relative;
+}
+.creator-camera-controls-btn-lighting::before {
+  content: '';
+  position: absolute;
+  left: calc(-0.35rem - 0.2rem);
+  top: 15%;
+  bottom: 15%;
+  border-left: 1px solid rgba(var(--fg-rgb), 0.15);
+}

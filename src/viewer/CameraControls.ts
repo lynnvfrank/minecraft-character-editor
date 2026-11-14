@@ -5,6 +5,7 @@
 
 import { publish, subscribe, CREATOR_EVENTS } from '../events/appEvents';
 import { createEl } from '../creator/dom';
+import { createIcon, type IconName } from '../creator/icons';
 import {
   LIGHTING_PRESETS,
   LIGHTING_PRESET_ORDER,
@@ -17,16 +18,31 @@ const BUTTONS: Array<{
   label: string;
   title: string;
   event: string;
+  icon: IconName;
   detail?: { degrees?: number };
 }> = [
-  { id: 'camera-left-45', label: 'Left', title: 'Rotate camera yaw left by 45 degrees', event: CREATOR_EVENTS.CAMERA_YAW_RIGHT, detail: { degrees: 45 } },
-  { id: 'camera-pitch-up', label: 'Up', title: 'Adjust camera pitch upward by 30 degrees', event: CREATOR_EVENTS.CAMERA_PITCH_UP, detail: { degrees: 30 } },
-  { id: 'camera-zoom-in', label: 'In', title: 'Move closer to the character', event: CREATOR_EVENTS.CAMERA_ZOOM_IN },
-  { id: 'camera-recenter', label: 'Recenter', title: 'Reset to default front-facing view', event: CREATOR_EVENTS.CAMERA_RECENTER },
-  { id: 'camera-zoom-out', label: 'Out', title: 'Move farther from the character', event: CREATOR_EVENTS.CAMERA_ZOOM_OUT },
-  { id: 'camera-pitch-down', label: 'Down', title: 'Adjust camera pitch downward by 30 degrees', event: CREATOR_EVENTS.CAMERA_PITCH_DOWN, detail: { degrees: 30 } },
-  { id: 'camera-right-45', label: 'Right', title: 'Rotate camera yaw right by 45 degrees', event: CREATOR_EVENTS.CAMERA_YAW_LEFT, detail: { degrees: 45 } },
+  { id: 'camera-left-45', label: 'Left', icon: 'modeCameraLeft', title: 'Rotate camera yaw left by 45 degrees', event: CREATOR_EVENTS.CAMERA_YAW_RIGHT, detail: { degrees: 45 } },
+  { id: 'camera-pitch-up', label: 'Up', icon: 'modeCameraUp', title: 'Adjust camera pitch upward by 30 degrees', event: CREATOR_EVENTS.CAMERA_PITCH_UP, detail: { degrees: 30 } },
+  { id: 'camera-zoom-in', label: 'In', icon: 'modeCameraIn', title: 'Move closer to the character', event: CREATOR_EVENTS.CAMERA_ZOOM_IN },
+  { id: 'camera-recenter', label: 'Recenter', icon: 'modeCameraRecenter', title: 'Reset to default front-facing view', event: CREATOR_EVENTS.CAMERA_RECENTER },
+  { id: 'camera-zoom-out', label: 'Out', icon: 'modeCameraOut', title: 'Move farther from the character', event: CREATOR_EVENTS.CAMERA_ZOOM_OUT },
+  { id: 'camera-pitch-down', label: 'Down', icon: 'modeCameraDown', title: 'Adjust camera pitch downward by 30 degrees', event: CREATOR_EVENTS.CAMERA_PITCH_DOWN, detail: { degrees: 30 } },
+  { id: 'camera-right-45', label: 'Right', icon: 'modeCameraRight', title: 'Rotate camera yaw right by 45 degrees', event: CREATOR_EVENTS.CAMERA_YAW_LEFT, detail: { degrees: 45 } },
 ];
+
+const ICON_OPTS = { width: 15, height: 15 };
+
+const LIGHT_ICONS: Record<string, IconName> = {
+  shader: 'modeLightShader',
+  sunset: 'modeLightSunset',
+  night: 'modeLightNight',
+  classic: 'modeLightClassic',
+};
+
+/** Replace a button's content with an icon followed by a text label. */
+function setIconLabel(btn: HTMLElement, icon: IconName, label: string): void {
+  btn.replaceChildren(createIcon(icon, ICON_OPTS), label);
+}
 
 let moveStartEndBound = false;
 
@@ -67,6 +83,10 @@ export function buildCameraControls(options?: BuildCameraControlsOptions): void 
   });
   let disabled = false;
 
+  const badge = createEl('span', { className: 'creator-camera-controls-badge', title: 'Camera', 'aria-hidden': 'true' });
+  badge.append(createIcon('modeCamera', { width: 18, height: 18 }));
+  toolbar.appendChild(badge);
+
   for (const cfg of BUTTONS) {
     const btn = createEl('button', {
       type: 'button',
@@ -76,7 +96,7 @@ export function buildCameraControls(options?: BuildCameraControlsOptions): void 
       'aria-label': cfg.title,
       'data-action': cfg.event,
     });
-    btn.textContent = cfg.label;
+    btn.append(createIcon(cfg.icon, ICON_OPTS), cfg.label);
     btn.addEventListener('click', () => {
       if (disabled) return;
       publish(cfg.event, cfg.detail ?? {});
@@ -93,7 +113,7 @@ export function buildCameraControls(options?: BuildCameraControlsOptions): void 
     });
     const syncFocusedBtn = () => {
       const on = options.getFocusedCreationEnabled();
-      focusedBtn.textContent = on ? 'Focused' : 'Free';
+      setIconLabel(focusedBtn, on ? 'modeCameraFocused' : 'modeCameraFree', on ? 'Focused' : 'Free');
       focusedBtn.setAttribute('aria-label', on ? 'Focused creation on' : 'Focused creation off');
       focusedBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
     };
@@ -104,7 +124,7 @@ export function buildCameraControls(options?: BuildCameraControlsOptions): void 
       syncFocusedBtn();
     });
     options.subscribeFocusedCreationChanged?.(syncFocusedBtn);
-    toolbar.insertBefore(focusedBtn, toolbar.firstChild);
+    toolbar.insertBefore(focusedBtn, badge.nextSibling);
   }
 
   // Lighting preset cycler: Shader → Sunset → Night → Classic.
@@ -115,7 +135,7 @@ export function buildCameraControls(options?: BuildCameraControlsOptions): void 
   });
   const syncLightBtn = () => {
     const p = LIGHTING_PRESETS[getLightingPreset()];
-    lightBtn.textContent = `☀ ${p.label}`;
+    setIconLabel(lightBtn, LIGHT_ICONS[getLightingPreset()] ?? 'modeLightClassic', p.label);
     lightBtn.title = `Lighting: ${p.title}. Click to cycle.`;
     lightBtn.setAttribute('aria-label', `Lighting preset: ${p.label}. Click to change.`);
   };
