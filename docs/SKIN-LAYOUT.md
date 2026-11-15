@@ -35,7 +35,7 @@ Reference diagrams (e.g., `images/minecraft-skin-layout-detailed.png`) often inc
 
 **Important:** Actual Minecraft skin PNG files (64×64) contain only texture data in the regions described in sections 1–12. Dead zones exist only in reference diagrams. When using a diagram as a guide, crop out or ignore these zones before creating or editing a skin.
 
-**Implementation:** The character creator excludes dead zones from the template overlay and from the hover info panel (`—` is shown when the cursor is over a dead zone). See `SKIN_DEAD_ZONES` and `isInDeadZone()` in `src/skinLayout.ts`.
+**Implementation:** The character creator excludes dead zones from the template overlay and from the hover info panel (`—` is shown when the cursor is over a dead zone). See `SKIN_DEAD_ZONES` and `isInDeadZone()` in `src/skin/layout.ts`.
 
 ---
 
@@ -403,26 +403,28 @@ This section documents how the skin rendering is implemented in code. Use it whe
 
 | File | Purpose |
 |------|---------|
-| `src/main.ts` | Scene setup, model loading, skin application, config |
-| `src/skinPreprocess.ts` | Texture preprocessing (primary-region transparency → solid fill) |
+| `src/main.ts` | Startup: scene, character load, config constants |
+| `src/controllers/character.ts` | `loadCharacter`, `switchSkin` |
+| `src/skin/preprocess.ts` | Texture preprocessing (primary-region transparency → solid fill) |
+| `src/viewer/skinApplication.ts` | `applySkinToModel`, `OVERLAY_SCALE`, layer visibility on meshes |
 
 ### Skin Load Flow
 
 1. **Load** — `THREE.TextureLoader` loads the skin PNG.
-2. **Preprocess** — `preprocessSkinTexture()` (from `skinPreprocess.ts`) replaces transparent pixels with a solid color in primary regions only. Overlay regions keep transparency.
+2. **Preprocess** — `preprocessSkinTexture()` (from `src/skin/preprocess.ts`) replaces transparent pixels with a solid color in primary regions only. Overlay regions keep transparency.
 3. **Apply** — `applySkinToModel()` assigns texture to all meshes, sets render order, applies overlay scale workaround, configures material (alpha mode, etc.).
 
 Both `loadCharacter` (initial load) and `switchSkin` (skin change) use this flow.
 
-### Config Options (main.ts)
+### Config Options
 
 | Constant | Location | Purpose |
 |----------|----------|---------|
-| `USE_DEBUG_TEXTURE` | main.ts ~L58 | If true, use a debug grid texture instead of the skin |
-| `OVERLAY_SCALE.enabled` | main.ts ~L65 | Toggle overlay scale workaround for `2nd_Layer` |
-| `OVERLAY_SCALE.factor` | main.ts ~L66 | Scale factor (e.g. 1.03) for `2nd_Layer` when enabled |
-| `LOG_MODEL_INFO` | main.ts | When true, log mesh names and UV bounds on model load; default false |
-| `buildCharacterConfig` | main.ts | Sets `texturePreset: 'clamped-flip'`, `alphaMode: 'transparent'` |
+| `USE_DEBUG_TEXTURE` | `src/main.ts` | If true, use a debug grid texture instead of the skin |
+| `OVERLAY_SCALE.enabled` | `src/viewer/skinApplication.ts` | Toggle overlay scale workaround for `2nd_Layer` |
+| `OVERLAY_SCALE.factor` | `src/viewer/skinApplication.ts` | Scale factor (e.g. 1.03) for `2nd_Layer` when enabled |
+| `LOG_MODEL_INFO` | `src/main.ts` | When true, log mesh names and UV bounds on model load; default false |
+| `buildCharacterConfig` | `src/controllers/characterTypes.ts` | Sets `texturePreset: 'clamped-flip'`, `alphaMode: 'transparent'` |
 
 ### Config Options (skinPreprocess.ts)
 

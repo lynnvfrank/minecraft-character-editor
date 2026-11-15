@@ -3,7 +3,7 @@ import { createEl } from './dom';
 import type { EditorToolsContext } from './api';
 import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE, isDrawingTool, isToggleType } from './api';
 import { createIcon } from './icons';
-import { creatorScope } from './lifecycle';
+import type { DisposableScope } from './lifecycle';
 
 let toolShortcutKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
@@ -13,7 +13,7 @@ export function unregisterEditorToolShortcuts(): void {
   toolShortcutKeyHandler = null;
 }
 
-export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
+export function buildEditorToolsPanel(ctx: EditorToolsContext, scope: DisposableScope): void {
   const bottomCenterPanels = document.getElementById('creator-bottom-center-panels');
   const upperLeftPanels = document.getElementById('creator-upper-left-panels');
   if (!bottomCenterPanels || !upperLeftPanels) return;
@@ -143,12 +143,12 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
     ctx.updateUndoRedoButtons();
   });
 
-  creatorScope.track(creatorToolsSlice.subscribe(() => {
+  scope.track(creatorToolsSlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     updateToolActive();
     ctx.updateCanvasCursor();
   }));
-  creatorScope.track(creatorModeSlice.subscribe(() => {
+  scope.track(creatorModeSlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     updateEditModeButtons();
     updateViewToggleButtons();

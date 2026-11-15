@@ -5,3 +5,4 @@ export {
   type UndoCommand,
   type CurrentStroke
 } from './creatorState';
+export { createArmModelState, type ArmModelState } from './armModelState';

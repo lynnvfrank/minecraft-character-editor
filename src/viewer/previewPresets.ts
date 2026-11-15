@@ -17,6 +17,9 @@ import type { PreviewPreset, PreviewPresetKey } from '../domain';
 
 export type { PreviewPreset, PreviewPresetKey, PreviewVector, PreviewViewport } from '../domain';
 
+/** A preset that shows one part (every preset except the whole outfit). */
+export type PreviewPartKey = Exclude<PreviewPresetKey, 'fullOutfit'>;
+
 export const PREVIEW_PRESET_KEYS = [
   'fullOutfit',
   'hat',

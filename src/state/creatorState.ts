@@ -4,7 +4,7 @@
  * Panels receive context objects that read from this state.
  */
 
-import type { DrawingTool } from '../creator/api';
+import type { DrawingTool } from '../domain/tools';
 import type { PaintBrushSize } from '../config/paintBrushTool';
 import { PAINT_BRUSH_TOOL_CONFIG } from '../config/paintBrushTool';
 import { LAYER_KEYS } from '../skin';

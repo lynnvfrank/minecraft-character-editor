@@ -4,20 +4,20 @@
  */
 
 import { publish, subscribe, CREATOR_EVENTS } from '../events/appEvents';
-import { createEl } from '../creator/dom';
-import { createIcon, type IconName } from '../creator/icons';
+import { createEl } from './dom';
+import { createIcon, type IconName } from './icons';
 import {
   LIGHTING_PRESETS,
   LIGHTING_PRESET_ORDER,
   getLightingPreset,
   setLightingPreset,
-} from './scene';
+} from '../viewer/scene';
 
 const BUTTONS: Array<{
   id: string;
   label: string;
   title: string;
-  event: string;
+  event: (typeof CREATOR_EVENTS)[keyof typeof CREATOR_EVENTS];
   icon: IconName;
   detail?: { degrees?: number };
 }> = [

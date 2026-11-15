@@ -41,6 +41,7 @@ export {
   type LayerKey,
   type UVPartKey,
   type WardrobeCompositeKey,
+  type WardrobeLayerKey,
   type WardrobePartKey,
 } from './layout';
 

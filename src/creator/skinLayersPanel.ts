@@ -8,7 +8,7 @@ import {
 } from '../state/creatorSlices';
 import type { SkinLayersContext, PartSide } from './api';
 import { createIcon } from './icons';
-import { creatorScope } from './lifecycle';
+import type { DisposableScope } from './lifecycle';
 
 /** Matches `LAYER_GROUPS` pairs in `creator.ts` — sleeves/arms and pants/legs share a Left/Right limb grid (no per-layer name rows). */
 function isLimbPairGroup(group: readonly string[]): boolean {
@@ -31,7 +31,7 @@ function limbPartButtonLabel(layerKey: string): string {
   }
 }
 
-export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
+export function buildSkinLayersPanel(ctx: SkinLayersContext, scope: DisposableScope): void {
   const upperLeftPanels = document.getElementById('creator-upper-left-panels');
   if (!upperLeftPanels) return;
 
@@ -419,7 +419,7 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
   updateLayerButtonUI(panel);
 
   const LOCK_FEEDBACK_DURATION_MS = 400;
-  creatorScope.track(creatorTexturePositionSlice.subscribe((detail: CreatorTexturePositionDetail) => {
+  scope.track(creatorTexturePositionSlice.subscribe((detail: CreatorTexturePositionDetail) => {
     if (document.body.dataset.route !== 'creator') return;
     const layer = detail.layer ?? null;
     const layersPanel = document.getElementById('creator-layers-panel');
@@ -444,15 +444,15 @@ export function buildSkinLayersPanel(ctx: SkinLayersContext): void {
     updateLayerButtonUI(panel);
   };
 
-  creatorScope.track(creatorLayerSlice.subscribe(syncLayersPanelFromState));
+  scope.track(creatorLayerSlice.subscribe(syncLayersPanelFromState));
   // Defer so focusedCreationController can apply wardrobe→3D/2D solo first (same notify tick).
-  creatorScope.track(creatorModeSlice.subscribe(() => {
+  scope.track(creatorModeSlice.subscribe(() => {
     queueMicrotask(() => {
       syncLayersPanelFromState();
     });
   }));
-  creatorScope.track(creatorFocusedCreationSlice.subscribe(syncLayersPanelFromState));
-  creatorScope.track(creatorLockFeedbackSlice.subscribe((detail: CreatorLockFeedbackDetail) => {
+  scope.track(creatorFocusedCreationSlice.subscribe(syncLayersPanelFromState));
+  scope.track(creatorLockFeedbackSlice.subscribe((detail: CreatorLockFeedbackDetail) => {
     if (document.body.dataset.route !== 'creator') return;
     const layer = detail.layer;
     if (!layer) return;

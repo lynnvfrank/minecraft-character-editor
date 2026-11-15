@@ -79,10 +79,10 @@ export function createCharacterEventsController(deps: CharacterEventsDeps): {
 
   function setupCharacterEventSubscribers() {
     subscribe(APP_EVENTS['app:character:skin-change'], (e) =>
-      handleCharacterSkinChange(e as CustomEvent<{ characterId?: string; path: string }>)
+      handleCharacterSkinChange(e)
     );
     subscribe(APP_EVENTS['app:character:animation-play'], (e) =>
-      handleCharacterAnimationPlay(e as CustomEvent<{ characterId?: string; name: string }>)
+      handleCharacterAnimationPlay(e)
     );
   }
 

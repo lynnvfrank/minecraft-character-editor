@@ -13,6 +13,15 @@ import {
   WALK_CYCLE_DISTANCE
 } from '../lib/trapezoidBounds';
 import { DEFAULT_CHARACTER_ID } from '../domain';
+import {
+  WANDER_EMOTES,
+  WAYPOINT_RELATIVE,
+  lerpAngleRad,
+  pickWanderWaypoint,
+  smoothstep,
+  waypointToWorld,
+  wrapAngle,
+} from './wander';
 
 /** Minimal character state required for animation manager (main's CharacterState extends this) */
 export type CharacterStateLike = {
@@ -70,33 +79,11 @@ function getBonesCharacterYawDeg(model: THREE.Group): number | null {
   return (euler.y * 180) / Math.PI;
 }
 
-/** Small emotes for idle wanderer — quick, non-disruptive */
-const WANDER_EMOTES = [
-  'acknowledging',
-  'bashful',
-  'blow-akiss',
-  'bored',
-  'shrugging',
-  'yawn',
-  'happy',
-  'happy-idle'
-];
-
 /** All FBX clips are 30 fps. Frame-aligned walk transitions (Approach 2). */
 const FPS = 30;
 const START_WALKING_FRAMES = 16;   // frames 1–16: acceleration phase
 const WALKING_START_FRAME = 7;     // walking starts at frame 7 (aligns with start-walking)
 const STOP_WALKING_FRAMES = 7;    // stop-walking length; frame 1 matches walking frame 1
-
-/** Relative waypoints: [depth in walk-units, lateral fraction -1..1]. Converted to world via bounds. */
-const WAYPOINT_RELATIVE: [number, number][] = [
-  [0, 0],
-  [-1.5, 0.4],
-  [-1.5, -0.4],
-  [-2.5, 0],
-  [-0.5, 0.5],
-  [-0.5, -0.5]
-];
 
 export function createAnimationManager(deps: AnimationManagerDeps) {
   // getTurnStrategy is accepted for compatibility but no longer used: facing is driven by
@@ -161,22 +148,6 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   const TURN_SETTLE_SEC = 0.6;
   /** How quickly facing steers toward the walk direction (higher = snappier). */
   const WALK_STEER_RATE = 8;
-
-  function wrapAngle(a: number): number {
-    a = (a + Math.PI) % (2 * Math.PI);
-    if (a < 0) a += 2 * Math.PI;
-    return a - Math.PI;
-  }
-
-  /** Lerp angle taking shortest path (avoids 270° swing on large turns) */
-  function lerpAngleRad(from: number, to: number, t: number): number {
-    return wrapAngle(from + wrapAngle(to - from) * t);
-  }
-
-  function smoothstep(t: number): number {
-    const c = Math.min(Math.max(t, 0), 1);
-    return c * c * (3 - 2 * c);
-  }
 
   /** Cached root-rotation interpolants per clip. */
   const rootInterpolants = new WeakMap<THREE.AnimationClip, THREE.Interpolant | null>();
@@ -248,18 +219,6 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
   function getBounds(): ReturnType<typeof getTrapezoidBounds> | null {
     const cam = getCamera();
     return getTrapezoidBounds(cam, CHAR_START_X, CHAR_START_Z, WALK_CYCLE_DISTANCE);
-  }
-
-  /** Convert relative waypoint to world position, clamped to trapezoid */
-  function waypointToWorld(rel: [number, number], bounds: ReturnType<typeof getTrapezoidBounds>): THREE.Vector3 {
-    const [depthRel, lateralFrac] = rel;
-    const depth = depthRel * WALK_CYCLE_DISTANCE;
-    const depthClamped = THREE.MathUtils.clamp(depth, bounds.depthAway, bounds.depthToward);
-    const halfWidth = bounds.getHalfWidthAtDepth(depthClamped);
-    const lateral = lateralFrac * halfWidth;
-    const x = bounds.startX + depthClamped * bounds.depthDirX + lateral * bounds.perpDirX;
-    const z = bounds.startZ + depthClamped * bounds.depthDirZ + lateral * bounds.perpDirZ;
-    return new THREE.Vector3(x, 0, z);
   }
 
   /** Check if a sequence is currently playing */
@@ -550,39 +509,21 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     runNextStep(sequenceGeneration);
   }
 
-  /** Only pick waypoints within 90° of current facing. Waypoints are inside the trapezoid bounds. */
-  function pickWanderWaypoint(): THREE.Vector3 {
-    const char = getCharacter(CHAR_ID);
+  /** Next wander target: smallest turn from current facing, preferring within 90° (see wander.ts). */
+  function pickWanderTarget(): THREE.Vector3 {
     const bounds = getBounds();
-    const currentFacing = getFacing();
-    const pos = char?.container.position ?? { x: 0, z: 0 };
-
     if (!bounds) return new THREE.Vector3(0, 0, 0);
-
-    const waypoints = WAYPOINT_RELATIVE.map((rel) => waypointToWorld(rel, bounds));
-    const withAngles = waypoints.map((wp) => {
-      const dx = wp.x - pos.x;
-      const dz = wp.z - pos.z;
-      if (dx === 0 && dz === 0) return { wp, angle: 0 };
-      const targetFacing = Math.atan2(dx, dz);
-      let diff = targetFacing - currentFacing;
-      while (diff > Math.PI) diff -= 2 * Math.PI;
-      while (diff < -Math.PI) diff += 2 * Math.PI;
-      return { wp, angle: Math.abs(diff) };
-    }).filter(({ wp }) => wp.x !== pos.x || wp.z !== pos.z);
-
-    const within90 = withAngles.filter(({ angle }) => angle <= Math.PI / 2);
-    const pool = within90.length > 0 ? within90 : withAngles;
-    if (pool.length === 0) return waypoints[0].clone();
-    const byAngle = [...pool].sort((a, b) => a.angle - b.angle);
-    return byAngle[0].wp.clone();
+    const pos = getCharacter(CHAR_ID)?.container.position ?? { x: 0, z: 0 };
+    const waypoints = WAYPOINT_RELATIVE.map((rel) => waypointToWorld(rel, bounds, WALK_CYCLE_DISTANCE));
+    const { x, z } = pickWanderWaypoint(waypoints, pos, getFacing());
+    return new THREE.Vector3(x, 0, z);
   }
 
   function doOneWanderStep(): void {
     const char = getCharacter(CHAR_ID);
     if (!char || !idleWanderEnabled || isPlaying) return;
 
-    const target = pickWanderWaypoint();
+    const target = pickWanderTarget();
     const emote =
       WANDER_EMOTES[Math.floor(Math.random() * WANDER_EMOTES.length)];
 

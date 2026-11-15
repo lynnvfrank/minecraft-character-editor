@@ -5,7 +5,7 @@
  */
 
 import { createEl } from './dom';
-import { creatorScope } from './lifecycle';
+import type { DisposableScope } from './lifecycle';
 import { MODE_PANEL_CONFIGS } from './modePanels';
 import type { ArmModel, ArmModelSetting } from '../skin/armModel';
 
@@ -30,7 +30,7 @@ const TITLES: Record<ArmModelSetting, string> = {
   classic: 'Classic arms (4px, "Steve")',
 };
 
-export function buildArmModelPanel(): void {
+export function buildArmModelPanel(scope: DisposableScope): void {
   const ctx = registered;
   const host = document.getElementById('creator-upper-left-panels');
   document.getElementById('creator-arm-model-panel')?.remove();
@@ -73,7 +73,7 @@ export function buildArmModelPanel(): void {
       sync();
     });
   }
-  creatorScope.track(ctx.subscribe(sync));
+  scope.track(ctx.subscribe(sync));
   sync();
 
   // Sit under whichever main panel is showing: Layers (3D/2D) or Wardrobe. They never

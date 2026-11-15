@@ -35,6 +35,6 @@ export const creatorFocusedCreationSlice = createPayloadSubscribable<{ enabled: 
 
 /** Wardrobe hover-preview state (tree/library hover layer + source). */
 export const creatorWardrobeHoverPreviewSlice = createPayloadSubscribable<{
-  layer: import('../creator/wardrobeLayers').WardrobeLayerKey | null;
+  layer: import('../skin').WardrobeLayerKey | null;
   source: 'layerPanel' | 'selectorPanel' | null;
 }>();

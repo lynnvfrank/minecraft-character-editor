@@ -8,16 +8,23 @@ import {
   SKIN_LAYER_BOUNDS,
   SKIN_DEAD_ZONES,
   LAYER_KEYS,
-  isLayerKey,
   isLayerWithParts,
   RESOLUTION_MULTIPLIER,
   snapWorkingToSkinCellCenter,
-  type LayerKey,
 } from '../skin';
 import { rgbToHex } from '../lib/color';
 import * as brush from './brush';
 import { paintBrushStampAt } from './paintBrushStamp';
 import { buildAfterPixelsForStroke } from './undo';
+import {
+  canPaintAtSkinPixel,
+  computeVisibleSkinRegions,
+  focusedCrop,
+  getTemplateLabelText,
+  isFullSkinVisible,
+  lockedLayerAtSkinPixel,
+  type VisibleSkinRegion,
+} from './paintMask';
 import type { CreatorState } from '../state/creatorState';
 import {
   creator2dPaintSlice,
@@ -86,26 +93,6 @@ function clamp01(v: number): number {
   return v;
 }
 
-function getTemplateLabelText(layerKey: string, bounds: { x: number; y: number; w: number; h: number }): string {
-  if (layerKey === 'arms') {
-    if (bounds.x === 40 && bounds.y === 16) return 'Right Arm';
-    if (bounds.x === 32 && bounds.y === 48) return 'Left Arm';
-  }
-  if (layerKey === 'sleeves') {
-    if (bounds.x === 40 && bounds.y === 32) return 'Right Sleeve';
-    if (bounds.x === 48 && bounds.y === 48) return 'Left Sleeve';
-  }
-  if (layerKey === 'pants') {
-    if (bounds.x === 0 && bounds.y === 32) return 'Right Pants';
-    if (bounds.x === 0 && bounds.y === 48) return 'Left Pants';
-  }
-  if (layerKey === 'legs') {
-    if (bounds.x === 0 && bounds.y === 16) return 'Right Leg';
-    if (bounds.x === 16 && bounds.y === 48) return 'Left Leg';
-  }
-  return layerKey.charAt(0).toUpperCase() + layerKey.slice(1);
-}
-
 function scheduleTemplateAnimationFrame(): void {
   if (templateAnimationFrameHandle != null) return;
   templateAnimationFrameHandle = window.requestAnimationFrame(() => {
@@ -163,16 +150,6 @@ type BlockyGridLayout = {
   skinMinY: number;
   skinCols: number;
   skinRows: number;
-};
-
-/** One visible skin rectangle (one part box), in 64×64 skin pixel space. */
-type VisibleSkinRegion = {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  layerKey: LayerKey;
-  partIndex: number;
 };
 
 /** Focused multi layout: each region’s position in texel packing space (gapTex between adjacent parts). */
@@ -246,47 +223,10 @@ function getBlockyGridPaddingInInner(grid: HTMLElement | null): { padX: number; 
   };
 }
 
-function isFullSkinLayerVisibilityForBlocky(state: CreatorState): boolean {
-  return LAYER_KEYS.every((k) => {
-    if (state.layer3DVisible[k] !== true) return false;
-    if (!isLayerWithParts(k)) return true;
-    const p = state.layer3DPartVisible[k];
-    return p?.L !== false && p?.R !== false;
-  });
-}
-
 /** Crop/zoom blocky cells to visible skin regions in 2D whenever any layer/part is hidden (not tied to camera Focused Creation). */
 function shouldUseFocusedBlockyLayout(ctx: BlockyEditorContext): boolean {
   if (ctx.state.editMode !== '2d') return false;
-  return !isFullSkinLayerVisibilityForBlocky(ctx.state);
-}
-
-/** One entry per visible part rectangle (never merged). Used to lay disjoint regions side-by-side in focused 2D. */
-function computeVisibleSkinRegions(state: CreatorState): VisibleSkinRegion[] {
-  const out: VisibleSkinRegion[] = [];
-  for (const layer of LAYER_KEYS) {
-    if (state.layer3DVisible[layer] !== true) continue;
-    const bounds = SKIN_LAYER_BOUNDS[layer];
-    const parts = state.layer3DPartVisible[layer];
-    for (let i = 0; i < bounds.length; i++) {
-      const partVisible = isLayerWithParts(layer)
-        ? i === 0
-          ? parts?.R !== false
-          : parts?.L !== false
-        : true;
-      if (!partVisible) continue;
-      const b = bounds[i]!;
-      out.push({
-        x: b.x,
-        y: b.y,
-        w: b.w,
-        h: b.h,
-        layerKey: layer,
-        partIndex: i,
-      });
-    }
-  }
-  return out;
+  return !isFullSkinVisible(ctx.state);
 }
 
 function parseVisibleRegionsJson(grid: HTMLElement | null): PackedVisibleSkinRegion[] {
@@ -299,55 +239,21 @@ function parseVisibleRegionsJson(grid: HTMLElement | null): PackedVisibleSkinReg
   }
 }
 
-function getLayerAtCoords(ctx: BlockyEditorContext, workingX: number, workingY: number): string | null {
-  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
-  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
-  for (const layer of LAYER_KEYS) {
-    if (ctx.state.layer3DVisible[layer] !== true) continue;
-    const bounds = SKIN_LAYER_BOUNDS[layer];
-    const parts = ctx.state.layer3DPartVisible[layer];
-    for (let i = 0; i < bounds.length; i++) {
-      const b = bounds[i]!;
-      if (isLayerWithParts(layer)) {
-        const sideOk = i === 0 ? parts?.R !== false : parts?.L !== false;
-        if (!sideOk) continue;
-      }
-      if (normX >= b.x && normX < b.x + b.w && normY >= b.y && normY < b.y + b.h) return layer;
-    }
-  }
-  return null;
-}
-
-function isInSelectedLayer(ctx: BlockyEditorContext, workingX: number, workingY: number): boolean {
-  if (!ctx.state.restrictToLayers) return true;
-  if (ctx.state.selectedLayers.size === 0) return true;
-  const normX = Math.floor(workingX / RESOLUTION_MULTIPLIER);
-  const normY = Math.floor(workingY / RESOLUTION_MULTIPLIER);
-  const pointInBounds = (x: number, y: number, b: { x: number; y: number; w: number; h: number }) =>
-    x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
-  for (const layer of ctx.state.selectedLayers) {
-    if (!isLayerKey(layer)) continue;
-    const bounds = SKIN_LAYER_BOUNDS[layer];
-    if (!bounds) continue;
-    for (const b of bounds) {
-      if (pointInBounds(normX, normY, b)) return true;
-    }
-  }
-  return false;
-}
+/** Working-canvas coords → 64×64 skin pixel. */
+const toSkinPixel = (workingX: number, workingY: number) => ({
+  x: Math.floor(workingX / RESOLUTION_MULTIPLIER),
+  y: Math.floor(workingY / RESOLUTION_MULTIPLIER),
+});
 
 function canPaintAt(ctx: BlockyEditorContext, workingX: number, workingY: number): boolean {
-  if (!isInSelectedLayer(ctx, workingX, workingY)) return false;
-  const layer = getLayerAtCoords(ctx, workingX, workingY);
-  return layer != null && !ctx.state.layer3DLocked[layer];
+  const { x, y } = toSkinPixel(workingX, workingY);
+  return canPaintAtSkinPixel(ctx.state, x, y);
 }
 
 function triggerLockFeedbackIfNeeded(ctx: BlockyEditorContext, workingX: number, workingY: number): void {
-  if (!isInSelectedLayer(ctx, workingX, workingY)) return;
-  const layer = getLayerAtCoords(ctx, workingX, workingY);
-  if (layer != null && ctx.state.layer3DLocked[layer]) {
-    creatorLockFeedbackSlice.notify({ layer });
-  }
+  const { x, y } = toSkinPixel(workingX, workingY);
+  const layer = lockedLayerAtSkinPixel(ctx.state, x, y);
+  if (layer != null) creatorLockFeedbackSlice.notify({ layer });
 }
 
 function clearFocusedGridDataset(grid: HTMLElement): void {
@@ -377,28 +283,15 @@ export function rebuildBlockyGrid(ctx: BlockyEditorContext): void {
 
   if (shouldUseFocusedBlockyLayout(ctx)) {
     visibleRegions = computeVisibleSkinRegions(ctx.state);
-    if (visibleRegions.length > 0) {
-      // Crop to the bounding box of all visible parts, keeping each part at its real skin
-      // position so cells stay aligned with the (skin-coordinate) rulers.
-      let minX = SKIN_SIZE;
-      let minY = SKIN_SIZE;
-      let maxX = 0;
-      let maxY = 0;
-      for (const r of visibleRegions) {
-        minX = Math.min(minX, r.x);
-        minY = Math.min(minY, r.y);
-        maxX = Math.max(maxX, r.x + r.w);
-        maxY = Math.max(maxY, r.y + r.h);
-      }
-      const w = maxX - minX;
-      const h = maxY - minY;
-      if (w > 0 && h > 0 && (w < SKIN_SIZE || h < SKIN_SIZE)) {
-        skinMinX = minX;
-        skinMinY = minY;
-        cols = w;
-        rows = h;
-        layoutMode = 'focused';
-      }
+    // Crop to the bounding box of all visible parts, keeping each part at its real skin
+    // position so cells stay aligned with the (skin-coordinate) rulers.
+    const crop = focusedCrop(visibleRegions);
+    if (crop) {
+      skinMinX = crop.x;
+      skinMinY = crop.y;
+      cols = crop.w;
+      rows = crop.h;
+      layoutMode = 'focused';
     }
   }
   const isVisibleCell = (sx: number, sy: number): boolean =>

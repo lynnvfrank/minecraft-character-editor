@@ -183,6 +183,8 @@ export const WARDROBE_COMPOSITE_KEYS = [
   'all',
 ] as const;
 export type WardrobeCompositeKey = (typeof WARDROBE_COMPOSITE_KEYS)[number];
+/** A row in the wardrobe tree: the whole outfit, one skin layer, or a composite group. */
+export type WardrobeLayerKey = 'fullOutfit' | LayerKey | WardrobeCompositeKey;
 
 /**
  * All wardrobe part keys (atomic + composite) for generation scripts.

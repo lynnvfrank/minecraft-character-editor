@@ -1,5 +1,5 @@
 import { createEl } from '../creator/dom';
-import { PREVIEW_PRESET_KEYS, getPreviewPresetLabel, type PreviewPresetKey } from '../viewer';
+import { PREVIEW_PRESET_KEYS, getPreviewPresetLabel, type PreviewPresetKey } from '../viewer/previewPresets';
 
 type VectorLike = {
   x: number;
