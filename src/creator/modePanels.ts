@@ -32,6 +32,48 @@ export const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
 /** Must match mode panel exit duration in `_animations.scss` (`$creator-mode-panel-enter-duration`). */
 export const MODE_TRANSITION_MS = 360;
 
+/** Panels that change size when shown, so the 3D view needs a resize afterwards. */
+const RESIZE_ON_SHOW_IDS = new Set(['creator-3d-preview-slot', 'creator-right-panels-group', 'creator-upper-right-panels-root']);
+
+export type ModePanelPlan = {
+  /** Visible before and not after: animate out, then hide. */
+  hide: ModePanelConfig[];
+  /** Hidden before and visible after: show (animated in after the hides finish). */
+  show: ModePanelConfig[];
+  /** Visible in both modes: stays shown. */
+  keep: ModePanelConfig[];
+  /** Hidden in both modes. */
+  stayHidden: ModePanelConfig[];
+  /** Wait this long before showing, so outgoing panels finish animating first. */
+  enterDelayMs: number;
+  /** A newly shown panel changes the 3D view's size. */
+  needsResize: boolean;
+};
+
+/**
+ * Which panels hide, show or stay when switching `from` → `to`. With `from` null (first render)
+ * every panel is placed immediately: visible ones go in `keep`, nothing animates.
+ */
+export function planModePanelTransition(
+  configs: readonly ModePanelConfig[],
+  from: EditMode | null,
+  to: EditMode
+): ModePanelPlan {
+  const plan: ModePanelPlan = { hide: [], show: [], keep: [], stayHidden: [], enterDelayMs: 0, needsResize: false };
+  for (const cfg of configs) {
+    const inTo = cfg.modes.includes(to);
+    const inFrom = from == null || from === to ? inTo : cfg.modes.includes(from);
+    if (inFrom && inTo) plan.keep.push(cfg);
+    else if (inFrom) plan.hide.push(cfg);
+    else if (inTo) plan.show.push(cfg);
+    else plan.stayHidden.push(cfg);
+  }
+  plan.enterDelayMs = plan.hide.length > 0 ? MODE_TRANSITION_MS : 0;
+  const shown = from == null || from === to ? plan.keep : plan.show;
+  plan.needsResize = shown.some((cfg) => RESIZE_ON_SHOW_IDS.has(cfg.id));
+  return plan;
+}
+
 function getAnimClass(prefix: 'in' | 'out', dir: PanelDirection): string {
   return `creator-mode-anim-${prefix}-${dir}`;
 }
@@ -99,18 +141,14 @@ export function createModePanelTransitions(): ModePanelTransitions {
   function applyModePanelsImmediate(mode: EditMode): void {
     modeTransitionToken += 1;
     mountPreviewSlotForMode();
-    let needsResizeAfterShow = false;
+    const plan = planModePanelTransition(MODE_PANEL_CONFIGS, null, mode);
     for (const cfg of MODE_PANEL_CONFIGS) {
       const el = document.getElementById(cfg.id) as HTMLElement | null;
       if (!el) continue;
       clearModeAnimClasses(el);
-      const isVisibleInMode = cfg.modes.includes(mode);
-      setModePanelHidden(el, !isVisibleInMode);
-      if (isVisibleInMode && (cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group' || cfg.id === 'creator-upper-right-panels-root')) {
-        needsResizeAfterShow = true;
-      }
+      setModePanelHidden(el, !cfg.modes.includes(mode));
     }
-    if (needsResizeAfterShow) {
+    if (plan.needsResize) {
       requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     }
     modePanelsCurrentMode = mode;
@@ -127,44 +165,38 @@ export function createModePanelTransitions(): ModePanelTransitions {
       return;
     }
 
-    const fromMode = modePanelsCurrentMode;
+    const plan = planModePanelTransition(MODE_PANEL_CONFIGS, modePanelsCurrentMode, targetMode);
     const token = ++modeTransitionToken;
-    const hideNow: Array<{ el: HTMLElement; cfg: ModePanelConfig }> = [];
-    const showLater: Array<{ el: HTMLElement; cfg: ModePanelConfig }> = [];
+    const withEl = (cfgs: ModePanelConfig[]) =>
+      cfgs.flatMap((cfg) => {
+        const el = document.getElementById(cfg.id) as HTMLElement | null;
+        return el ? [{ el, cfg }] : [];
+      });
 
-    for (const cfg of MODE_PANEL_CONFIGS) {
-      const el = document.getElementById(cfg.id) as HTMLElement | null;
-      if (!el) continue;
-      const inFrom = cfg.modes.includes(fromMode);
-      const inTarget = cfg.modes.includes(targetMode);
-      if (inFrom && !inTarget) hideNow.push({ el, cfg });
-      else if (!inFrom && inTarget) showLater.push({ el, cfg });
-      else if (inFrom && inTarget) {
-        clearModeAnimClasses(el);
-        setModePanelHidden(el, false);
-      } else {
-        clearModeAnimClasses(el);
-        setModePanelHidden(el, true);
-      }
+    for (const { el } of withEl(plan.keep)) {
+      clearModeAnimClasses(el);
+      setModePanelHidden(el, false);
     }
-
+    for (const { el } of withEl(plan.stayHidden)) {
+      clearModeAnimClasses(el);
+      setModePanelHidden(el, true);
+    }
+    const hideNow = withEl(plan.hide);
+    const showLater = withEl(plan.show);
     hideNow.forEach(({ el, cfg }) => animateModePanelOut(el, cfg.exitTo));
 
-    const enterDelayMs = hideNow.length > 0 ? MODE_TRANSITION_MS : 0;
     window.setTimeout(() => {
       if (token !== modeTransitionToken) return;
       hideNow.forEach(({ el }) => {
         clearModeAnimClasses(el);
         setModePanelHidden(el, true);
       });
-      showLater.forEach(({ el, cfg }) => {
-        animateModePanelIn(el, cfg.enterFrom);
-      });
-      if (showLater.some(({ cfg }) => cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group' || cfg.id === 'creator-upper-right-panels-root')) {
+      showLater.forEach(({ el, cfg }) => animateModePanelIn(el, cfg.enterFrom));
+      if (plan.needsResize) {
         requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
       }
       modePanelsCurrentMode = targetMode;
-    }, enterDelayMs);
+    }, hideNow.length > 0 ? plan.enterDelayMs : 0);
   }
 
   function bindModePanelTransitions(getEditMode: () => EditMode): void {
