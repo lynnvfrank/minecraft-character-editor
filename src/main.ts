@@ -69,7 +69,6 @@ import {
   createPreviewRouteController,
   type PreviewRouteInfo,
   type PreviewRouteStateInput,
-  type PreviewRoutePartKey,
 } from './controllers/previewRoute';
 import { createCreatorTransitionHandler } from './controllers/transitions/creatorTransitionHandler';
 import { createViewerUIController } from './controllers/viewerUI';
@@ -98,14 +97,7 @@ import { registerArmModelPanelContext } from './creator/armModelPanel';
 import { createSubscribable } from './lib/subscribable';
 import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
-import {
-  SKIN_LAYER_BOUNDS,
-  LAYER_KEYS,
-  TEXTURE_LAYER_KEYS,
-  isLayerWithParts,
-  getPartBounds,
-  type LayerKey,
-} from './skin';
+import { LAYER_KEYS } from './skin';
 import {
   ensurePreviewCameraPanel,
   removePreviewCameraPanel,
@@ -113,6 +105,7 @@ import {
   initElectronStatus,
 } from './ui';
 import { linearToSrgb } from './viewer/captureHelpers';
+import { createSkinCompositor, buildLayerVisibleState, loadCachedImage } from './viewer/skinCompositor';
 import { registerCapture3DThumbnail, registerCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
 import {
   initScene as initViewerScene,
@@ -524,13 +517,9 @@ let creatorPreviewDirty = false;
 let lastRouteForPreview = '';
 /** Path last loaded into creator (from gallery or route enter). Used to know when to reload from char.currentSkin (user picked different skin in home). */
 let lastCreatorLoadedPath: string | null = null;
-let creatorOverlayCanvas: HTMLCanvasElement | null = null;
-let creatorOverlayTexture: THREE.CanvasTexture | null = null;
-let previewRouteCanvas: HTMLCanvasElement | null = null;
-let previewRouteTexture: THREE.CanvasTexture | null = null;
 let lastAppliedPreviewSignature: string | null = null;
 let previewRouteSyncToken = 0;
-const previewImageCache = new Map<string, Promise<HTMLImageElement>>();
+const skinCompositor = createSkinCompositor();
 let activePreviewCameraPreset: PreviewPresetKey | null = null;
 let lastPreviewCameraPanelSignature = '';
 const focusAutoDisableBoundControls = new WeakSet<object>();
@@ -631,163 +620,9 @@ function removePreviewPanelsContainer(): void {
 // Preview route: skin composition, camera, capture
 // -----------------------------------------------------------------------------
 
-function buildLayerVisibleState(visibleLayers: readonly LayerKey[]): Record<string, boolean> {
-  const visibleSet = new Set<string>(visibleLayers);
-  return Object.fromEntries(LAYER_KEYS.map((layer) => [layer, visibleSet.has(layer)]));
-}
-
-function loadPreviewImage(path: string): Promise<HTMLImageElement> {
-  const cached = previewImageCache.get(path);
-  if (cached) return cached;
-  const pending = new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load preview image: ${path}`));
-    img.src = path;
-  });
-  previewImageCache.set(path, pending);
-  return pending;
-}
-
-function getImageSourceSize(source: HTMLCanvasElement | HTMLImageElement): number {
-  if (source instanceof HTMLCanvasElement) return source.width;
-  return source.naturalWidth || source.width || 64;
-}
-
-function buildLayerMaskedCanvas(
-  source: HTMLCanvasElement | HTMLImageElement,
-  layerVisible: Record<string, boolean>,
-  layerPartVisible: Record<string, { L?: boolean; R?: boolean }>,
-  workSize: number
-): HTMLCanvasElement | null {
-  const sourceSize = getImageSourceSize(source);
-  if (!sourceSize) return null;
-  const scale = workSize / 64;
-
-  if (!creatorOverlayCanvas || creatorOverlayCanvas.width !== workSize || creatorOverlayCanvas.height !== workSize) {
-    creatorOverlayCanvas = document.createElement('canvas');
-    creatorOverlayCanvas.width = workSize;
-    creatorOverlayCanvas.height = workSize;
-  }
-  const ctx = creatorOverlayCanvas.getContext('2d');
-  if (!ctx) return null;
-
-  ctx.clearRect(0, 0, workSize, workSize);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(source, 0, 0, sourceSize, sourceSize, 0, 0, workSize, workSize);
-  const imageData = ctx.getImageData(0, 0, workSize, workSize);
-  const data = imageData.data;
-
-  for (const layerKey of TEXTURE_LAYER_KEYS) {
-    const bounds = SKIN_LAYER_BOUNDS[layerKey];
-    if (!bounds) continue;
-    const layerHidden = layerVisible[layerKey] === false;
-    const parts = layerPartVisible[layerKey];
-    for (let i = 0; i < bounds.length; i++) {
-      const b = bounds[i]!;
-      const side: 'L' | 'R' = i === 0 ? 'R' : 'L';
-      const partHidden = isLayerWithParts(layerKey)
-        ? (side === 'R' ? parts?.R === false : parts?.L === false)
-        : false;
-      const shouldMask = layerHidden || partHidden;
-      if (!shouldMask) continue;
-      const x0 = Math.floor(b.x * scale);
-      const y0 = Math.floor(b.y * scale);
-      const x1 = Math.min(Math.ceil((b.x + b.w) * scale), workSize);
-      const y1 = Math.min(Math.ceil((b.y + b.h) * scale), workSize);
-      for (let py = y0; py < y1; py++) {
-        for (let px = x0; px < x1; px++) {
-          const idx = (py * workSize + px) * 4;
-          data[idx + 3] = 0;
-        }
-      }
-    }
-  }
-  ctx.putImageData(imageData, 0, 0);
-  return creatorOverlayCanvas;
-}
-
-/** Build visibility texture: copy skin, zero alpha for hidden layer regions. Apply to all meshes. */
-function buildVisibilityTexture(
-  skinCanvas: HTMLCanvasElement,
-  layerVisible: Record<string, boolean>,
-  layerPartVisible: Record<string, { L?: boolean; R?: boolean }>
-): THREE.Texture {
-  const workSize = getCreatorWorkSize();
-  const maskedCanvas = buildLayerMaskedCanvas(skinCanvas, layerVisible, layerPartVisible, workSize);
-  if (!maskedCanvas) return creatorPreviewTexture!;
-
-  if (!creatorOverlayTexture) {
-    creatorOverlayTexture = new THREE.CanvasTexture(maskedCanvas);
-    creatorOverlayTexture.colorSpace = THREE.SRGBColorSpace;
-    creatorOverlayTexture.magFilter = THREE.NearestFilter;
-    creatorOverlayTexture.minFilter = THREE.NearestFilter;
-    creatorOverlayTexture.generateMipmaps = false;
-    creatorOverlayTexture.wrapS = creatorOverlayTexture.wrapT = THREE.ClampToEdgeWrapping;
-    creatorOverlayTexture.flipY = true;
-  }
-  creatorOverlayTexture.source.data = maskedCanvas;
-  creatorOverlayTexture.needsUpdate = true;
-  return creatorOverlayTexture;
-}
-
-function composePreviewSkinCanvas(
-  baseImage: HTMLImageElement | null,
-  skinImage: HTMLImageElement,
-  part: PreviewRoutePartKey | null
-): HTMLCanvasElement {
-  if (!previewRouteCanvas) {
-    previewRouteCanvas = document.createElement('canvas');
-    previewRouteCanvas.width = 64;
-    previewRouteCanvas.height = 64;
-  }
-  const ctx = previewRouteCanvas.getContext('2d');
-  if (!ctx) return previewRouteCanvas;
-
-  ctx.clearRect(0, 0, 64, 64);
-  ctx.imageSmoothingEnabled = false;
-
-  if (baseImage) {
-    const baseSize = baseImage.naturalWidth || baseImage.width || 64;
-    ctx.drawImage(baseImage, 0, 0, baseSize, baseSize, 0, 0, 64, 64);
-  }
-
-  const skinSize = skinImage.naturalWidth || skinImage.width || 64;
-  if (!part) {
-    ctx.clearRect(0, 0, 64, 64);
-    ctx.drawImage(skinImage, 0, 0, skinSize, skinSize, 0, 0, 64, 64);
-    return previewRouteCanvas;
-  }
-
-  const sourceCanvas = document.createElement('canvas');
-  sourceCanvas.width = 64;
-  sourceCanvas.height = 64;
-  const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
-  if (!sourceCtx) return previewRouteCanvas;
-  sourceCtx.imageSmoothingEnabled = false;
-  sourceCtx.drawImage(skinImage, 0, 0, skinSize, skinSize, 0, 0, 64, 64);
-
-  const bounds = getPartBounds(part);
-  bounds.forEach((rect) => {
-    const partImageData = sourceCtx.getImageData(rect.x, rect.y, rect.w, rect.h);
-    ctx.putImageData(partImageData, rect.x, rect.y);
-  });
-  return previewRouteCanvas;
-}
-
 function applyPreviewTextureFromCanvas(char: CharacterState, canvas: HTMLCanvasElement, skinPath: string): void {
-  if (!previewRouteTexture) {
-    previewRouteTexture = new THREE.CanvasTexture(canvas);
-    previewRouteTexture.colorSpace = THREE.SRGBColorSpace;
-    previewRouteTexture.magFilter = THREE.NearestFilter;
-    previewRouteTexture.minFilter = THREE.NearestFilter;
-    previewRouteTexture.generateMipmaps = false;
-    previewRouteTexture.wrapS = previewRouteTexture.wrapT = THREE.ClampToEdgeWrapping;
-    previewRouteTexture.flipY = true;
-  }
-  previewRouteTexture.source.data = canvas;
-  previewRouteTexture.needsUpdate = true;
-  applySkinToModel(char.model, previewRouteTexture, char.texturePreset, char.alphaMode, skinPath);
+  const texture = skinCompositor.getPreviewTexture(canvas);
+  applySkinToModel(char.model, texture, char.texturePreset, char.alphaMode, skinPath);
   char.currentSkin = skinPath;
 }
 
@@ -916,13 +751,13 @@ async function syncPreviewRouteState(): Promise<void> {
     : previewInfo.baseSkinPath;
 
   const [skinImage, baseImage] = await Promise.all([
-    loadPreviewImage(previewInfo.skinPath),
-    baseSkinPath ? loadPreviewImage(baseSkinPath).catch(() => null) : Promise.resolve(null),
+    loadCachedImage(previewInfo.skinPath),
+    baseSkinPath ? loadCachedImage(baseSkinPath).catch(() => null) : Promise.resolve(null),
   ]);
   if (token !== previewRouteSyncToken) return;
 
-  const composedCanvas = composePreviewSkinCanvas(baseImage, skinImage, previewInfo.part);
-  const maskedCanvas = buildLayerMaskedCanvas(composedCanvas, layerVisible, {}, 64) ?? composedCanvas;
+  const composedCanvas = skinCompositor.composePreviewSkinCanvas(baseImage, skinImage, previewInfo.part);
+  const maskedCanvas = skinCompositor.buildLayerMaskedCanvas(composedCanvas, layerVisible, {}, 64) ?? composedCanvas;
   if (token !== previewRouteSyncToken) return;
 
   applyPreviewTextureFromCanvas(char, maskedCanvas, previewInfo.skinPath);
@@ -979,7 +814,7 @@ function updateCreatorPreviewTexture() {
   const layerPartVisible = getLayer3DPartVisible();
   // Always build texture from fresh canvas copy so eraser/paint updates show immediately
   // (direct creatorPreviewTexture can show stale pixels on base layers due to GPU/Three.js caching)
-  const textureToUse = buildVisibilityTexture(canvas, layerVisible, layerPartVisible);
+  const textureToUse = skinCompositor.buildVisibilityTexture(canvas, layerVisible, layerPartVisible, getCreatorWorkSize(), creatorPreviewTexture!);
 
   applySkinToModel(char.model, textureToUse, 'clamped-flip' as TexturePreset, 'transparent' as AlphaMode);
   applyCreatorLayerVisibility(char.model, layerVisible);
@@ -1138,7 +973,7 @@ export async function captureCreator3DPartThumbnail(
   const layerVisible = buildLayerVisibleState(preset.visibleLayers);
   const canvas = getCreatorSkinCanvas();
   const workSize = getCreatorWorkSize();
-  const maskedCanvas = buildLayerMaskedCanvas(canvas, layerVisible, {}, workSize);
+  const maskedCanvas = skinCompositor.buildLayerMaskedCanvas(canvas, layerVisible, {}, workSize);
   if (!maskedCanvas) return null;
 
   creatorPreviewDirty = true;
@@ -1264,7 +1099,7 @@ function detectArmModelFromCanvas(canvas: HTMLCanvasElement): ArmModel | null {
 
 async function detectArmModelFromPath(path: string): Promise<ArmModel | null> {
   try {
-    const img = await loadPreviewImage(path);
+    const img = await loadCachedImage(path);
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth || 64;
     canvas.height = img.naturalHeight || 64;
