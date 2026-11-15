@@ -92,10 +92,10 @@ import {
 import { registerArmModelPanelContext } from './creator/armModelPanel';
 import { createPreviewCameraController } from './controllers/previewCamera';
 import { createPreviewRouteRuntime } from './controllers/previewRouteRuntime';
+import { createCreatorPreviewController } from './controllers/creatorPreview';
 import { createArmModelState } from './state/armModelState';
 import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
-import { LAYER_KEYS } from './skin';
 import {
   initElectronStatus,
 } from './ui';
@@ -118,8 +118,6 @@ import {
   getPreviewPreset,
   type PreviewPresetKey,
   type SceneContext,
-  type TexturePreset,
-  type AlphaMode,
 } from './viewer';
 
 // -----------------------------------------------------------------------------
@@ -493,9 +491,6 @@ function onWindowResize() {
   logger.debug('renderer', 'Resize', { width, height });
 }
 
-let creatorPreviewTexture: THREE.CanvasTexture | null = null;
-let creatorPreviewDirty = false;
-let lastRouteForPreview = '';
 /** Path last loaded into creator (from gallery or route enter). Used to know when to reload from char.currentSkin (user picked different skin in home). */
 let lastCreatorLoadedPath: string | null = null;
 const skinCompositor = createSkinCompositor();
@@ -504,6 +499,15 @@ const previewCamera = createPreviewCameraController({
   defaultFov: DEFAULT_SCENE_FOV,
   showDebugPanel: SHOW_PREVIEW_CAMERA_CONTROLS,
   isPreviewRoute: () => getRoute() === 'preview',
+});
+const creatorPreview = createCreatorPreviewController({
+  compositor: skinCompositor,
+  getPrimaryCharacter: () => getCharacter(getPrimaryCharacterId()),
+  getSkinCanvas: getCreatorSkinCanvas,
+  getLayerVisible: getLayer3DVisible,
+  getLayerPartVisible: getLayer3DPartVisible,
+  getWorkSize: getCreatorWorkSize,
+  onPreviewFrame: () => previewCamera.update(),
 });
 const previewRuntime = createPreviewRouteRuntime({
   routeController: previewRouteController,
@@ -598,32 +602,8 @@ function updateCreator3DViewPlacement() {
   }
 }
 
-function updateCreatorPreviewTexture() {
-  if (getRoute() !== 'creator') return;
-  const canvas = getCreatorSkinCanvas();
-  const char = getCharacter(getPrimaryCharacterId());
-  if (!canvas || !char) return;
-  if (!creatorPreviewTexture) {
-    creatorPreviewTexture = new THREE.CanvasTexture(canvas);
-    creatorPreviewTexture.colorSpace = THREE.SRGBColorSpace;
-    creatorPreviewTexture.magFilter = THREE.NearestFilter;
-    creatorPreviewTexture.minFilter = THREE.NearestFilter;
-    creatorPreviewTexture.generateMipmaps = false;
-    creatorPreviewTexture.wrapS = creatorPreviewTexture.wrapT = THREE.ClampToEdgeWrapping;
-    creatorPreviewTexture.flipY = true;
-  }
-  const layerVisible = getLayer3DVisible();
-  const layerPartVisible = getLayer3DPartVisible();
-  // Always build texture from fresh canvas copy so eraser/paint updates show immediately
-  // (direct creatorPreviewTexture can show stale pixels on base layers due to GPU/Three.js caching)
-  const textureToUse = skinCompositor.buildVisibilityTexture(canvas, layerVisible, layerPartVisible, getCreatorWorkSize(), creatorPreviewTexture!);
-
-  applySkinToModel(char.model, textureToUse, 'clamped-flip' as TexturePreset, 'transparent' as AlphaMode);
-  applyCreatorLayerVisibility(char.model, layerVisible);
-}
-
 function setupCreatorPreviewDirtySubscription(): void {
-  const markDirty = () => { creatorPreviewDirty = true; };
+  const markDirty = creatorPreview.markDirty;
 
   creatorCanvasSlice.subscribe(() => markDirty());
   creatorLayerSlice.subscribe(() => markDirty());
@@ -646,29 +626,6 @@ function setupCreatorPreviewDirtySubscription(): void {
   });
 }
 
-function createOnFrameUpdate() {
-  return (route: 'creator' | 'viewer' | 'preview') => {
-    if (route === 'creator') {
-      if (lastRouteForPreview !== 'creator') creatorPreviewDirty = true;
-      lastRouteForPreview = 'creator';
-      if (creatorPreviewDirty) {
-        updateCreatorPreviewTexture();
-        creatorPreviewDirty = false;
-      }
-    } else if (route === 'preview') {
-      lastRouteForPreview = 'preview';
-      previewCamera.update();
-    } else {
-      lastRouteForPreview = route;
-      const char = getCharacter(getPrimaryCharacterId());
-      if (char) {
-        const allVisible = Object.fromEntries(LAYER_KEYS.map((k) => [k, true]));
-        applyCreatorLayerVisibility(char.model, allVisible);
-      }
-    }
-  };
-}
-
 // -----------------------------------------------------------------------------
 // Exported capture API (used by creator for gallery thumbnails)
 // -----------------------------------------------------------------------------
@@ -683,7 +640,7 @@ export async function captureCreator3DThumbnail(size: number = 128): Promise<str
   const char = getCharacter(getPrimaryCharacterId());
   if (!char || !ctx || !ctx.renderer || !ctx.scene || !ctx.container) return null;
 
-  creatorPreviewDirty = true;
+  creatorPreview.markDirty();
   await nextAnimationFrame();
   await nextAnimationFrame();
 
@@ -778,7 +735,7 @@ export async function captureCreator3DPartThumbnail(
   const maskedCanvas = skinCompositor.buildLayerMaskedCanvas(canvas, layerVisible, {}, workSize);
   if (!maskedCanvas) return null;
 
-  creatorPreviewDirty = true;
+  creatorPreview.markDirty();
   await nextAnimationFrame();
   await nextAnimationFrame();
 
@@ -863,7 +820,7 @@ export async function captureCreator3DPartThumbnail(
   }
   canvasCtx.putImageData(imgData, 0, 0);
 
-  creatorPreviewDirty = true;
+  creatorPreview.markDirty();
   return outCanvas.toDataURL('image/png');
 }
 
@@ -884,7 +841,7 @@ function applyArmModelToCharacter(): void {
   const path = ARM_MODEL_PATHS[armModelState.getResolved()];
   if (char.modelPath === path) return;
   void characterController.setModel(char.id, path).then(() => {
-    creatorPreviewDirty = true;
+    creatorPreview.markDirty();
     previewRuntime.invalidate();
   });
 }
@@ -1125,7 +1082,7 @@ async function main(): Promise<void> {
       getPrimaryCharacterId,
       animationManager,
       characterAI: null,
-      onFrameUpdate: createOnFrameUpdate(),
+      onFrameUpdate: creatorPreview.onFrame,
     });
     setupTestControls({
       animationManager,
@@ -1155,7 +1112,7 @@ async function main(): Promise<void> {
       getPrimaryCharacterId,
       animationManager,
       characterAI,
-      onFrameUpdate: createOnFrameUpdate(),
+      onFrameUpdate: creatorPreview.onFrame,
     });
     setFacingLogContextProvider(() => ({
       state: characterAI?.getState(),
