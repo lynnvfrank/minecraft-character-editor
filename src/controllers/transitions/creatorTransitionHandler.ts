@@ -46,6 +46,8 @@ export function createCreatorTransitionHandler(deps: CreatorTransitionHandlerDep
     setInFlight(true);
     const transitionStart = performance.now();
     deps.logTransition('design-clicked');
+    // Home-only panels (Move) slide out while the camera heads into the creator.
+    document.body.dataset.homeExiting = '1';
     try {
       const char = deps.getCharacter(getPrimaryCharacterId());
       if (char) {
@@ -70,6 +72,7 @@ export function createCreatorTransitionHandler(deps: CreatorTransitionHandlerDep
       deps.logTransition('camera-move-end', { elapsedMs: Math.round(performance.now() - transitionStart) });
       location.hash = deps.getCreatorHash(deps.getEditMode());
     } finally {
+      document.body.removeAttribute('data-home-exiting');
       setInFlight(false);
     }
   }

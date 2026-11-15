@@ -79,7 +79,7 @@ export function createMovePanel(deps: MovePanelDeps) {
   root.classList.toggle('collapsed', readCollapsed());
 
   // Collapsed pill / header toggle
-  const toggle = button('move-panel-toggle', '<span class="move-panel-toggle-icon" aria-hidden="true">🕹️</span><span class="move-panel-title">Move</span>', 'Show or hide the Move panel');
+  const toggle = button('move-panel-toggle', '<span class="move-panel-title">Move</span><span class="move-panel-chevron" aria-hidden="true">▾</span>', 'Show or hide the Move panel');
   toggle.setAttribute('aria-expanded', String(!root.classList.contains('collapsed')));
   toggle.addEventListener('click', () => {
     const collapsed = !root.classList.contains('collapsed');
@@ -134,7 +134,8 @@ export function createMovePanel(deps: MovePanelDeps) {
 
   body.append(pad, padHint, tricksLabel, tricks, more);
   root.append(toggle, body);
-  document.body.appendChild(root);
+  // Same layer as the other floating panels (Design button etc.).
+  (document.getElementById('app-lower-left-panels')?.parentElement ?? document.body).appendChild(root);
 
   // --- Actions ---
   function takeControl() {
