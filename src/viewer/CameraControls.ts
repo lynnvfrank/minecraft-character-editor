@@ -17,7 +17,7 @@ const BUTTONS: Array<{
   id: string;
   label: string;
   title: string;
-  event: string;
+  event: (typeof CREATOR_EVENTS)[keyof typeof CREATOR_EVENTS];
   icon: IconName;
   detail?: { degrees?: number };
 }> = [

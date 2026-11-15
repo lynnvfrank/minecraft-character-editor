@@ -66,17 +66,46 @@ export type {
   CreatorLockFeedbackPayload as CreatorLockFeedbackDetail,
 } from '../state/creatorSlicePayloads';
 
-/** Publish an event. Subscribers will be notified. */
-export function publish(event: string, detail?: unknown): void {
+/** Detail for events that carry no payload. */
+export type AppEmptyDetail = Record<string, never>;
+
+/** Payload type for every bus event. Adding an event to APP_EVENTS without an entry here is a type error. */
+export type AppEventMap = {
+  'app:creator:camera-yaw-left': AppCreatorCameraAngleDetail;
+  'app:creator:camera-yaw-right': AppCreatorCameraAngleDetail;
+  'app:creator:camera-pitch-up': AppCreatorCameraAngleDetail;
+  'app:creator:camera-pitch-down': AppCreatorCameraAngleDetail;
+  'app:creator:camera-zoom-in': AppEmptyDetail;
+  'app:creator:camera-zoom-out': AppEmptyDetail;
+  'app:creator:camera-recenter': AppEmptyDetail;
+  'app:creator:camera-move-start': AppEmptyDetail;
+  'app:creator:camera-move-end': AppEmptyDetail;
+  'app:character:skin-change': AppCharacterSkinChangeDetail;
+  'app:character:animation-play': AppCharacterAnimationPlayDetail;
+};
+
+// Compile-time check that APP_EVENTS and AppEventMap list the same events.
+type _SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : never;
+const _eventMapCoversAllEvents: _SameKeys<typeof APP_EVENTS, AppEventMap> = true;
+void _eventMapCoversAllEvents;
+
+/** Detail is optional when every field of the payload is optional, required otherwise. */
+type DetailArg<E extends AppEventName> = {} extends AppEventMap[E] ? [detail?: AppEventMap[E]] : [detail: AppEventMap[E]];
+
+/** Publish an event; the detail must match the event's payload type. */
+export function publish<E extends AppEventName>(event: E, ...[detail]: DetailArg<E>): void {
   if (typeof document !== 'undefined') {
     document.dispatchEvent(new CustomEvent(event, { detail }));
   }
 }
 
-/** Subscribe to an event. Returns an unsubscribe function. */
-export function subscribe(event: string, handler: (e: CustomEvent) => void): () => void {
+/** Subscribe to an event; the handler gets a CustomEvent typed for that event. Returns an unsubscribe function. */
+export function subscribe<E extends AppEventName>(
+  event: E,
+  handler: (e: CustomEvent<AppEventMap[E]>) => void
+): () => void {
   if (typeof document === 'undefined') return () => {};
-  const wrapped = (e: Event) => handler(e as CustomEvent);
+  const wrapped = (e: Event) => handler(e as CustomEvent<AppEventMap[E]>);
   document.addEventListener(event, wrapped);
   return () => document.removeEventListener(event, wrapped);
 }
