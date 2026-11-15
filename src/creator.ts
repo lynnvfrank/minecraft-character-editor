@@ -72,7 +72,7 @@ import {
 } from './config/paintBrushTool';
 import { rgbToHex } from './lib/color';
 import { getCapture3DThumbnail } from './viewer/capture3DThumbnail';
-import { buildCameraControls } from './viewer/CameraControls';
+import { buildCameraControls } from './creator/cameraControlsPanel';
 
 // --- Constants ---
 const UNDO_LIMIT = 50;

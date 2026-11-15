@@ -3,7 +3,16 @@
  * preview preset with a separate camera, so the main 3D view is never moved. Extracted from main.ts.
  */
 import * as THREE from 'three';
-import type { CharacterState } from '../controllers/characterTypes';
+import type { AlphaMode, TexturePreset } from './skinApplication';
+
+/** The parts of a character that capture needs (CapturableCharacter in controllers/ satisfies it). */
+type CapturableCharacter = {
+  model: THREE.Group;
+  texturePreset: TexturePreset;
+  alphaMode: AlphaMode;
+  currentSkin: string;
+  modelPath: string;
+};
 import { getPreviewPreset, type PreviewPreset, type PreviewPresetKey } from './previewPresets';
 import type { SceneContext } from './scene';
 import { applySkinToModel, applyCreatorLayerVisibility, applyCreatorLayerVisibilityForCapture } from './skinApplication';
@@ -12,7 +21,7 @@ import { renderTargetPixelsToImageData } from './captureHelpers';
 
 export type ThumbnailCaptureDeps = {
   getSceneContext: () => SceneContext | null;
-  getPrimaryCharacter: () => CharacterState | undefined;
+  getPrimaryCharacter: () => CapturableCharacter | undefined;
   getSkinCanvas: () => HTMLCanvasElement;
   getWorkSize: () => number;
   compositor: SkinCompositor;
@@ -64,7 +73,7 @@ function renderPresetToDataUrl(ctx: SceneContext, preset: PreviewPreset, size: n
 }
 
 export function createThumbnailCapture(deps: ThumbnailCaptureDeps) {
-  function ready(): { ctx: SceneContext; char: CharacterState } | null {
+  function ready(): { ctx: SceneContext; char: CapturableCharacter } | null {
     const ctx = deps.getSceneContext();
     const char = deps.getPrimaryCharacter();
     if (!char || !ctx?.renderer || !ctx.scene || !ctx.container) return null;

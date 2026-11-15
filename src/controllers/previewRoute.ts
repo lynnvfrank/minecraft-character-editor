@@ -2,9 +2,9 @@
  * Preview route state: skin, baseSkin, part, cameraPreset from URL params or override.
  */
 
-import { isPreviewPresetKey, type PreviewPresetKey } from '../viewer/previewPresets';
+import { isPreviewPresetKey, type PreviewPartKey, type PreviewPresetKey } from '../viewer/previewPresets';
 
-export type PreviewRoutePartKey = Exclude<PreviewPresetKey, 'fullOutfit'>;
+export type PreviewRoutePartKey = PreviewPartKey;
 
 export type PreviewRouteStateInput = {
   skin?: string | null;

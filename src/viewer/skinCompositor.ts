@@ -14,7 +14,7 @@ import {
   getPartBounds,
   type LayerKey,
 } from '../skin';
-import type { PreviewRoutePartKey } from '../controllers/previewRoute';
+import type { PreviewPartKey } from './previewPresets';
 
 export type LayerVisibleState = Record<string, boolean>;
 export type LayerPartVisibleState = Record<string, { L?: boolean; R?: boolean }>;
@@ -144,7 +144,7 @@ export function createSkinCompositor() {
   function composePreviewSkinCanvas(
     baseImage: HTMLImageElement | null,
     skinImage: HTMLImageElement,
-    part: PreviewRoutePartKey | null
+    part: PreviewPartKey | null
   ): HTMLCanvasElement {
     if (!previewCanvas) {
       previewCanvas = document.createElement('canvas');

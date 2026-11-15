@@ -1,6 +1,6 @@
-import { LAYER_KEYS, WARDROBE_COMPOSITE_KEYS, isLayerKey, type LayerKey } from '../skin';
+import { LAYER_KEYS, WARDROBE_COMPOSITE_KEYS, isLayerKey, type LayerKey, type WardrobeLayerKey } from '../skin';
 
-export type WardrobeLayerKey = 'fullOutfit' | LayerKey | (typeof WARDROBE_COMPOSITE_KEYS)[number];
+export type { WardrobeLayerKey };
 
 export type WardrobePartKey = Exclude<WardrobeLayerKey, 'fullOutfit'>;
 
