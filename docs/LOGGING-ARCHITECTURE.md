@@ -204,7 +204,7 @@ logger.trace('position', 'tick', { t, x, z })
 
 ## Implementation Outline
 
-### 1. Create `src/logger.ts`
+### 1. Logger module (`src/lib/logger.ts`)
 
 - Parse `?log=...` and localStorage.
 - Export `logger` with `error`, `warn`, `info`, `debug`, `trace` methods.

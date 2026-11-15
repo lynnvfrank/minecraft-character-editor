@@ -155,6 +155,7 @@ minecraft-character-editor/
 - `docs/TROUBLESHOOTING.md` and `docs/LOGGING-ARCHITECTURE.md` - debugging and logs
 - `docs/ELECTRON-PACKAGING.md` - desktop packaging and distribution
 - `docs/ATTRIBUTION-ASSESSMENT.md` - asset licensing; read before shipping
+- `docs/REFACTORING-PLAN.md` - the 2026 structure refactor: what moved where, and remaining follow-ups
 
 ## For Agents
 
