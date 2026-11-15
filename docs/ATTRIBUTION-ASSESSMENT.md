@@ -31,8 +31,6 @@ Licenses confirmed from installed `node_modules/*/package.json`.
 | express | 4.22.1 | MIT | Local server (`server/`) |
 | electron | 33.4.11 | MIT | Desktop shell (bundles Chromium, Node.js — their notices ship with the build) |
 | electron-store | 10.1.0 | MIT | Desktop settings |
-| dotenv | 17.4.2 | BSD-2-Clause | Env config |
-| minimatch | 10.2.5 | BlueOak-1.0.0 | Glob matching |
 
 ### Dev / tooling only (not shipped)
 

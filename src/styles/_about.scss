@@ -143,3 +143,20 @@ a.about-item-name:hover {
   font-size: 0.75rem;
   opacity: 0.7;
 }
+
+// Electron only: local server address (see src/ui/electronStatus.ts).
+.about-server-url {
+  display: block;
+  font-size: 0.85rem;
+  user-select: all;
+}
+
+.about-server-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.75;
+
+  code {
+    font-size: 0.75rem;
+  }
+}
