@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-Quick links and instructions for debugging the Minecraft 3D viewer.
+Quick links and instructions for debugging the Minecraft Character Editor.
 
 ---
 

@@ -23,6 +23,20 @@ import modeCreatorToolsRedoRaw from './mode.creator.tools.redo.svg?raw';
 import modeCreatorWardrobeRaw from './mode.creator.wardrobe.svg?raw';
 import modeCreator2DRaw from './mode.creator.2D.svg?raw';
 import modeCreator3DRaw from './mode.creator.3D.svg?raw';
+import modeCameraRaw from './mode.camera.svg?raw';
+import modeCameraFreeRaw from './mode.camera.free.svg?raw';
+import modeCameraFocusedRaw from './mode.camera.focused.svg?raw';
+import modeCameraLeftRaw from './mode.camera.left.svg?raw';
+import modeCameraRightRaw from './mode.camera.right.svg?raw';
+import modeCameraUpRaw from './mode.camera.up.svg?raw';
+import modeCameraDownRaw from './mode.camera.down.svg?raw';
+import modeCameraInRaw from './mode.camera.in.svg?raw';
+import modeCameraOutRaw from './mode.camera.out.svg?raw';
+import modeCameraRecenterRaw from './mode.camera.recenter.svg?raw';
+import modeLightShaderRaw from './mode.light.shader.svg?raw';
+import modeLightSunsetRaw from './mode.light.sunset.svg?raw';
+import modeLightNightRaw from './mode.light.night.svg?raw';
+import modeLightClassicRaw from './mode.light.classic.svg?raw';
 
 const ICONS_RAW = {
   modeHome: modeHomeRaw,
@@ -44,6 +58,20 @@ const ICONS_RAW = {
   modeCreatorWardrobe: modeCreatorWardrobeRaw,
   modeCreator2D: modeCreator2DRaw,
   modeCreator3D: modeCreator3DRaw,
+  modeCamera: modeCameraRaw,
+  modeCameraFree: modeCameraFreeRaw,
+  modeCameraFocused: modeCameraFocusedRaw,
+  modeCameraLeft: modeCameraLeftRaw,
+  modeCameraRight: modeCameraRightRaw,
+  modeCameraUp: modeCameraUpRaw,
+  modeCameraDown: modeCameraDownRaw,
+  modeCameraIn: modeCameraInRaw,
+  modeCameraOut: modeCameraOutRaw,
+  modeCameraRecenter: modeCameraRecenterRaw,
+  modeLightShader: modeLightShaderRaw,
+  modeLightSunset: modeLightSunsetRaw,
+  modeLightNight: modeLightNightRaw,
+  modeLightClassic: modeLightClassicRaw,
 } as const;
 
 export type IconName = keyof typeof ICONS_RAW;

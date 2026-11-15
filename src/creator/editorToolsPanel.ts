@@ -23,7 +23,7 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
 
   const modeIconOpts = { width: 18, height: 18 };
   const modePanel = createEl('div', { id: 'creator-mode-panel', className: 'creator-mode-panel', role: 'group', 'aria-label': 'Creator mode' },
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_WARDROBE, title: 'Wardrobe', 'aria-label': 'Wardrobe' }, createIcon('modeCreatorWardrobe', modeIconOpts)),
+    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_WARDROBE, title: 'Wardrobe', 'aria-label': 'Wardrobe' }, createIcon('modeCreatorWardrobe', modeIconOpts), ' Wardrobe'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_3D, title: 'Edit on 3D model' }, createIcon('modeCreator3D', modeIconOpts), ' 3D'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_2D, title: 'Edit on 2D canvas' }, createIcon('modeCreator2D', modeIconOpts), ' 2D')
   );
@@ -32,7 +32,8 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   const oldOverlaysPanel = document.getElementById('creator-canvas-overlays-panel');
   if (oldOverlaysPanel) oldOverlaysPanel.remove();
 
-  const overlaysPanel = createEl('div', { id: 'creator-canvas-overlays-panel', className: 'creator-canvas-overlays-panel', role: 'group', 'aria-label': 'Canvas overlays' },
+  const overlaysPanel = createEl('div', { id: 'creator-canvas-overlays-panel', className: 'creator-canvas-overlays-panel', role: 'group', 'aria-label': 'Guides' },
+    createEl('div', { className: 'creator-layers-panel-title creator-panel-title' }, 'Guides'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'rulers', title: 'Toggle rulers' }, 'Rulers'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'template', title: 'Show template overlay' }, 'Template')
   );

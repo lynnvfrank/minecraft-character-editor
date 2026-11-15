@@ -17,7 +17,7 @@ export const OVERLAY_SCALE = {
 };
 
 /**
- * Minecraft 64x64 skin layout UVs (from minecraft-skin-layout-specification.md).
+ * Minecraft 64x64 skin layout UVs (from docs/SKIN-LAYOUT.md).
  * Normalized 0-1: U = x/64, V = 1 - y/64 (OpenGL convention, top-left image origin).
  * Face order: front, back, top, bottom, right, left — 4 verts each (bl, br, tr, tl).
  * Runningboy uses FBX UVs; this table is for models with separate meshes per part.
@@ -218,7 +218,9 @@ export function applySkinToModel(
             mat.transparent = true;
             mat.alphaTest = 0.1;
             mat.depthWrite = true;
-            mat.side = THREE.DoubleSide;
+            // Front faces only: with DoubleSide, the inside of the oversized hat/jacket box
+            // shows through transparent overlay pixels as a dark ghost outline.
+            mat.side = THREE.FrontSide;
             break;
           case 'cutout':
             mat.alphaTest = 0.01;

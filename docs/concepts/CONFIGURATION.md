@@ -39,6 +39,6 @@ If JSON config is added later:
 
 ## Reference
 
-- **AGENT-README** — orientation, high-value files
+- **AGENTS.md** (repo root) — orientation, high-value files
 - **CHARACTERS.md** — character data model
 - **SCENE-CONTEXT.md** — scene ownership

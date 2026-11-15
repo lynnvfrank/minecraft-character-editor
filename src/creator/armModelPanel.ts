@@ -1,10 +1,12 @@
 /**
- * Arm model picker (Auto / Slim / Classic) in the creator's lower-left panel group.
+ * Arm model picker (Auto / Slim / Classic): a small panel floating directly under the
+ * wardrobe panel (Wardrobe, 3D and 2D modes; see modePanels.ts).
  * State lives in main.ts (it owns the character); main registers a context here.
  */
 
 import { createEl } from './dom';
 import { creatorScope } from './lifecycle';
+import { MODE_PANEL_CONFIGS } from './modePanels';
 import type { ArmModel, ArmModelSetting } from '../skin/armModel';
 
 export type ArmModelPanelContext = {
@@ -30,7 +32,7 @@ const TITLES: Record<ArmModelSetting, string> = {
 
 export function buildArmModelPanel(): void {
   const ctx = registered;
-  const host = document.getElementById('creator-lower-left-panels');
+  const host = document.getElementById('creator-upper-left-panels');
   document.getElementById('creator-arm-model-panel')?.remove();
   if (!ctx || !host) return;
 
@@ -74,7 +76,16 @@ export function buildArmModelPanel(): void {
   creatorScope.track(ctx.subscribe(sync));
   sync();
 
-  const savePanel = document.getElementById('creator-save-download-panel');
-  const homePanel = document.getElementById('creator-home-panel');
-  host.insertBefore(panel, savePanel ?? homePanel ?? host.firstChild);
+  // Sit under whichever main panel is showing: Layers (3D/2D) or Wardrobe. They never
+  // show together, so placing after the later of the two works for every mode.
+  const anchor = ['creator-layers-panel', 'creator-wardrobe-parts-panel']
+    .map((id) => document.getElementById(id))
+    .find((el) => el?.parentElement === host);
+  if (anchor) host.insertBefore(panel, anchor.nextSibling);
+  else host.appendChild(panel);
+  // Match current mode visibility (it's built after the mode panels were last synced).
+  const mode = document.body.dataset.editMode;
+  if (mode && !MODE_PANEL_CONFIGS.find((c) => c.id === panel.id)?.modes.includes(mode as never)) {
+    panel.classList.add('creator-mode-panel-hidden');
+  }
 }

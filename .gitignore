@@ -19,3 +19,6 @@ scripts/guard/.bundle/
 
 # Python cache
 scripts/__pycache__/
+# Local environment (personal tooling)
+.env
+.foundry/

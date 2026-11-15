@@ -4,7 +4,7 @@ This guide documents what npm is currently responsible for in this project, and 
 
 ## Overview
 
-In `minecraft-3d-viewer`, npm scripts orchestrate:
+In `minecraft-character-editor`, npm scripts orchestrate:
 
 - web development and production builds (Vite)
 - generated asset manifests/previews
@@ -86,8 +86,8 @@ All of these set `VITE_SOCKET_ENABLED=true`, run a fresh web build, and then lau
 | --- | --- | --- |
 | `wardrobe:generate` | Generate skin manifest, parts, and previews | Refresh wardrobe metadata/images |
 | `wardrobe:clean` | Clear wardrobe previews | Reset generated previews |
-| `animations:generate` | Generate animations manifest | Refresh animation index |
-| `animations:clean` | Clear animation manifest | Reset animation index |
+| `animations:generate` | Pack `assets-src/animations/*.fbx` into `public/animations/animations.glb` + `index.json` | After adding or changing animation clips |
+| `animations:clean` | Clear the animation manifest | Reset animation index |
 | `assets:generate` | Run all generation scripts | Full asset refresh |
 | `assets:clean` | Clean wardrobe + animation generated artifacts | Cleanup pass |
 
@@ -151,5 +151,4 @@ Use `docs/TROUBLESHOOTING.md` for URL param patterns (`?log=...`, `?logRelay=1`)
 - `docs/ELECTRON-PACKAGING.md`
 - `docs/TROUBLESHOOTING.md`
 - `docs/LOGGING-ARCHITECTURE.md`
-- `docs/LOGGING-IMPLEMENTATION.md`
 - `README.md`

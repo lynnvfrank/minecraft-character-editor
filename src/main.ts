@@ -97,6 +97,7 @@ import {
 import { registerArmModelPanelContext } from './creator/armModelPanel';
 import { createSubscribable } from './lib/subscribable';
 import { initTheme } from './ui/theme';
+import { initAboutPanel } from './ui/aboutPanel';
 import {
   SKIN_LAYER_BOUNDS,
   LAYER_KEYS,
@@ -143,8 +144,8 @@ const FALLBACK_SKINS: SkinEntry[] = [
 ];
 
 const FALLBACK_ANIMATIONS: AnimationEntry[] = [
-  { path: '/animations/Bored-RunningboyRig.fbx', key: 'bored', label: 'Bored' },
-  { path: '/animations/Crying-RunningboyRig.fbx', key: 'crying', label: 'Crying' }
+  { path: '/animations/animations.glb', key: 'bored', label: 'Bored' },
+  { path: '/animations/animations.glb', key: 'crying', label: 'Crying' }
 ];
 
 const USE_DEBUG_TEXTURE = false;
@@ -1310,6 +1311,7 @@ async function main(): Promise<void> {
 
   sceneContext = initViewerScene(container, params) as AppSceneContext;
   initTheme();
+  initAboutPanel();
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();
 

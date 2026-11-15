@@ -115,13 +115,23 @@ body[data-route="preview"] .app-lower-left-panels {
   white-space: nowrap;
 }
 
-.creator-wardrobe-layer-placeholder {
-  width: 24px;
-  height: 24px;
+.creator-wardrobe-layer-icons {
+  display: inline-flex;
+  gap: 2px;
   flex-shrink: 0;
-  object-fit: contain;
-  opacity: 0.85;
   margin-left: auto;
+  color: inherit;
+}
+
+.creator-wardrobe-layer-icon {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
 }
 .creator-wardrobe-library-header,
 .creator-wardrobe-outfits-header {
@@ -289,6 +299,11 @@ body[data-route="preview"] .app-lower-left-panels {
   padding: 0.45rem 0.6rem 0.55rem;
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
   font-size: 0.8rem;
+}
+.creator-wardrobe-parts-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 .creator-arm-model-header {
   display: flex;

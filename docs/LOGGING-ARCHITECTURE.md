@@ -1,6 +1,6 @@
 # Logging Architecture Specification
 
-A comprehensive, configurable logging system for troubleshooting the Minecraft 3D viewer: character states, messages, actions, position, head direction, animation, state machine, and renderer behavior. Designed for different levels of detail and per-system enablement.
+A comprehensive, configurable logging system for troubleshooting the Minecraft Character Editor: character states, messages, actions, position, head direction, animation, state machine, and renderer behavior. Designed for different levels of detail and per-system enablement.
 
 ---
 

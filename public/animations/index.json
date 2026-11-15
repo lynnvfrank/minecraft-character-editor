@@ -1,211 +1,211 @@
 [
   {
-    "path": "/animations/Acknowledging-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "acknowledging",
     "label": "Acknowledging"
   },
   {
-    "path": "/animations/Arm-Stretching-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "arm-stretching",
     "label": "Arm Stretching"
   },
   {
-    "path": "/animations/Backflip-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "backflip",
     "label": "Backflip"
   },
   {
-    "path": "/animations/Bashful-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "bashful",
     "label": "Bashful"
   },
   {
-    "path": "/animations/BlowAKiss-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "blow-akiss",
     "label": "BlowAKiss"
   },
   {
-    "path": "/animations/Bored-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "bored",
     "label": "Bored"
   },
   {
-    "path": "/animations/Clapping-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "clapping",
     "label": "Clapping"
   },
   {
-    "path": "/animations/Crying-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "crying",
     "label": "Crying"
   },
   {
-    "path": "/animations/Dancing-Twerk-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "dancing-twerk",
     "label": "Dancing Twerk"
   },
   {
-    "path": "/animations/Excited-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "excited",
     "label": "Excited"
   },
   {
-    "path": "/animations/Female-Walk-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "female-walk",
     "label": "Female Walk"
   },
   {
-    "path": "/animations/Happy-Idle-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "happy-idle",
     "label": "Happy Idle"
   },
   {
-    "path": "/animations/Happy-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "happy",
     "label": "Happy"
   },
   {
-    "path": "/animations/Hard-Head-Nod-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "hard-head-nod",
     "label": "Hard Head Nod"
   },
   {
-    "path": "/animations/Laughing-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "laughing",
     "label": "Laughing"
   },
   {
-    "path": "/animations/Laying-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "laying",
     "label": "Laying"
   },
   {
-    "path": "/animations/Look-Around-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "look-around",
     "label": "Look Around"
   },
   {
-    "path": "/animations/Pointing-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "pointing",
     "label": "Pointing"
   },
   {
-    "path": "/animations/Quick-Informal-Bow-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "quick-informal-bow",
     "label": "Quick Informal Bow"
   },
   {
-    "path": "/animations/Shrugging-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "shrugging",
     "label": "Shrugging"
   },
   {
-    "path": "/animations/Sit-To-Stand-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "sit-to-stand",
     "label": "Sit To Stand"
   },
   {
-    "path": "/animations/Sitting-Clap-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "sitting-clap",
     "label": "Sitting Clap"
   },
   {
-    "path": "/animations/Sitting-Talking-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "sitting-talking",
     "label": "Sitting Talking"
   },
   {
-    "path": "/animations/Sitting-Yell-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "sitting-yell",
     "label": "Sitting Yell"
   },
   {
-    "path": "/animations/Stand-To-Sit-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "stand-to-sit",
     "label": "Stand To Sit"
   },
   {
-    "path": "/animations/Standing-Thumbs-Up-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "standing-thumbs-up",
     "label": "Standing Thumbs Up"
   },
   {
-    "path": "/animations/Start-Walking-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "start-walking",
     "label": "Start Walking"
   },
   {
-    "path": "/animations/Start-Walking-movement-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "start-walking-movement",
     "label": "Start Walking movement"
   },
   {
-    "path": "/animations/Stop-Walking-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "stop-walking",
     "label": "Stop Walking"
   },
   {
-    "path": "/animations/Stop-Walking-movement-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "stop-walking-movement",
     "label": "Stop Walking movement"
   },
   {
-    "path": "/animations/Surprised-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "surprised",
     "label": "Surprised"
   },
   {
-    "path": "/animations/Texting-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "texting",
     "label": "Texting"
   },
   {
-    "path": "/animations/Thinking-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "thinking",
     "label": "Thinking"
   },
   {
-    "path": "/animations/Thoughtful-Head-Shake-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "thoughtful-head-shake",
     "label": "Thoughtful Head Shake"
   },
   {
-    "path": "/animations/Walking-Backwards-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "walking-backwards",
     "label": "Walking Backwards"
   },
   {
-    "path": "/animations/Waving-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "waving",
     "label": "Waving"
   },
   {
-    "path": "/animations/Yawn-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "yawn",
     "label": "Yawn"
   },
   {
-    "path": "/animations/idle-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "idle",
     "label": "idle"
   },
   {
-    "path": "/animations/jump-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "jump",
     "label": "jump"
   },
   {
-    "path": "/animations/left-turn-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "left-turn",
     "label": "left turn"
   },
   {
-    "path": "/animations/right-turn-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "right-turn",
     "label": "right turn"
   },
   {
-    "path": "/animations/walking-RunningboyRig.fbx",
+    "path": "/animations/animations.glb",
     "key": "walking",
     "label": "walking"
   }

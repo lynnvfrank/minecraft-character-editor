@@ -1,6 +1,6 @@
 # Electron Packaging Guide
 
-This guide explains how to package the Electron version of `minecraft-3d-viewer` so you can share it with testers or publish desktop builds.
+This guide explains how to package the Electron version of `minecraft-character-editor` so you can share it with testers or publish desktop builds.
 
 ## Overview
 
@@ -44,8 +44,8 @@ What they do:
 
 The `package.json` Electron build config currently includes:
 
-- `appId`: `com.minecraft-3d-viewer.app`
-- `productName`: `3D Character Viewer`
+- `appId`: see `build.appId` in `package.json`
+- `productName`: `Blockygotchi`
 - output directory: `release/`
 - macOS targets: `dmg`, `zip`
 - Windows targets: `nsis`, `portable`
