@@ -12,7 +12,6 @@ interface Credit {
 
 const LIBRARIES: Credit[] = [
   { name: 'three.js', detail: '3D rendering, FBX/GLTF loaders, controls', license: 'MIT', url: 'https://threejs.org' },
-  { name: 'tween.js', detail: 'Animation tweening', license: 'MIT', url: 'https://github.com/tweenjs/tween.js' },
   { name: 'XState', detail: 'State machines', license: 'MIT', url: 'https://stately.ai/docs/xstate' },
   { name: 'Socket.IO', detail: 'Local messaging', license: 'MIT', url: 'https://socket.io' },
   { name: 'Express', detail: 'Local server', license: 'MIT', url: 'https://expressjs.com' },

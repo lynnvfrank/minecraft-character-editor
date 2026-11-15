@@ -25,7 +25,6 @@ Licenses confirmed from installed `node_modules/*/package.json`.
 | Package | Version | License | Used for |
 |---------|---------|---------|----------|
 | three | 0.165.0 | MIT | 3D rendering; also `FBXLoader`, `GLTFLoader`, `OrbitControls` from `three/examples` (same MIT license) |
-| @tweenjs/tween.js | 25.0.0 | MIT | Camera / UI tweens |
 | xstate | 5.30.0 | MIT | Character state machines |
 | socket.io / socket.io-client | 4.8.3 | MIT | Local control channel |
 | express | 4.22.1 | MIT | Local server (`server/`) |

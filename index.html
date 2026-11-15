@@ -8,7 +8,6 @@
       (function () {
         var p = new URLSearchParams(location.search);
         var show = function (v) { return v === '1' || v === 'on' || v === 'true'; };
-        if (!show(p.get('chat'))) document.documentElement.dataset.chatHidden = '1';
         if (!show(p.get('controls'))) document.documentElement.dataset.controlsHidden = '1';
         if (p.get('movementcontrols') === '1') document.documentElement.dataset.testMode = '1';
       })();

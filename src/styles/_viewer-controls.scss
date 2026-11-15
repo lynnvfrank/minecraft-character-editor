@@ -1,5 +1,4 @@
-/* Hide panels when URL params chat=0|off|false or controls=0|off|false */
-[data-chat-hidden="1"] #fake-chat-container { display: none !important; }
+/* Controls bar is hidden unless the URL has controls=1|on|true */
 [data-controls-hidden="1"] #controls-bar { display: none !important; }
 
 /* Test mode: hide normal controls, show test panel */
@@ -7,8 +6,7 @@
   display: none;
   flex: 0 0 auto;
 }
-[data-test-mode="1"] #controls-bar,
-[data-test-mode="1"] #fake-chat-container { display: none !important; }
+[data-test-mode="1"] #controls-bar { display: none !important; }
 [data-test-mode="1"] #test-controls {
   display: flex;
   justify-content: center;

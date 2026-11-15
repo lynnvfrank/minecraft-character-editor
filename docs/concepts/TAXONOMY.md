@@ -49,7 +49,7 @@ src/
 ├── main.ts
 ├── styles/           # SCSS partials (index.scss imports all)
 │   ├── creator/      # layout, swatches, panels, layers, tools, canvas, etc.
-│   └── _*.scss       # reset, routes, app-shell, viewer-controls, fake-chat
+│   └── _*.scss       # reset, routes, app-shell, viewer-controls
 │
 ├── domain/           # types, constants, schemas
 ├── lib/              # logger, color, trapezoidBounds

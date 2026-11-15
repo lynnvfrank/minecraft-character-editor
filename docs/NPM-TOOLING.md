@@ -49,7 +49,6 @@ Runs `server/index.js`.
 ### 4) Electron launch and packaging
 
 ```bash
-npm run electron:dev
 npm run electron
 npm run pack
 npm run dist
@@ -69,8 +68,6 @@ All of these set `VITE_SOCKET_ENABLED=true`, run a fresh web build, and then lau
 | `dev:log:info` | Dev with relay and all systems at info | Broad system visibility |
 | `dev:log:debug` | Dev with relay and all systems at debug | Deep troubleshooting |
 | `dev:log:trace` | Dev with relay and all systems at trace | High-verbosity diagnostics |
-| `dev:debug` | Alias for `dev:log:debug` | Convenience |
-| `dev:trace` | Alias for `dev:log:trace` | Convenience |
 
 ### Build/runtime scripts
 
@@ -87,7 +84,6 @@ All of these set `VITE_SOCKET_ENABLED=true`, run a fresh web build, and then lau
 | `wardrobe:generate` | Generate skin manifest, parts, and previews | Refresh wardrobe metadata/images |
 | `wardrobe:clean` | Clear wardrobe previews | Reset generated previews |
 | `animations:generate` | Pack `assets-src/animations/*.fbx` into `public/animations/animations.glb` + `index.json` | After adding or changing animation clips |
-| `animations:clean` | Clear the animation manifest | Reset animation index |
 | `assets:generate` | Run all generation scripts | Full asset refresh |
 | `assets:clean` | Clean wardrobe + animation generated artifacts | Cleanup pass |
 
@@ -96,7 +92,6 @@ All of these set `VITE_SOCKET_ENABLED=true`, run a fresh web build, and then lau
 | Script | Command intent | Typical use |
 | --- | --- | --- |
 | `electron` | Build web app + launch Electron | Production-style desktop run |
-| `electron:dev` | Build web app + launch Electron | Local desktop testing |
 | `pack` | Build web app + electron-builder unpacked output | Smoke-test desktop artifact |
 | `dist` | Build web app + electron-builder distributables | Installer/release artifacts |
 
@@ -127,7 +122,7 @@ Use `docs/TROUBLESHOOTING.md` for URL param patterns (`?log=...`, `?logRelay=1`)
 
 ### Preparing desktop artifacts
 
-1. `npm run electron:dev` for a quick smoke test
+1. `npm run electron` for a quick smoke test
 2. `npm run pack` for unpacked app verification
 3. `npm run dist` for distributables
 

@@ -184,7 +184,6 @@ This helps when troubleshooting with Cursor or other tools: errors and debug out
 | `animationManager.ts` | Log at sequence/step/fade/walk boundaries |
 | `characterAI.ts` | Log at state transitions, user activity, emote |
 | `main.ts` | Log model load, skin apply, socket setup |
-| `fakeChatUI.ts` | Log messages sent/received |
 | `socketManager.ts` | Log connect, disconnect, events |
 
 ### Logger API (Conceptual)
@@ -352,4 +351,4 @@ When relay is enabled, the client sends every log that passes its own system/lev
 | Throttling | trace/debug high-frequency; 50–100ms per (system, event) |
 | Output | browser console; optional overlay; **optional server relay** (dual output) |
 | Server relay | `POST /api/log` endpoint; env/runtime params for dev server (`LOG_RELAY`, `LOG_LEVEL`, `LOG_SYSTEMS`) |
-| Integration | Replace/extend debugFacing; add calls in animationManager, characterAI, main, fakeChatUI, socketManager |
+| Integration | Replace/extend debugFacing; add calls in animationManager, characterAI, main, socketManager |
