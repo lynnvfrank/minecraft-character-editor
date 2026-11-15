@@ -23,9 +23,6 @@
     "animations:clean": "node scripts/clear-animations-manifest.js",
     "assets:generate": "node scripts/generate-skins-manifest.js && node scripts/pack-animations.mjs && npx tsx scripts/generate-wardrobe-parts.ts && node scripts/generate-skin-previews.js",
     "assets:clean": "npm run wardrobe:clean && npm run animations:clean",
-    "watch": "npx tsx scripts/file-watcher/cli.ts",
-    "watch:turbo": "ulimit -n 10240 2>/dev/null; turbowatch ./scripts/turbowatch-watcher/turbowatch.config.ts",
-    "watch:guard": "bash -c 'cd scripts/guard && (bundle check || bundle install) && cd ../.. && BUNDLE_GEMFILE=scripts/guard/Gemfile bundle exec guard -G scripts/guard/Guardfile'",
     "electron": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron .",
     "electron:dev": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron .",
     "pack": "cross-env VITE_SOCKET_ENABLED=true npm run build && electron-builder --dir",
@@ -66,21 +63,15 @@
     }
   },
   "dependencies": {
-    "@qdrant/js-client-rest": "^1.17.0",
     "@tweenjs/tween.js": "^25.0.0",
-    "chokidar": "^5.0.0",
-    "dotenv": "^17.3.1",
     "electron-store": "^10.0.0",
     "express": "^4.21.0",
-    "minimatch": "^10.2.4",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "three": "^0.165.0",
-    "turbowatch": "^2.30.0",
     "xstate": "^5.28.0"
   },
   "devDependencies": {
-    "@types/chokidar": "^1.7.5",
     "@types/three": "^0.165.0",
     "canvas": "^3.2.1",
     "cross-env": "^7.0.3",
