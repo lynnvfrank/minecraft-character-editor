@@ -7,11 +7,11 @@ const { app, BrowserWindow, Tray, Menu, ipcMain } = require('electron');
 const { startServer, DEFAULT_PORT } = require('./server.js');
 
 const APP_NAME = 'Blockygotchi';
+const IS_MAC = process.platform === 'darwin';
 let mainWindow = null;
 let tray = null;
 let serverInstance = null;
 let serverPort = DEFAULT_PORT;
-const PORT_KEY = 'serverPort';
 let store = null;
 let isFirstRun = false;
 
@@ -65,8 +65,10 @@ function createWindow() {
     mainWindow = null;
   });
 
+  // On macOS, closing the window keeps the app in the dock/tray (platform convention).
+  // Elsewhere, closing the window quits the app.
   mainWindow.on('close', (e) => {
-    if (!app.isQuitting) {
+    if (IS_MAC && !app.isQuitting) {
       e.preventDefault();
       mainWindow.hide();
     }
@@ -108,46 +110,49 @@ function updateTrayTooltip(status) {
 async function startAppServer() {
   if (serverInstance) return serverPort;
   await initStore();
-  const port = store.get(PORT_KEY, DEFAULT_PORT);
   const distDir = getDistDir();
+  // Always try the default port first. Older builds saved a port in the store; it's
+  // ignored now, so a past fallback (or Vite's 5173) never sticks.
+  let instance;
   try {
-    const { server, port: actualPort } = await startServer({
-      distDir,
-      port
-    });
-    serverInstance = { server };
-    serverPort = actualPort;
-    store.set(PORT_KEY, actualPort);
-    updateTrayTooltip('Running');
-    return actualPort;
+    instance = await startServer({ distDir, port: DEFAULT_PORT });
   } catch (err) {
-    const fallbackPort = port === DEFAULT_PORT ? 5174 : DEFAULT_PORT;
-    try {
-      const { server, port: actualPort } = await startServer({
-        distDir,
-        port: fallbackPort
-      });
-      serverInstance = { server };
-      serverPort = actualPort;
-      store.set(PORT_KEY, actualPort);
-      updateTrayTooltip('Running');
-      return actualPort;
-    } catch (e) {
+    if (err.code !== 'EADDRINUSE') {
       updateTrayTooltip('Error');
-      throw e;
+      throw err;
     }
+    // Preferred port is busy: let the OS pick a free one.
+    instance = await startServer({ distDir, port: 0 });
   }
+  serverInstance = instance;
+  serverPort = instance.port;
+  updateTrayTooltip('Running');
+  return serverPort;
 }
 
+/** Close Socket.IO and the HTTP server, dropping open connections so nothing keeps the process alive. */
 function stopAppServer() {
-  if (serverInstance?.server) {
-    serverInstance.server.close();
-    serverInstance = null;
-  }
+  const instance = serverInstance;
+  serverInstance = null;
   updateTrayTooltip('Stopped');
+  if (!instance) return Promise.resolve();
+  return new Promise((resolve) => {
+    instance.io.close();
+    instance.server.closeAllConnections?.();
+    instance.server.close(() => resolve());
+    setTimeout(resolve, 1000); // never block quitting on a stuck socket
+  });
 }
 
-app.whenReady().then(async () => {
+if (!app.requestSingleInstanceLock()) {
+  // Another copy is already running; it will show its window (see 'second-instance').
+  app.quit();
+} else {
+  app.on('second-instance', () => createWindow());
+  app.whenReady().then(onReady);
+}
+
+async function onReady() {
   app.setName(APP_NAME);
   if (process.platform === 'darwin' && app.dock) {
     const dockIconPath = path.join(__dirname, 'icons', 'dock.png');
@@ -164,25 +169,24 @@ app.whenReady().then(async () => {
   }
   createTray();
   createWindow();
-});
+}
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    stopAppServer();
-  }
+  if (!IS_MAC) app.quit();
 });
 
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  } else {
-    createWindow();
-  }
-});
+app.on('activate', () => createWindow());
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
   app.isQuitting = true;
-  stopAppServer();
+  if (!serverInstance) return;
+  // Hold the quit until the server has shut down, then quit for real.
+  e.preventDefault();
+  stopAppServer().then(() => {
+    tray?.destroy();
+    tray = null;
+    app.quit();
+  });
 });
 
 ipcMain.handle('getStatus', () => ({
@@ -197,7 +201,7 @@ ipcMain.handle('startServer', async () => {
   return { port: serverPort, url: `http://localhost:${serverPort}` };
 });
 
-ipcMain.handle('stopServer', () => {
-  stopAppServer();
+ipcMain.handle('stopServer', async () => {
+  await stopAppServer();
   return { port: serverPort };
 });
