@@ -21,14 +21,13 @@ Configured output currently goes to `release/`.
 Before packaging, make sure the app runs locally:
 
 ```bash
-npm run electron:dev
+npm run electron
 ```
 
 ## Important Scripts
 
 ```bash
 npm run electron
-npm run electron:dev
 npm run pack
 npm run dist
 ```
@@ -36,7 +35,6 @@ npm run dist
 What they do:
 
 - `npm run electron` builds the app and launches Electron
-- `npm run electron:dev` runs a fast local Electron build for development
 - `npm run pack` builds an unpacked Electron app into `release/`
 - `npm run dist` builds distributable artifacts with `electron-builder`
 
@@ -135,7 +133,7 @@ For very early testing, `npm run pack` is often enough.
 
 Before publishing publicly, verify:
 
-1. `npm run electron:dev` launches successfully
+1. `npm run electron` launches successfully
 2. viewer route works
 3. creator route works
 4. tray icon works

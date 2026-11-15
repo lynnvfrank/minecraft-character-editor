@@ -110,7 +110,6 @@ import {
   ensurePreviewCameraPanel,
   removePreviewCameraPanel,
   updatePreviewCameraInfo,
-  createFakeChatUI,
   initElectronStatus,
 } from './ui';
 import { linearToSrgb } from './viewer/captureHelpers';
@@ -1540,13 +1539,6 @@ async function main(): Promise<void> {
     setupUserActivityListeners();
     characterEventsController.setupCharacterEventSubscribers();
     characterEventsController.setupSocketEvents(socketManager);
-    createFakeChatUI({
-      onPlaySequence: (seq) => animationManager!.playSequence(seq),
-      onMessageSent: () => characterAI!.onUserActivity(true),
-      getExampleSequences: () => sequencesList.map((s) => s.steps),
-      setLastActivity: () => characterAI!.setLastActivity(),
-      checkIdleTimers: () => {} // characterAI.update handles idle/wander every frame
-    });
   }
 
   const initialSkin = skins.find((skin) => skin.path === FALLBACK_SKINS[0]?.path) ?? skins[0]!;

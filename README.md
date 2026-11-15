@@ -80,19 +80,13 @@ npm run preview
 
 ## Run The App (Electron)
 
-For local Electron development:
-
-```bash
-npm run electron:dev
-```
-
-For a production-style Electron launch:
+Build the web app and launch it in Electron:
 
 ```bash
 npm run electron
 ```
 
-Both commands:
+This:
 
 - regenerate asset manifests
 - build the Vite app into `dist/`
@@ -123,7 +117,6 @@ npm run dev:log:trace
 npm run build
 npm run preview
 npm run start
-npm run electron:dev
 npm run electron
 
 # Asset pipeline
@@ -132,7 +125,6 @@ npm run assets:clean
 npm run wardrobe:generate
 npm run wardrobe:clean
 npm run animations:generate
-npm run animations:clean
 ```
 
 See `docs/NPM-TOOLING.md` for a full script-by-script guide.

@@ -10,7 +10,8 @@ const { createServer } = require('http');
 const { Server } = require('socket.io');
 const { handleApi, setSocketIo } = require('../server/api.js');
 
-const DEFAULT_PORT = 5173;
+// Not 5173: that's the Vite dev server.
+const DEFAULT_PORT = 5190;
 
 /**
  * @param {{ distDir: string; port?: number }} opts
@@ -18,7 +19,7 @@ const DEFAULT_PORT = 5173;
  */
 function createAppServer(opts = {}) {
   const distDir = opts.distDir || path.join(__dirname, '..', 'dist');
-  const port = opts.port || DEFAULT_PORT;
+  const port = opts.port ?? DEFAULT_PORT;
 
   const app = express();
   const server = createServer(app);
@@ -51,10 +52,10 @@ function createAppServer(opts = {}) {
 function startServer(opts = {}) {
   const { server, io, port } = createAppServer(opts);
   return new Promise((resolve, reject) => {
+    server.once('error', reject);
     server.listen(port, () => {
-      resolve({ server, io, port });
+      resolve({ server, io, port: server.address().port });
     });
-    server.on('error', reject);
   });
 }
 
