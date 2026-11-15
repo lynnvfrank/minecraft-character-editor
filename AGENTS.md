@@ -33,6 +33,8 @@ npm run build
   `scripts/blender_build_runningboy_slim.py` (Blender 3.6, `--background --python`). Regenerate it; don't edit it by hand.
 - **Creator state** goes through observable slices in `src/state/`. Subscribe to them; don't poke the DOM from
   other panels. See `docs/concepts/MODELS-AND-SUBSCRIBERS.md` and `docs/concepts/EVENT-SYSTEM.md`.
+- **Import rules** between `src/` folders are enforced by `src/architecture.test.ts`; see
+  `docs/concepts/TAXONOMY.md` before adding a cross-folder import.
 - **Logging** is opt-in per system via URL, e.g. `?log=animation:debug`. The dev server prints the full list on start.
 - **Naming and licensing.** Never put "Minecraft" in user-facing names (trademark). The bundled skins and Mixamo
   clips are for testing only. Read `docs/ATTRIBUTION-ASSESSMENT.md` before adding or shipping assets.

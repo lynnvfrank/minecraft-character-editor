@@ -126,12 +126,36 @@ variables. The wardrobe keyboard shortcuts must stop when you *leave* the creato
 the scope would leave the shortcuts active on the home screen. Fixing that properly means disposing the
 scope on exit too, which is a behaviour change worth its own PR.
 
-### Phase 5: typed event bus and docs
+### Phase 5: typed event bus and import rules (done)
 
-- Generate the `CREATOR_EVENTS` aliases and payload types from one map so `publish`/`subscribe` are
-  type-checked per event.
-- Update `TAXONOMY.md` with the dependency rules above and add a lint check (e.g. `eslint-plugin-boundaries`
-  or a small `node:test` that scans imports) so `viewer/` can't import `creator/`.
+- [x] `AppEventMap` in `events/appEvents.ts` gives every bus event its payload type. `publish` and
+      `subscribe` are checked against it, and typecheck fails if `APP_EVENTS` and the map disagree
+      (4 tests, including `@ts-expect-error` checks that wrong payloads don't compile).
+- [x] `src/architecture.test.ts` enforces which `src/` folders may import which (rules in
+      `docs/concepts/TAXONOMY.md`). Existing violations fixed: the camera toolbar moved from `viewer/` to
+      `creator/cameraControlsPanel.ts`; `DrawingTool` → `domain/`; `WardrobeLayerKey` → `skin/`;
+      `PreviewPartKey` → `viewer/previewPresets.ts`; thumbnail capture takes a structural character type.
+      One documented exception remains (`viewer/controls.ts` → creator paint API).
+
+Result: tests 149 → 155.
+
+## Where things ended up
+
+| | Start | End |
+|---|---|---|
+| `main.ts` | 1579 lines | ~830 lines |
+| Tests | 43 | 155 |
+| New test files | — | 18 |
+| New source modules (split out of larger files) | — | 16 |
+
+Follow-ups noted in the phases above, roughly in order of value:
+
+1. Inject the creator paint API into `viewer/controls.ts` and drop the last boundary exception.
+2. Dispose the creator scope on exit (not just re-entry) so the wardrobe shortcuts and blocky editor can
+   use it like every other panel.
+3. Split `blockyEditor.ts` into grid building, rulers/template rendering and pointer input.
+4. Test the animation manager's walk/turn phase machine with a fake clock.
+5. `setEditMode` and colour/swatch logic: same treatment as layer visibility.
 
 ## Testing as we go
 

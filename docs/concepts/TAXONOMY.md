@@ -68,51 +68,30 @@ src/
 
 ---
 
-## Dependency Flow
+## Dependency Rules
 
-```mermaid
-flowchart TB
-  subgraph base [Base]
-    domain[domain]
-    lib[lib]
-    config[config]
-  end
+Enforced by `src/architecture.test.ts` (runs with `npm test`). A folder may import from anything
+except the folders listed for it:
 
-  subgraph app [Application]
-    state[state]
-    services[services]
-    controllers[controllers]
-  end
+| Folder | Must not import |
+|--------|-----------------|
+| **domain**, **skin** | state, services, viewer, animation, ui, creator, controllers, events, debug |
+| **lib** | everything else in `src/` (it is the bottom layer) |
+| **state** | services, viewer, animation, ui, creator, controllers |
+| **viewer** | creator, controllers, ui, services |
+| **animation** | creator, controllers, ui, viewer, services |
+| **services** | creator, controllers, ui, viewer |
+| **creator**, **ui** | controllers |
+| **controllers**, **config**, **events**, **debug**, `main.ts` | (unrestricted; controllers wire everything) |
 
-  subgraph features [Features]
-    skin[skin]
-    viewer[viewer]
-    creator[creator]
-    animation[animation]
-  end
+`src/creator.ts` counts as part of **creator** (it is the creator's public API).
 
-  subgraph shared [Shared]
-    ui[ui]
-    debug[debug]
-  end
+When a lower layer needs a type from a higher one, move the type down (e.g. `DrawingTool` lives in
+`domain/tools.ts`, `WardrobeLayerKey` in `skin/`) or describe it by shape at the use site.
 
-  domain --> lib
-  lib --> config
-  skin --> domain
-  state --> domain
-  services --> lib
-  controllers --> services
-  controllers --> state
-  viewer --> skin
-  viewer --> lib
-  creator --> skin
-  creator --> lib
-  creator --> state
-  animation --> lib
-  ui --> creator
-  ui --> viewer
-  debug --> lib
-```
+**Known exception:** `viewer/controls.ts` imports the creator paint API for 3D painting. It is listed in
+`ALLOWED_EXCEPTIONS` with the fix (inject the paint functions through `setupCreator3DPaint`'s deps).
+The test fails if an exception stops being needed, so the list can't go stale.
 
 ---
 

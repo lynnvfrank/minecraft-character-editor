@@ -11,8 +11,9 @@ The **document `CustomEvent` bus** in [src/events/appEvents.ts](../../src/events
 ## Convention (document bus)
 
 - **Naming:** `app:<domain>:<action>`
-- **Publish:** `publish(event, detail)`
-- **Subscribe:** `subscribe(event, handler)` — returns unsubscribe function
+- **Publish:** `publish(event, detail)` — `detail` is type-checked against `AppEventMap` (optional for events with no payload)
+- **Subscribe:** `subscribe(event, handler)` — handler gets a `CustomEvent` typed for that event; returns unsubscribe function
+- **Adding an event:** add it to `APP_EVENTS` *and* `AppEventMap` in `appEvents.ts`; typecheck fails if the two disagree.
 
 ---
 
@@ -20,15 +21,15 @@ The **document `CustomEvent` bus** in [src/events/appEvents.ts](../../src/events
 
 | Event | Domain | Publishers | Subscribers | Payload |
 |-------|--------|------------|-------------|---------|
-| `app:creator:camera-yaw-left` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
-| `app:creator:camera-yaw-right` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
-| `app:creator:camera-pitch-up` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
-| `app:creator:camera-pitch-down` | creator | CameraControls | creatorCameraController | `{ degrees?: number }` |
-| `app:creator:camera-zoom-in` | creator | CameraControls | creatorCameraController | (none) |
-| `app:creator:camera-zoom-out` | creator | CameraControls | creatorCameraController | (none) |
-| `app:creator:camera-recenter` | creator | CameraControls | creatorCameraController | (none) |
-| `app:creator:camera-move-start` | creator | creatorCameraController | CameraControls | (none) |
-| `app:creator:camera-move-end` | creator | creatorCameraController | CameraControls | (none) |
+| `app:creator:camera-yaw-left` | creator | cameraControlsPanel | creatorCameraController | `{ degrees?: number }` |
+| `app:creator:camera-yaw-right` | creator | cameraControlsPanel | creatorCameraController | `{ degrees?: number }` |
+| `app:creator:camera-pitch-up` | creator | cameraControlsPanel | creatorCameraController | `{ degrees?: number }` |
+| `app:creator:camera-pitch-down` | creator | cameraControlsPanel | creatorCameraController | `{ degrees?: number }` |
+| `app:creator:camera-zoom-in` | creator | cameraControlsPanel | creatorCameraController | (none) |
+| `app:creator:camera-zoom-out` | creator | cameraControlsPanel | creatorCameraController | (none) |
+| `app:creator:camera-recenter` | creator | cameraControlsPanel | creatorCameraController | (none) |
+| `app:creator:camera-move-start` | creator | creatorCameraController | cameraControlsPanel | (none) |
+| `app:creator:camera-move-end` | creator | creatorCameraController | cameraControlsPanel | (none) |
 | `app:character:skin-change` | character | viewerUI, socket | characterEvents | `{ characterId?, path }` |
 | `app:character:animation-play` | character | viewerUI, socket | characterEvents | `{ characterId?, name }` |
 
@@ -39,7 +40,7 @@ The **document `CustomEvent` bus** in [src/events/appEvents.ts](../../src/events
 ```mermaid
 flowchart LR
   subgraph cam [Camera DOM]
-    CC[CameraControls]
+    CC[cameraControlsPanel]
   end
   subgraph bus [document bus]
     AE[publish subscribe]
