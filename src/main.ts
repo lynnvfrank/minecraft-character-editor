@@ -67,8 +67,6 @@ import {
 } from './controllers/modes/appModeMachine';
 import {
   createPreviewRouteController,
-  type PreviewRouteInfo,
-  type PreviewRouteStateInput,
 } from './controllers/previewRoute';
 import { createCreatorTransitionHandler } from './controllers/transitions/creatorTransitionHandler';
 import { createViewerUIController } from './controllers/viewerUI';
@@ -93,6 +91,7 @@ import {
 } from './skin';
 import { registerArmModelPanelContext } from './creator/armModelPanel';
 import { createPreviewCameraController } from './controllers/previewCamera';
+import { createPreviewRouteRuntime } from './controllers/previewRouteRuntime';
 import { createArmModelState } from './state/armModelState';
 import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
@@ -166,12 +165,6 @@ type AppRoute = 'creator' | 'viewer' | 'preview';
 type RouteInfo = { route: AppRoute; creatorMode: EditMode | null };
 /** Extended scene context with typed characters. Populated in main() after initViewerScene. */
 type AppSceneContext = SceneContext & { characters: Record<string, CharacterState> };
-type PreviewCaptureRuntimeApi = {
-  waitUntilReady: (timeoutMs?: number) => Promise<void>;
-  setPreviewState: (state: PreviewRouteStateInput) => Promise<PreviewRouteInfo>;
-  clearPreviewStateOverride: () => void;
-  getPreviewState: () => PreviewRouteInfo;
-};
 /** Composite sequences loaded from /sequences/index.json */
 type Sequence = { id: string; label: string; steps: SequenceStep[] };
 // -----------------------------------------------------------------------------
@@ -335,9 +328,7 @@ function applyRoute(routeInfo?: RouteInfo): void {
   const route = info.route;
   document.body.dataset.route = route;
   if (route === 'creator') {
-    previewCamera.reset();
-    previewRouteController.setPreviewRouteOverride(null);
-    lastAppliedPreviewSignature = null;
+    previewRuntime.exit();
     const desiredMode = info.creatorMode ?? EDIT_MODE_WARDROBE;
     if (lastAppliedRouteInfo?.route === 'creator') {
       if (getEditMode() !== desiredMode) {
@@ -415,14 +406,12 @@ function applyRoute(routeInfo?: RouteInfo): void {
     ensureViewerFullWidthLayout();
     creatorPoseController.lockCharacterToCreatorIdle();
     window.setTimeout(() => {
-      void syncPreviewRouteState();
+      void previewRuntime.sync();
       window.dispatchEvent(new Event('resize'));
     }, 0);
   } else {
     ensureViewerFullWidthLayout();
-    previewCamera.reset();
-    previewRouteController.setPreviewRouteOverride(null);
-    lastAppliedPreviewSignature = null;
+    previewRuntime.exit();
     resumeHomeMode();
   }
   updateRouteButtonsState();
@@ -509,14 +498,23 @@ let creatorPreviewDirty = false;
 let lastRouteForPreview = '';
 /** Path last loaded into creator (from gallery or route enter). Used to know when to reload from char.currentSkin (user picked different skin in home). */
 let lastCreatorLoadedPath: string | null = null;
-let lastAppliedPreviewSignature: string | null = null;
-let previewRouteSyncToken = 0;
 const skinCompositor = createSkinCompositor();
 const previewCamera = createPreviewCameraController({
   getSceneContext: () => sceneContext,
   defaultFov: DEFAULT_SCENE_FOV,
   showDebugPanel: SHOW_PREVIEW_CAMERA_CONTROLS,
   isPreviewRoute: () => getRoute() === 'preview',
+});
+const previewRuntime = createPreviewRouteRuntime({
+  routeController: previewRouteController,
+  camera: previewCamera,
+  compositor: skinCompositor,
+  getSceneContext: () => sceneContext,
+  getPrimaryCharacter: () => getCharacter(getPrimaryCharacterId()),
+  isPreviewRoute: () => getRoute() === 'preview',
+  getSkinPaths: () => skinsList.map((skin) => skin.path),
+  baseSkinCandidates: PREVIEW_BASE_SKIN_CANDIDATES,
+  fallbackSkinPath: FALLBACK_SKINS[0]?.path ?? null,
 });
 const focusAutoDisableBoundControls = new WeakSet<object>();
 let lastCreatorCameraInputWasMouse = false;
@@ -565,95 +563,9 @@ function bindFocusedModeAutoDisableOnMouseCameraMove(): void {
   });
 }
 
-async function waitForPreviewSceneReady(timeoutMs: number = 30000): Promise<void> {
-  const deadline = performance.now() + timeoutMs;
-  while (performance.now() < deadline) {
-    if (getRoute() === 'preview' && !!getCharacter(getPrimaryCharacterId()) && !!sceneContext?.camera && !!sceneContext?.controls) {
-      return;
-    }
-    await sleep(50);
-  }
-  throw new Error('Preview scene did not become ready in time');
-}
-
-function getPreferredPreviewBaseSkinPath(): string | null {
-  for (const candidate of PREVIEW_BASE_SKIN_CANDIDATES) {
-    if (skinsList.some((skin) => skin.path === candidate)) return candidate;
-  }
-  return skinsList[0]?.path ?? FALLBACK_SKINS[0]?.path ?? null;
-}
-
 // -----------------------------------------------------------------------------
 // Preview route: skin composition, camera, capture
 // -----------------------------------------------------------------------------
-
-function applyPreviewTextureFromCanvas(char: CharacterState, canvas: HTMLCanvasElement, skinPath: string): void {
-  const texture = skinCompositor.getPreviewTexture(canvas);
-  applySkinToModel(char.model, texture, char.texturePreset, char.alphaMode, skinPath);
-  char.currentSkin = skinPath;
-}
-
-function installPreviewCaptureRuntimeApi(): void {
-  const host = window as Window & typeof globalThis & {
-    __previewCapture?: PreviewCaptureRuntimeApi;
-  };
-  host.__previewCapture = {
-    waitUntilReady: async (timeoutMs?: number) => {
-      await waitForPreviewSceneReady(timeoutMs);
-    },
-    setPreviewState: async (state: PreviewRouteStateInput) => {
-      await waitForPreviewSceneReady();
-      previewRouteController.setPreviewRouteOverride(state);
-      const previewInfo = previewRouteController.getPreviewRouteInfo();
-      await syncPreviewRouteState();
-      await nextAnimationFrame();
-      await nextAnimationFrame();
-      return previewInfo;
-    },
-    clearPreviewStateOverride: () => {
-      previewRouteController.setPreviewRouteOverride(null);
-      lastAppliedPreviewSignature = null;
-    },
-    getPreviewState: () => previewRouteController.getPreviewRouteInfo(),
-  };
-}
-
-async function syncPreviewRouteState(): Promise<void> {
-  if (getRoute() !== 'preview') return;
-  const ctx = sceneContext;
-  const char = getCharacter(getPrimaryCharacterId());
-  if (!char || !ctx?.camera || !ctx?.controls) return;
-
-  const previewInfo = previewRouteController.getPreviewRouteInfo();
-  previewCamera.activate(previewInfo);
-
-  if (!previewInfo.skinPath) {
-    lastAppliedPreviewSignature = previewInfo.signature;
-    return;
-  }
-  if (lastAppliedPreviewSignature === previewInfo.signature) return;
-
-  const token = ++previewRouteSyncToken;
-  const preset = getPreviewPreset(previewInfo.cameraPreset);
-  const layerVisible = buildLayerVisibleState(preset.visibleLayers);
-  const baseSkinPath = previewInfo.part
-    ? (previewInfo.baseSkinPath ?? getPreferredPreviewBaseSkinPath())
-    : previewInfo.baseSkinPath;
-
-  const [skinImage, baseImage] = await Promise.all([
-    loadCachedImage(previewInfo.skinPath),
-    baseSkinPath ? loadCachedImage(baseSkinPath).catch(() => null) : Promise.resolve(null),
-  ]);
-  if (token !== previewRouteSyncToken) return;
-
-  const composedCanvas = skinCompositor.composePreviewSkinCanvas(baseImage, skinImage, previewInfo.part);
-  const maskedCanvas = skinCompositor.buildLayerMaskedCanvas(composedCanvas, layerVisible, {}, 64) ?? composedCanvas;
-  if (token !== previewRouteSyncToken) return;
-
-  applyPreviewTextureFromCanvas(char, maskedCanvas, previewInfo.skinPath);
-  applyCreatorLayerVisibility(char.model, layerVisible);
-  lastAppliedPreviewSignature = previewInfo.signature;
-}
 
 // -----------------------------------------------------------------------------
 // Creator: 3D view placement and preview texture
@@ -973,7 +885,7 @@ function applyArmModelToCharacter(): void {
   if (char.modelPath === path) return;
   void characterController.setModel(char.id, path).then(() => {
     creatorPreviewDirty = true;
-    lastAppliedPreviewSignature = null;
+    previewRuntime.invalidate();
   });
 }
 armModelState.subscribe(applyArmModelToCharacter);
@@ -1061,7 +973,7 @@ async function main(): Promise<void> {
       viewerUIController.setupSequenceButtons(sequences as Sequence[]);
     },
     getSequencesList: () => sequencesList,
-    onPreviewRouteAfterCharacterReady: () => void syncPreviewRouteState(),
+    onPreviewRouteAfterCharacterReady: () => void previewRuntime.sync(),
     getCreatorPoseController: () => controllerRefs.creatorPoseController,
     getCreatorTransitionInFlight: () => controllerRefs.getCreatorTransitionInFlight(),
     getAnimationManager: () => controllerRefs.animationManager,
@@ -1287,7 +1199,7 @@ async function main(): Promise<void> {
   window.addEventListener('resize', onWindowResize);
   initElectronStatus();
   setupCreatorPreviewDirtySubscription();
-  installPreviewCaptureRuntimeApi();
+  previewRuntime.installCaptureApi();
   animationLoopController.animate();
 }
 
