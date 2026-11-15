@@ -105,21 +105,26 @@ manager 854 → ~800, wardrobe 694 → ~580): what's left in them is DOM/WebGL c
 rendering and pointer input (it still mixes all three); and `animation/manager.ts`'s walk/turn phase
 machine (`tick`, `playAnimationForDuration`), which needs a fake clock and mixer to test.
 
-### Phase 4: a common panel interface
+### Phase 4: a common panel contract (done)
 
-The creator panels (`skinLayersPanel`, `editorToolsPanel`, `wardrobe*Panel`, `colorPicker`, `swatches`, ...)
-each have their own setup signature. Give them one:
+Most of this already existed: `MODE_PANEL_CONFIGS` in `modePanels.ts` is the mode → panel table, and
+`creator/lifecycle.ts` has a `DisposableScope` that is torn down on each creator visit. What was missing
+was using them consistently.
 
-```ts
-interface Panel {
-  mount(root: HTMLElement, ctx: CreatorContext): void;
-  unmount(): void; // unsubscribe slices and events
-}
-```
+- [x] `planModePanelTransition` (pure, 7 tests) decides which panels hide, show, stay or stay hidden on a
+      mode switch; `modePanels.ts` only applies the plan to the DOM.
+- [x] `creator/panels.ts`: `CreatorPanel { name, mount(scope) }` and `mountPanels` (3 tests).
+      `buildCreatorPanels` is a list; panels get the scope passed in instead of importing the
+      `creatorScope` singleton. A panel that throws is now logged and skipped instead of stopping the
+      rest of the creator from building.
 
-`modePanels.ts` then shows/hides panels per mode from a table instead of custom code, which is the
-"unified editor interface" the mode concepts were heading toward. Group files under
-`src/creator/panels/`, `src/creator/tools/`, `src/creator/wardrobe/`.
+Result: tests 139 → 149.
+
+**Left as is, on purpose:** `wardrobePartsPanel.ts` and `blockyEditor.ts` keep their own unbind
+variables. The wardrobe keyboard shortcuts must stop when you *leave* the creator
+(`unregisterCreatorShortcuts`), while the scope is only disposed when you *re-enter*; moving them onto
+the scope would leave the shortcuts active on the home screen. Fixing that properly means disposing the
+scope on exit too, which is a behaviour change worth its own PR.
 
 ### Phase 5: typed event bus and docs
 
