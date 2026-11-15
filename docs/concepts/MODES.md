@@ -105,7 +105,7 @@ flowchart LR
 
 ## Creator submodes (`EditMode`)
 
-Submodes share **`route: creator`** and differ by `state.editMode` in `src/creator/creatorState.ts`, mirrored on `document.body.dataset.editMode`. Changes notify `creatorModeSlice` ([`src/state/creatorSlices.ts`](../../src/state/creatorSlices.ts)); see [MODELS-AND-SUBSCRIBERS.md](./MODELS-AND-SUBSCRIBERS.md).
+Submodes share **`route: creator`** and differ by `state.editMode` in `src/state/creatorState.ts`, mirrored on `document.body.dataset.editMode`. Changes notify `creatorModeSlice` ([`src/state/creatorSlices.ts`](../../src/state/creatorSlices.ts)); see [MODELS-AND-SUBSCRIBERS.md](./MODELS-AND-SUBSCRIBERS.md).
 
 ### Creator.Wardrobe (`wardrobe`)
 
@@ -218,7 +218,7 @@ flowchart TB
 | Apply route to DOM + scene | `applyRoute()` in `src/main.ts` |
 | Set creator submode + event | `setEditMode()` in `src/creator.ts` |
 | Submode constants / types | `EDIT_MODE_*`, `EditMode` in `src/creator/api.ts` |
-| Creator state default (`editMode`) | `createCreatorState()` in `src/creator/creatorState.ts` |
+| Creator state default (`editMode`) | `createCreatorState()` in `src/state/creatorState.ts` |
 | URL sync when submode changes | `syncCreatorModeUrl()` in `src/creator.ts` (only when `data-route="creator"`) |
 | Mode change notification | `creatorModeSlice.notify` in `src/state/creatorSlices.ts` |
 | Mode toggle UI | `src/creator/editorToolsPanel.ts` (Wardrobe / 3D / 2D buttons, keys 1–3) |
@@ -229,6 +229,4 @@ flowchart TB
 
 ## Related documentation
 
-- Wardrobe behavior detail: `docs/specs/CREATOR-WARDROBE-MODE-SPEC.md`
-- Creator vs viewer state: `docs/specs/CREATOR-VIEWER-STATE-MANAGEMENT.md`
 - Cursor rule (short alias map): `.cursor/rules/app-modes.mdc`

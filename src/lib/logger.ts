@@ -1,5 +1,5 @@
 /**
- * Configurable logging for the Minecraft 3D viewer.
+ * Configurable logging for the Minecraft Character Editor.
  * Supports URL params (?log=...), localStorage, and server relay.
  * See docs/LOGGING-ARCHITECTURE.md for full spec.
  */

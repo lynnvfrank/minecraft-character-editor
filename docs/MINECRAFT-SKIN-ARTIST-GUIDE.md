@@ -417,4 +417,4 @@ left_sleeve_*: (see table section 12)
 
 ---
 
-*Derived from `docs/minecraft-skin-layout-specification.md`. Use with ImageMagick, Python PIL/Pillow, or any pixel/region-based image tool.*
+*Derived from `docs/SKIN-LAYOUT.md`. Use with ImageMagick, Python PIL/Pillow, or any pixel/region-based image tool.*

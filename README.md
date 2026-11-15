@@ -1,4 +1,4 @@
-# Minecraft 3D Character Viewer
+# Minecraft Character Editor
 
 Three.js-based Minecraft character viewer and skin editor with:
 
@@ -36,7 +36,7 @@ Start the Vite development server:
 npm run dev
 ```
 
-`npm run dev` also refreshes generated asset manifests first.
+`npm run dev` runs `npm run assets:generate` first, then starts Vite. The first run takes several minutes; later runs are much faster. See [What `npm run dev` generates](#what-npm-run-dev-generates).
 
 Open the URL shown in the terminal, usually `http://localhost:5173`.
 
@@ -44,6 +44,23 @@ Useful routes:
 
 - Viewer: `http://localhost:5173/`
 - Creator: `http://localhost:5173/#/creator`
+
+## What `npm run dev` generates
+
+The repo ships source assets, and the app needs a few files derived from them. `assets:generate` builds those files in four steps:
+
+| Step | Script | What it makes | Why | Cost |
+| --- | --- | --- | --- | --- |
+| 1 | `generate-skins-manifest.js` | `public/wardrobe/skins/index.json` | The app finds skins through this list, so dropping a PNG into `public/wardrobe/skins/` is enough to add one | Instant |
+| 2 | `pack-animations.mjs` | `public/animations/animations.glb` + `index.json` | Packs the ~40 Mixamo FBX clips in `assets-src/animations/` into one GLB, so the app loads one file and doesn't ship the raw FBX clips (licensing: see `docs/ATTRIBUTION-ASSESSMENT.md`) | About a minute, **every run** (it doesn't check for changes yet) |
+| 3 | `generate-wardrobe-parts.ts` | `public/wardrobe/parts/<part>/*.png` | Crops each outfit into parts (hat, top, pants, ...) for Wardrobe mixing | A few seconds |
+| 4 | `generate-skin-previews.js` | `previews/` thumbnails for every skin and part | Starts a temporary Vite server and headless Chrome (Puppeteer), then renders each skin and part in 3D for the Wardrobe thumbnails | **Several minutes on the first run** (~1,600 images); later runs only render missing previews |
+
+The skins manifest and the animation GLB are committed, so a fresh clone runs even before step 2 finishes. The parts and previews are gitignored. If nothing has changed, `npm run dev:server` starts Vite alone and skips all four steps.
+
+### Skins
+
+About 110 sample skins are bundled in `public/wardrobe/skins/`, so the app works right away. They are for testing only and must be replaced before any public release (see `docs/ATTRIBUTION-ASSESSMENT.md`). To add your own skin, put a 64x64 PNG in that folder and rerun `npm run dev`.
 
 ## Build And Preview (Web)
 
@@ -121,33 +138,30 @@ See `docs/NPM-TOOLING.md` for a full script-by-script guide.
 ## Project Structure
 
 ```text
-minecraft-3d-viewer/
-├── electron/                     # Electron main process, preload, tray assets
-├── server/                       # API handlers and web/Electron server helpers
+minecraft-character-editor/
 ├── src/                          # Viewer, creator, animation, and UI code
+├── server/                       # Local API and web server
+├── electron/                     # Electron main process, preload, tray assets
+├── scripts/                      # Asset generators
+├── assets-src/animations/        # Source Mixamo FBX clips (not shipped)
 ├── public/
-│   ├── models/                   # FBX rigs
-│   ├── animations/               # FBX clips + generated manifest
+│   ├── models/                   # FBX rig
+│   ├── animations/               # Packed animations.glb + index.json (generated)
 │   ├── wardrobe/skins/           # Skin PNGs + generated manifests/previews
 │   └── sequences/                # Composite animation sequences
-├── scripts/                      # Manifest generation and helper scripts
-└── docs/                         # Specs and supporting documentation
+└── docs/                         # Reference documentation
 ```
 
-## Documentation Map
+## Documentation
 
-- `docs/plans/CHARACTER-CREATION-SCREEN-SPEC.md` - full creator UX and behavior spec
-- `docs/plans/CREATOR-VIEWER-STATE-MANAGEMENT.md` - state boundaries between creator/viewer
-- `docs/plans/MINECRAFT-SKIN-ARTIST-AND-AGENT-SPEC.md` - skin art process, constraints, and QA
-- `docs/plans/SPEC-electron.md` - Electron migration and architecture intent
-- `docs/minecraft-skin-layout-specification.md` - canonical skin layout and UV reference
-- `docs/LOGGING-ARCHITECTURE.md` and `docs/LOGGING-IMPLEMENTATION.md` - logging design + implementation
-- `docs/TROUBLESHOOTING.md` - debugging workflows and known issues
-- `docs/ELECTRON-PACKAGING.md` - packaging and distribution workflow
-- `docs/archive/` - historical docs retained for context
+- `docs/concepts/` - how the code works: modes, events, state models, scene, characters, configuration
+- `docs/SKIN-LAYOUT.md` - canonical 64x64 skin layout and UV reference
+- `docs/MINECRAFT-SKIN-ARTIST-GUIDE.md` - drawing skins: process, constraints, QA
+- `docs/NPM-TOOLING.md` - every npm script
+- `docs/TROUBLESHOOTING.md` and `docs/LOGGING-ARCHITECTURE.md` - debugging and logs
+- `docs/ELECTRON-PACKAGING.md` - desktop packaging and distribution
+- `docs/ATTRIBUTION-ASSESSMENT.md` - asset licensing; read before shipping
 
-## For Future Agents
+## For Agents
 
-If you are an agent working in this repository, start with:
-
-- `docs/AGENT-README.md` for scope, execution flow, command usage, platform baseline, and constraints
+Start with `AGENTS.md` (Claude Code loads it through `CLAUDE.md`).

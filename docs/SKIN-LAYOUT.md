@@ -25,7 +25,7 @@
 
 ## Dead Zones / Non-Skin Zones (Reference Diagrams)
 
-Reference diagrams (e.g., `minecraft-skin-layout-detailed.png`) often include **dead zones** — areas with black backgrounds and white text that contain meta-information, not actual skin texture data. These zones appear in layout guides for understanding and should be ignored when extracting or creating skin textures.
+Reference diagrams (e.g., `images/minecraft-skin-layout-detailed.png`) often include **dead zones** — areas with black backgrounds and white text that contain meta-information, not actual skin texture data. These zones appear in layout guides for understanding and should be ignored when extracting or creating skin textures.
 
 | Zone | Bounds (X, Y, W, H) | Purpose |
 |------|---------------------|---------|

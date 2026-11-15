@@ -1,6 +1,6 @@
 /**
  * Minecraft 64×64 skin layout pixel bounds.
- * Origin (0,0) is top-left. Per minecraft-skin-layout-specification.md
+ * Origin (0,0) is top-left. Per docs/SKIN-LAYOUT.md
  */
 
 export type Bounds = { x: number; y: number; w: number; h: number };
@@ -74,7 +74,7 @@ export const LAYER_TO_PART_DISPLAY_NAMES: Record<LayerKey, string[]> = {
 };
 
 /**
- * Dead zones / non-skin zones from reference diagrams (minecraft-skin-layout-specification.md).
+ * Dead zones / non-skin zones from reference diagrams (docs/SKIN-LAYOUT.md).
  * These areas contain meta-information (cropping instructions, legend, etc.), not skin texture.
  * Excluded from template overlay and hover info (reported as "not over skin").
  */

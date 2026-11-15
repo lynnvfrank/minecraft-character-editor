@@ -80,7 +80,7 @@ The schematic props (commit 9741365) were removed. The schematics were purchased
 
 ## 7. Skins (out of scope, noted for completeness)
 
-Bundled skins are for testing only and must be removed or replaced with legally sourced / original skins before release (see `docs/release-001.plan.md` → "Legal skins").
+Bundled skins are for testing only and must be removed or replaced with legally sourced / original skins before release.
 
 ## Release checklist
 

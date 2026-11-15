@@ -1,6 +1,6 @@
 # Electron Packaging Guide
 
-This guide explains how to package the Electron version of `minecraft-3d-viewer` so you can share it with testers or publish desktop builds.
+This guide explains how to package the Electron version of `minecraft-character-editor` so you can share it with testers or publish desktop builds.
 
 ## Overview
 
