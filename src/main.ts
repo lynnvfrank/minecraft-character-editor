@@ -87,21 +87,17 @@ import {
   preprocessSkinTexture,
   ARM_MODEL_PATHS,
   detectArmModelFromRGBA,
-  resolveArmModel,
   readArmModelSetting,
   writeArmModelSetting,
   type ArmModel,
-  type ArmModelSetting,
 } from './skin';
 import { registerArmModelPanelContext } from './creator/armModelPanel';
-import { createSubscribable } from './lib/subscribable';
+import { createPreviewCameraController } from './controllers/previewCamera';
+import { createArmModelState } from './state/armModelState';
 import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
 import { LAYER_KEYS } from './skin';
 import {
-  ensurePreviewCameraPanel,
-  removePreviewCameraPanel,
-  updatePreviewCameraInfo,
   initElectronStatus,
 } from './ui';
 import { linearToSrgb } from './viewer/captureHelpers';
@@ -339,11 +335,9 @@ function applyRoute(routeInfo?: RouteInfo): void {
   const route = info.route;
   document.body.dataset.route = route;
   if (route === 'creator') {
-    removePreviewPanelsContainer();
+    previewCamera.reset();
     previewRouteController.setPreviewRouteOverride(null);
-    activePreviewCameraPreset = null;
     lastAppliedPreviewSignature = null;
-    restoreDefaultCameraFov();
     const desiredMode = info.creatorMode ?? EDIT_MODE_WARDROBE;
     if (lastAppliedRouteInfo?.route === 'creator') {
       if (getEditMode() !== desiredMode) {
@@ -426,11 +420,9 @@ function applyRoute(routeInfo?: RouteInfo): void {
     }, 0);
   } else {
     ensureViewerFullWidthLayout();
-    removePreviewPanelsContainer();
+    previewCamera.reset();
     previewRouteController.setPreviewRouteOverride(null);
-    activePreviewCameraPreset = null;
     lastAppliedPreviewSignature = null;
-    restoreDefaultCameraFov();
     resumeHomeMode();
   }
   updateRouteButtonsState();
@@ -520,8 +512,12 @@ let lastCreatorLoadedPath: string | null = null;
 let lastAppliedPreviewSignature: string | null = null;
 let previewRouteSyncToken = 0;
 const skinCompositor = createSkinCompositor();
-let activePreviewCameraPreset: PreviewPresetKey | null = null;
-let lastPreviewCameraPanelSignature = '';
+const previewCamera = createPreviewCameraController({
+  getSceneContext: () => sceneContext,
+  defaultFov: DEFAULT_SCENE_FOV,
+  showDebugPanel: SHOW_PREVIEW_CAMERA_CONTROLS,
+  isPreviewRoute: () => getRoute() === 'preview',
+});
 const focusAutoDisableBoundControls = new WeakSet<object>();
 let lastCreatorCameraInputWasMouse = false;
 
@@ -587,35 +583,6 @@ function getPreferredPreviewBaseSkinPath(): string | null {
   return skinsList[0]?.path ?? FALLBACK_SKINS[0]?.path ?? null;
 }
 
-function ensurePreviewPanelsContainer(): HTMLElement | null {
-  const wrapper = document.getElementById('creator-view-wrapper');
-  if (!wrapper) return null;
-
-  let container = document.getElementById('preview-lower-right-panels');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'preview-lower-right-panels';
-    container.className = 'preview-lower-right-panels';
-    wrapper.appendChild(container);
-  }
-
-  let group = document.getElementById('preview-right-panels-group');
-  if (!group) {
-    group = document.createElement('div');
-    group.id = 'preview-right-panels-group';
-    group.className = 'preview-right-panels-group';
-    container.appendChild(group);
-  }
-
-  return group;
-}
-
-function removePreviewPanelsContainer(): void {
-  removePreviewCameraPanel();
-  document.getElementById('preview-lower-right-panels')?.remove();
-  lastPreviewCameraPanelSignature = '';
-}
-
 // -----------------------------------------------------------------------------
 // Preview route: skin composition, camera, capture
 // -----------------------------------------------------------------------------
@@ -624,81 +591,6 @@ function applyPreviewTextureFromCanvas(char: CharacterState, canvas: HTMLCanvasE
   const texture = skinCompositor.getPreviewTexture(canvas);
   applySkinToModel(char.model, texture, char.texturePreset, char.alphaMode, skinPath);
   char.currentSkin = skinPath;
-}
-
-function applyPreviewCameraPreset(previewInfo: PreviewRouteInfo): void {
-  const ctx = sceneContext;
-  if (!ctx?.camera || !ctx?.controls) return;
-  const preset = getPreviewPreset(previewInfo.cameraPreset);
-  ctx.camera.position.set(preset.cameraPosition.x, preset.cameraPosition.y, preset.cameraPosition.z);
-  ctx.controls.target.set(preset.cameraTarget.x, preset.cameraTarget.y, preset.cameraTarget.z);
-  ctx.camera.fov = preset.fov ?? DEFAULT_SCENE_FOV;
-  ctx.camera.updateProjectionMatrix();
-  ctx.controls.update();
-}
-
-function updatePreviewCameraDebugPanel(): void {
-  const ctx = sceneContext;
-  if (!SHOW_PREVIEW_CAMERA_CONTROLS || getRoute() !== 'preview' || !ctx?.camera || !ctx?.controls) return;
-  if (activePreviewCameraPreset) {
-    const preset = getPreviewPreset(activePreviewCameraPreset);
-    const matchesPreset =
-      Math.abs(ctx.camera.position.x - preset.cameraPosition.x) < 0.0005 &&
-      Math.abs(ctx.camera.position.y - preset.cameraPosition.y) < 0.0005 &&
-      Math.abs(ctx.camera.position.z - preset.cameraPosition.z) < 0.0005 &&
-      Math.abs(ctx.controls.target.x - preset.cameraTarget.x) < 0.0005 &&
-      Math.abs(ctx.controls.target.y - preset.cameraTarget.y) < 0.0005 &&
-      Math.abs(ctx.controls.target.z - preset.cameraTarget.z) < 0.0005 &&
-      Math.abs(ctx.camera.fov - (preset.fov ?? DEFAULT_SCENE_FOV)) < 0.0005;
-    if (!matchesPreset) {
-      activePreviewCameraPreset = null;
-    }
-  }
-  const signature = [
-    activePreviewCameraPreset ?? 'custom',
-    ctx.camera.position.x.toFixed(3),
-    ctx.camera.position.y.toFixed(3),
-    ctx.camera.position.z.toFixed(3),
-    ctx.controls.target.x.toFixed(3),
-    ctx.controls.target.y.toFixed(3),
-    ctx.controls.target.z.toFixed(3),
-    ctx.camera.fov.toFixed(3),
-  ].join('|');
-  if (signature === lastPreviewCameraPanelSignature) return;
-  lastPreviewCameraPanelSignature = signature;
-  updatePreviewCameraInfo({
-    activePreset: activePreviewCameraPreset,
-    position: ctx.camera.position,
-    target: ctx.controls.target,
-    fov: ctx.camera.fov,
-  });
-}
-
-function ensurePreviewCameraDebugPanel(previewInfo: PreviewRouteInfo): void {
-  if (!SHOW_PREVIEW_CAMERA_CONTROLS || getRoute() !== 'preview') {
-    removePreviewPanelsContainer();
-    return;
-  }
-  const container = ensurePreviewPanelsContainer();
-  if (!container) return;
-  ensurePreviewCameraPanel({
-    container,
-    activePreset: activePreviewCameraPreset ?? previewInfo.cameraPreset,
-    onSelectPreset: (preset) => {
-      activePreviewCameraPreset = preset;
-      applyPreviewCameraPreset({ ...previewInfo, cameraPreset: preset });
-      updatePreviewCameraDebugPanel();
-    },
-  });
-  updatePreviewCameraDebugPanel();
-}
-
-function restoreDefaultCameraFov(): void {
-  const ctx = sceneContext;
-  if (!ctx?.camera) return;
-  if (ctx.camera.fov === DEFAULT_SCENE_FOV) return;
-  ctx.camera.fov = DEFAULT_SCENE_FOV;
-  ctx.camera.updateProjectionMatrix();
 }
 
 function installPreviewCaptureRuntimeApi(): void {
@@ -733,9 +625,7 @@ async function syncPreviewRouteState(): Promise<void> {
   if (!char || !ctx?.camera || !ctx?.controls) return;
 
   const previewInfo = previewRouteController.getPreviewRouteInfo();
-  activePreviewCameraPreset = previewInfo.cameraPreset;
-  applyPreviewCameraPreset(previewInfo);
-  ensurePreviewCameraDebugPanel(previewInfo);
+  previewCamera.activate(previewInfo);
 
   if (!previewInfo.skinPath) {
     lastAppliedPreviewSignature = previewInfo.signature;
@@ -855,7 +745,7 @@ function createOnFrameUpdate() {
       }
     } else if (route === 'preview') {
       lastRouteForPreview = 'preview';
-      updatePreviewCameraDebugPanel();
+      previewCamera.update();
     } else {
       lastRouteForPreview = route;
       const char = getCharacter(getPrimaryCharacterId());
@@ -1069,26 +959,24 @@ export async function captureCreator3DPartThumbnail(
 // Arm model (slim / classic): user setting + auto-detect from the current skin
 // -----------------------------------------------------------------------------
 
-let armModelSetting: ArmModelSetting = readArmModelSetting();
-let detectedArmModel: ArmModel = 'slim';
-const armModelSlice = createSubscribable();
+const armModelState = createArmModelState({
+  initialSetting: readArmModelSetting(),
+  persist: writeArmModelSetting,
+});
 
-function getResolvedArmModel(): ArmModel {
-  return resolveArmModel(armModelSetting, detectedArmModel);
-}
-
-function applyArmModel(): void {
-  armModelSlice.notify();
+/** Swap the primary character's rig when the resolved arm model changes. */
+function applyArmModelToCharacter(): void {
   if (!characterController) return;
   const char = getCharacter(getPrimaryCharacterId());
   if (!char) return;
-  const path = ARM_MODEL_PATHS[getResolvedArmModel()];
+  const path = ARM_MODEL_PATHS[armModelState.getResolved()];
   if (char.modelPath === path) return;
   void characterController.setModel(char.id, path).then(() => {
     creatorPreviewDirty = true;
     lastAppliedPreviewSignature = null;
   });
 }
+armModelState.subscribe(applyArmModelToCharacter);
 
 function detectArmModelFromCanvas(canvas: HTMLCanvasElement): ArmModel | null {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -1111,20 +999,14 @@ async function detectArmModelFromPath(path: string): Promise<ArmModel | null> {
 }
 
 function setDetectedArmModel(model: ArmModel | null): void {
-  if (!model || model === detectedArmModel) return;
-  detectedArmModel = model;
-  applyArmModel();
+  armModelState.setDetected(model);
 }
 
 registerArmModelPanelContext({
-  getSetting: () => armModelSetting,
-  getResolved: getResolvedArmModel,
-  setSetting: (setting) => {
-    armModelSetting = setting;
-    writeArmModelSetting(setting);
-    applyArmModel();
-  },
-  subscribe: (cb) => armModelSlice.subscribe(cb),
+  getSetting: armModelState.getSetting,
+  getResolved: armModelState.getResolved,
+  setSetting: armModelState.setSetting,
+  subscribe: armModelState.subscribe,
 });
 
 // -----------------------------------------------------------------------------
@@ -1186,7 +1068,7 @@ async function main(): Promise<void> {
     highlightActiveButton: (charId, action) => viewerUIController.highlightActiveButton(charId, action),
     highlightActiveSkin: (charId, path) => {
       viewerUIController.highlightActiveSkin(charId, path);
-      if (armModelSetting === 'auto') void detectArmModelFromPath(path).then(setDetectedArmModel);
+      if (armModelState.isAuto()) void detectArmModelFromPath(path).then(setDetectedArmModel);
     },
     useDebugTexture: USE_DEBUG_TEXTURE,
     logModelInfo: LOG_MODEL_INFO,
@@ -1249,9 +1131,7 @@ async function main(): Promise<void> {
     creatorPoseController.snapCameraToCreatorView();
   } else if (getRoute() === 'preview') {
     const previewInfo = previewRouteController.getPreviewRouteInfo();
-    activePreviewCameraPreset = previewInfo.cameraPreset;
-    applyPreviewCameraPreset(previewInfo);
-    ensurePreviewCameraDebugPanel(previewInfo);
+    previewCamera.activate(previewInfo);
   }
 
   let skins: SkinEntry[];
@@ -1377,13 +1257,13 @@ async function main(): Promise<void> {
   }
 
   const initialSkin = skins.find((skin) => skin.path === FALLBACK_SKINS[0]?.path) ?? skins[0]!;
-  detectedArmModel = (await detectArmModelFromPath(initialSkin.path)) ?? detectedArmModel;
-  armModelSlice.notify(); // the creator panel may already be showing the pre-detection default
+  armModelState.setDetected(await detectArmModelFromPath(initialSkin.path));
+  armModelState.notify(); // the creator panel may already be showing the pre-detection default
   const config = buildCharacterConfig(
     initialSkin.path,
     animations,
     undefined,
-    ARM_MODEL_PATHS[getResolvedArmModel()]
+    ARM_MODEL_PATHS[armModelState.getResolved()]
   );
   characterController.loadCharacter(config, skins);
   if (getRoute() === 'creator') {

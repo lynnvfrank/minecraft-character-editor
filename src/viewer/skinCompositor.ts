@@ -56,6 +56,40 @@ export function createPixelSkinTexture(canvas: HTMLCanvasElement): THREE.CanvasT
   return tex;
 }
 
+/**
+ * Zero the alpha of every hidden layer region in a square RGBA buffer of side `size`
+ * (64-pixel skin scaled up by size/64). For layers with L/R parts, bounds[0] is R and bounds[1] is L.
+ * Pure: no DOM, unit-tested in skinCompositor.test.ts.
+ */
+export function maskHiddenLayerRegions(
+  data: Uint8ClampedArray,
+  size: number,
+  layerVisible: LayerVisibleState,
+  layerPartVisible: LayerPartVisibleState
+): void {
+  const scale = size / 64;
+  for (const layerKey of TEXTURE_LAYER_KEYS) {
+    const bounds = SKIN_LAYER_BOUNDS[layerKey];
+    if (!bounds) continue;
+    const layerHidden = layerVisible[layerKey] === false;
+    const parts = layerPartVisible[layerKey];
+    for (let i = 0; i < bounds.length; i++) {
+      const b = bounds[i]!;
+      const partHidden = isLayerWithParts(layerKey) ? (i === 0 ? parts?.R === false : parts?.L === false) : false;
+      if (!layerHidden && !partHidden) continue;
+      const x0 = Math.floor(b.x * scale);
+      const y0 = Math.floor(b.y * scale);
+      const x1 = Math.min(Math.ceil((b.x + b.w) * scale), size);
+      const y1 = Math.min(Math.ceil((b.y + b.h) * scale), size);
+      for (let py = y0; py < y1; py++) {
+        for (let px = x0; px < x1; px++) {
+          data[(py * size + px) * 4 + 3] = 0;
+        }
+      }
+    }
+  }
+}
+
 /** Holds one scratch canvas + texture pair, recreating the canvas when the size changes. */
 export function createSkinCompositor() {
   let maskCanvas: HTMLCanvasElement | null = null;
@@ -72,8 +106,6 @@ export function createSkinCompositor() {
   ): HTMLCanvasElement | null {
     const sourceSize = getImageSourceSize(source);
     if (!sourceSize) return null;
-    const scale = workSize / 64;
-
     if (!maskCanvas || maskCanvas.width !== workSize || maskCanvas.height !== workSize) {
       maskCanvas = document.createElement('canvas');
       maskCanvas.width = workSize;
@@ -86,33 +118,8 @@ export function createSkinCompositor() {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(source, 0, 0, sourceSize, sourceSize, 0, 0, workSize, workSize);
     const imageData = ctx.getImageData(0, 0, workSize, workSize);
-    const data = imageData.data;
 
-    for (const layerKey of TEXTURE_LAYER_KEYS) {
-      const bounds = SKIN_LAYER_BOUNDS[layerKey];
-      if (!bounds) continue;
-      const layerHidden = layerVisible[layerKey] === false;
-      const parts = layerPartVisible[layerKey];
-      for (let i = 0; i < bounds.length; i++) {
-        const b = bounds[i]!;
-        const side: 'L' | 'R' = i === 0 ? 'R' : 'L';
-        const partHidden = isLayerWithParts(layerKey)
-          ? side === 'R'
-            ? parts?.R === false
-            : parts?.L === false
-          : false;
-        if (!layerHidden && !partHidden) continue;
-        const x0 = Math.floor(b.x * scale);
-        const y0 = Math.floor(b.y * scale);
-        const x1 = Math.min(Math.ceil((b.x + b.w) * scale), workSize);
-        const y1 = Math.min(Math.ceil((b.y + b.h) * scale), workSize);
-        for (let py = y0; py < y1; py++) {
-          for (let px = x0; px < x1; px++) {
-            data[(py * workSize + px) * 4 + 3] = 0;
-          }
-        }
-      }
-    }
+    maskHiddenLayerRegions(imageData.data, workSize, layerVisible, layerPartVisible);
     ctx.putImageData(imageData, 0, 0);
     return maskCanvas;
   }

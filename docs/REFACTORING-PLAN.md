@@ -44,10 +44,13 @@ Each phase is one PR that leaves the app working. Verify with typecheck, tests, 
 
 Move each `// ---` section of `main.ts` into a module that owns its state through a factory:
 
-- [x] Skin texture composition → `src/viewer/skinCompositor.ts` (`createSkinCompositor`). Done in this branch.
-- [ ] Preview route sync, camera preset and capture API → `src/controllers/previewRouteRuntime.ts`
-- [ ] Arm model setting/detection (`armModelSetting`, `detectedArmModel`, `armModelSlice`) → a state slice
-      in `src/state/armModel.ts` plus `src/controllers/armModel.ts`
+- [x] Skin texture composition → `src/viewer/skinCompositor.ts`; the pixel masking is a pure
+      `maskHiddenLayerRegions` with tests.
+- [x] Preview camera presets + debug panel → `src/controllers/previewCamera.ts` (tests for preset matching
+      and signatures). `previewRoute.ts` URL parsing now has tests too.
+- [ ] Preview route skin sync and capture API (`syncPreviewRouteState`, `installPreviewCaptureRuntimeApi`)
+      → `src/controllers/previewRouteRuntime.ts`
+- [x] Arm model setting/detection → `src/state/armModelState.ts` (tested); `main.ts` subscribes to swap the rig.
 - [ ] Creator 3D preview texture and dirty flag → `src/controllers/creatorPreview.ts`
 - [ ] `createOnFrameUpdate` (~225 lines) → merge into `controllers/animationLoop.ts`
 - [ ] `applyRoute` + transition buttons → `controllers/router.ts` driven by the mode machine
@@ -92,6 +95,16 @@ interface Panel {
   type-checked per event.
 - Update `TAXONOMY.md` with the dependency rules above and add a lint check (e.g. `eslint-plugin-boundaries`
   or a small `node:test` that scans imports) so `viewer/` can't import `creator/`.
+
+## Testing as we go
+
+Every extraction should leave a pure core with a `*.test.ts` beside it (`node:test`, run by `npm test`).
+Tests run in Node without a DOM, so:
+
+- Put pixel/math/state logic in functions that take plain data (`Uint8ClampedArray`, `{x,y,z}`, strings).
+- Import specific modules (`../viewer/previewPresets`), not barrels (`../viewer`, `../ui`): the barrels pull
+  in `.svg` imports and three.js scene code that Node can't load.
+- Keep DOM/three.js glue thin and cover it with the browser check instead.
 
 ## Order and risk
 
