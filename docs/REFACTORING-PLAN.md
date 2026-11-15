@@ -87,12 +87,23 @@ them had no tests and was mixed with DOM code. Remaining work of that kind, for 
   pure transition rules (save/restore layers, which panels to show) into a tested function.
 - `colorActions` / swatches: same treatment as layer visibility.
 
-### Phase 3: split the big feature modules
+### Phase 3: pull the pure rules out of the big feature modules (done)
 
-- `blockyEditor.ts` → `canvasRenderer.ts`, `pointerInput.ts`, `paintOps.ts` (pure, tested on `ImageData`).
-- `animation/manager.ts` → `clipLibrary.ts` (loading), `sequencer.ts` (steps, testable without three.js),
-  `turning.ts` (turn strategies), with `manager.ts` composing them.
-- `wardrobe.ts` → data/selection model in `state/`, panel in `creator/wardrobe/`.
+Each module kept its DOM / three.js code; the rules it applies moved to a pure, tested module beside it.
+
+- [x] `animation/manager.ts` → `animation/wander.ts`: angle wrap/lerp, smoothstep, waypoint placement
+      in the camera trapezoid, and wander-target choice (13 tests).
+- [x] `creator/blockyEditor.ts` → `creator/paintMask.ts`: visible regions, focused 2D crop, layer under a
+      skin pixel, selection/lock painting rules, template labels (12 tests).
+- [x] `creator/wardrobe.ts` → `creator/wardrobeSelection.ts`: default selections, per-part composite step,
+      paint order, mutually exclusive composite clears (11 tests).
+
+Result: tests 104 → 139. Line counts moved less than in Phases 1–2 (blockyEditor 1326 → ~1220,
+manager 854 → ~800, wardrobe 694 → ~580): what's left in them is DOM/WebGL code that only a browser can test.
+
+**Not done, worth doing next:** split `blockyEditor.ts` further into grid building, rulers/template
+rendering and pointer input (it still mixes all three); and `animation/manager.ts`'s walk/turn phase
+machine (`tick`, `playAnimationForDuration`), which needs a fake clock and mixer to test.
 
 ### Phase 4: a common panel interface
 
