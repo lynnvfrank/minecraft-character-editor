@@ -4,6 +4,9 @@ Orientation for coding agents (and humans) working in this repo.
 
 ## What this is
 
+The app is named **Blockygotchi** in its UI and builds; "Minecraft Character Editor" is only the repo/package name.
+Never put "Minecraft" in user-facing product names (trademark; see `docs/ATTRIBUTION-ASSESSMENT.md`).
+
 A Minecraft-style character app built with Three.js, TypeScript and Vite:
 
 - **Viewer** (`#/`): 3D character with skins, animations and sequences.

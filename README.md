@@ -1,5 +1,7 @@
 # Minecraft Character Editor
 
+The app itself is named **Blockygotchi**: that's the name in the tab title, About panel and desktop build. The repo name only describes the project. "Minecraft" stays out of the product name because it is a trademark (see `docs/ATTRIBUTION-ASSESSMENT.md`).
+
 Three.js-based Minecraft character viewer and skin editor with:
 
 - a 3D viewer with skins, animations, and sequences

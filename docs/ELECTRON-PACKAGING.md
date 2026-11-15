@@ -44,8 +44,8 @@ What they do:
 
 The `package.json` Electron build config currently includes:
 
-- `appId`: `com.minecraft-3d-viewer.app`
-- `productName`: `3D Character Viewer`
+- `appId`: see `build.appId` in `package.json`
+- `productName`: `Blockygotchi`
 - output directory: `release/`
 - macOS targets: `dmg`, `zip`
 - Windows targets: `nsis`, `portable`
