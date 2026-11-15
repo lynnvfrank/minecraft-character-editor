@@ -20,7 +20,9 @@ npm run build
 2. Load the screen you changed in a browser and check the console. Typecheck doesn't catch rendering bugs.
    - Viewer: `http://localhost:5173/`
    - Creator: `http://localhost:5173/#/creator`. Routing is hash-based; `/creator` without the `#` won't open the creator.
-3. If the scene is empty, check that `assets:generate` finished before you blame the code.
+   - Preview: query params go *before* the hash, e.g. `http://localhost:5173/?skin=/wardrobe/skins/<file>.png&part=head#/preview`.
+3. If the scene or the wardrobe libraries are empty, check that `assets:generate` finished before you blame the code.
+   A fresh git worktree has no generated assets; run it there too.
 
 ## Things that will trip you up
 
@@ -33,8 +35,15 @@ npm run build
   `scripts/blender_build_runningboy_slim.py` (Blender 3.6, `--background --python`). Regenerate it; don't edit it by hand.
 - **Creator state** goes through observable slices in `src/state/`. Subscribe to them; don't poke the DOM from
   other panels. See `docs/concepts/MODELS-AND-SUBSCRIBERS.md` and `docs/concepts/EVENT-SYSTEM.md`.
+- **Creator panels** are listed in `buildCreatorPanels` (`src/creator.ts`) as `CreatorPanel`s and receive a
+  `DisposableScope`. Register every subscription and document/window listener on that scope, or it will stack up
+  each time the creator is re-entered. Which panels show in which mode is `MODE_PANEL_CONFIGS` in `src/creator/modePanels.ts`.
+- **Bus events** must be added to both `APP_EVENTS` and `AppEventMap` in `src/events/appEvents.ts`; typecheck fails otherwise.
 - **Import rules** between `src/` folders are enforced by `src/architecture.test.ts`; see
   `docs/concepts/TAXONOMY.md` before adding a cross-folder import.
+- **Unit tests run in Node with no DOM.** Keep rules in pure modules and import the specific file
+  (`../viewer/previewPresets`), not a barrel (`../viewer`, `../ui`): barrels pull in `.svg` imports and fail with
+  `SyntaxError: Unexpected token '<'`.
 - **Logging** is opt-in per system via URL, e.g. `?log=animation:debug`. The dev server prints the full list on start.
 - **Naming and licensing.** Never put "Minecraft" in user-facing names (trademark). The bundled skins and Mixamo
   clips are for testing only. Read `docs/ATTRIBUTION-ASSESSMENT.md` before adding or shipping assets.

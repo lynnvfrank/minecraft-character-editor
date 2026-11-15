@@ -15,7 +15,7 @@ The scene context (`SceneContext`) is the single object that owns:
 - The characters map (per-character model, mixer, actions)
 - The DOM container element that hosts the canvas
 
-All scene access flows through `sceneContext` (or `getSceneContext()`) so that initialization and route logic stay consistent. See **TAXONOMY**: scene lives at the controllers/viewer boundary—`main.ts` orchestrates, `viewer/` owns scene creation.
+All scene access flows through the app context (`app.get('scene')`, or `getSceneContext()` in `main.ts`) so that initialization and route logic stay consistent. See **TAXONOMY**: scene lives at the controllers/viewer boundary—`main.ts` orchestrates, `viewer/` owns scene creation.
 
 ---
 
@@ -31,7 +31,7 @@ main() → initViewerScene(container, params) → SceneContext
 - **Factory:** `initViewerScene` from `src/viewer/scene.ts`
 - **Container:** `#three-canvas-container` DOM element
 
-After creation, `sceneContext` is stored at module level in `main.ts` and populated before any character load or animation loop runs.
+After creation it is registered with `app.provide('scene', …)` on the app context (`src/controllers/appContext.ts`), before any character load or animation loop runs. Other startup services (`characters`, `animation`, `creatorPose`, …) are provided the same way.
 
 ---
 
@@ -88,7 +88,7 @@ flowchart TB
 
 ## How to add a character
 
-1. Ensure `sceneContext` is initialized (after `main()` has run).
+1. Ensure the scene is provided (after `main()` has run).
 2. Build a `CharacterConfig` (model path, skin path, animations, etc.).
 3. Call `loadCharacter(config, skins)` from `main.ts`. It:
    - Loads the FBX model
@@ -103,16 +103,16 @@ flowchart TB
 
 | Need | Use |
 |------|-----|
-| Scene, camera, renderer, controls | `getSceneContext()` (throws if not initialized) |
-| Check if scene exists | `sceneContext` (may be null before `main()`) |
+| Scene, camera, renderer, controls | `app.get('scene')` / `getSceneContext()` (throws if not provided yet) |
+| Check if scene exists | `app.tryGet('scene')` (undefined before `main()` provides it) |
 | Get a character by id | `getCharacter(id)` (returns `CharacterState \| undefined`) |
-| Update controls (e.g. recreate OrbitControls) | `sceneContext.controls = recreateOrbitControls(...)` |
+| Update controls (e.g. recreate OrbitControls) | `app.get('scene').controls = recreateOrbitControls(...)` |
 
-Functions that run before `main()` completes (e.g. early `applyRoute` from hash init) should guard with `if (!sceneContext) return` before accessing scene state.
+Functions that run before `main()` completes (e.g. early `applyRoute` from hash init) should guard with `if (!app.tryGet('scene')) return` before accessing scene state. Controllers outside `main.ts` receive a `getSceneContext: () => SceneContext | null` dependency instead of reading the context directly.
 
 ---
 
 ## Reference: TAXONOMY
 
 - **viewer:** 3D scene, skin application, orbit controls. `SceneContext` and `initScene` live here.
-- **controllers / main.ts:** Orchestrates scene creation, character load, mode machine, and `applyRoute`. Owns `sceneContext` and passes it (or getters) to services and UI.
+- **controllers / main.ts:** Orchestrates scene creation, character load, mode machine, and `applyRoute`. Provides the scene on the app context and passes getters to controllers, services and UI.

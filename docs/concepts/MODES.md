@@ -25,7 +25,7 @@ The same idea is often called **view**, **mode**, **scene**, or **world** (espec
 
 ## Top-level routes (`AppRoute`)
 
-The shell is driven by **hash routing** (`hashchange` → `applyRoute()` in `src/main.ts`). `document.body.dataset.route` mirrors the active route.
+The shell is driven by **hash routing** (`hashchange` → `applyRoute()` in `src/main.ts` → `router.apply()` in `src/controllers/router.ts`). `document.body.dataset.route` mirrors the active route.
 
 ### Home (`viewer`)
 
@@ -39,8 +39,8 @@ The shell is driven by **hash routing** (`hashchange` → `applyRoute()` in `src
 | **Enters from** | Creator (Home button / `transitionCreatorToViewer`), Preview (`#/`) |
 | **Exits to** | Creator (Design button → `transitionViewerToCreator` → camera move → `#/creator/...`), Preview (`#/preview`) |
 | **Behavior notes** | Full-width `#app` in `creator-view-wrapper`; animation manager + character AI can run; skin/animation selectors in controls bar |
-| **Core code** | `src/main.ts` (`getRouteInfo`, `applyRoute`, `resumeHomeMode`, character load, animation loop) |
-| **Styles** | `src/style.css` — `body[data-route="viewer"]` (layout, floating home hidden, lower-left panels) |
+| **Core code** | `src/controllers/router.ts` (viewer branch), `src/main.ts` (`resumeHomeMode`, character load, startup), `src/controllers/animationLoop.ts` |
+| **Styles** | `src/styles/` — `body[data-route="viewer"]` (layout, floating home hidden, lower-left panels) |
 | **Resources** | `/wardrobe/skins/index.json`, `/animations/index.json`, `/sequences/index.json`, `RunningboyRig.fbx`, skin PNGs |
 
 ```mermaid
@@ -68,8 +68,8 @@ flowchart LR
 | **Enters from** | Home (Design), Preview (nav to creator hash) |
 | **Exits to** | Home (`transitionCreatorToViewer`: optional `data-creator-exiting` on body, delay, then `#/`) |
 | **Behavior notes** | `initCreator()` on first entry to route; shortcuts unregistered when leaving; leaving forces `navigate` tool and normalizes layer state for non-edit |
-| **Core code** | `src/main.ts` (`applyRoute`, `transitionViewerToCreator`, `transitionCreatorToViewer`, `updateCreator3DViewPlacement`, preview texture sync); `src/creator.ts` (`setEditMode`, `getEditMode`, skin canvas, wardrobe); `src/creator/*.ts` (panels, brush, block editor) |
-| **Styles** | `src/style.css` — `body[data-route="creator"]`, `[data-edit-mode="..."]` for canvas visibility/layout |
+| **Core code** | `src/controllers/router.ts` (creator branch), `src/controllers/transitions/creatorTransitionHandler.ts` (Design/Home transitions), `src/main.ts` (`updateCreator3DViewPlacement`), `src/controllers/creatorPreview.ts` (2D canvas → 3D texture sync); `src/creator.ts` (`setEditMode`, `getEditMode`, skin canvas, wardrobe); `src/creator/*.ts` (panels, brush, block editor) |
+| **Styles** | `src/styles/` — `body[data-route="creator"]`, `[data-edit-mode="..."]` for canvas visibility/layout |
 | **Resources** | Same model/skins as Home; wardrobe UI uses `public/wardrobe/skins/` and wardrobe parts indices as built by repo scripts |
 
 ```mermaid
@@ -97,8 +97,8 @@ flowchart LR
 | **Enters from** | Home, Creator (hash change) |
 | **Exits to** | Home (`#/`), Creator (`#/creator/...`) |
 | **Behavior notes** | Character locked to idle; creator shortcuts off; optional preview panels; FOV / camera preset driven by preview config |
-| **Core code** | `src/main.ts` (`applyRoute` preview branch, `syncPreviewRouteState`, capture helpers in `src/viewer/capture3DThumbnail.ts` if used) |
-| **Styles** | `src/style.css` — `body[data-route="preview"]` (shared with viewer for some chrome hiding) |
+| **Core code** | `src/controllers/router.ts` (preview branch), `src/controllers/previewRouteRuntime.ts` (skin sync, `window.__previewCapture`), `src/controllers/previewCamera.ts` (presets, debug panel), `src/viewer/thumbnailCapture.ts` (3D thumbnails) |
+| **Styles** | `src/styles/` — `body[data-route="preview"]` (shared with viewer for some chrome hiding) |
 | **Resources** | Preview base skins, composed skin paths as configured for capture |
 
 ---
@@ -137,7 +137,7 @@ Submodes share **`route: creator`** and differ by `state.editMode` in `src/state
 | **Enters from** | Creator.Wardrobe, Creator.2D |
 | **Exits to** | Creator.Wardrobe, Creator.2D, Home |
 | **Behavior notes** | Idle pose **frozen at frame 0** for stable painting (`lockCharacterFrozenForPainting`). Layer visibility/lock affect brush and mesh visibility. 3D view in **main** area. Orbit controls adjusted for creator (`updateOrbitControlsForEditMode`). |
-| **Core code** | `src/creator.ts`, `src/creator/blockyEditor.ts`, `src/creator/brush.ts`, `src/viewer/controls.ts` (subscribes to edit mode), `src/viewer/skinApplication.ts`, `src/main.ts` (`updateCreatorPreviewTexture`, `applyCreatorLayerVisibility`) |
+| **Core code** | `src/creator.ts`, `src/creator/blockyEditor.ts`, `src/creator/brush.ts`, `src/viewer/controls.ts` (subscribes to edit mode), `src/viewer/skinApplication.ts` (`applyCreatorLayerVisibility`), `src/controllers/creatorPreview.ts` (texture sync) |
 | **Styles** | `body[data-route="creator"][data-edit-mode="3d"] .creator-canvas-area` |
 | **Resources** | Working skin texture from creator canvas; mesh part map in `src/skin/meshPartMapping.ts` |
 
@@ -214,8 +214,8 @@ flowchart TB
 
 | Concern | Where |
 |--------|--------|
-| Parse hash → route + creator submode | `getRouteInfo()` in `src/main.ts` |
-| Apply route to DOM + scene | `applyRoute()` in `src/main.ts` |
+| Parse hash → route + creator submode | `parseHashToRouteInfo()` in `src/controllers/modes/appModeMachine.ts` |
+| Apply route to DOM + scene | `createRouter().apply()` in `src/controllers/router.ts` |
 | Set creator submode + event | `setEditMode()` in `src/creator.ts` |
 | Submode constants / types | `EDIT_MODE_*`, `EditMode` in `src/creator/api.ts` |
 | Creator state default (`editMode`) | `createCreatorState()` in `src/state/creatorState.ts` |
