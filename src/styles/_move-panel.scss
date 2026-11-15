@@ -46,6 +46,23 @@ body[data-home-exiting='1'] .move-panel {
   pointer-events: none;
 }
 
+// All moves: the right-hand twin, docked top-right like the editor's library column.
+.move-panel--right {
+  left: auto;
+  right: 0.75rem;
+  // Leave room below for the ? and day/night buttons in the bottom-right corner.
+  max-height: calc(100% - 0.75rem - 110px);
+  animation-name: creator-slide-in-right;
+
+  &.collapsed {
+    align-items: flex-end;
+  }
+}
+
+body[data-home-exiting='1'] .move-panel--right {
+  animation-name: creator-slide-out-right;
+}
+
 .move-panel-toggle {
   display: flex;
   align-items: center;
@@ -194,39 +211,6 @@ body[data-home-exiting='1'] .move-panel {
 .move-recent-empty {
   text-align: left;
   margin: 0;
-}
-
-// --- All moves / Combos drawers ----------------------------------------------
-.move-more {
-  margin-top: 0.6rem;
-
-  summary {
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: rgba(var(--fg-rgb), 0.9);
-    list-style: none;
-
-    &::-webkit-details-marker {
-      display: none;
-    }
-
-    &::before {
-      content: '▸';
-      display: inline-block;
-      width: 1em;
-      opacity: 0.6;
-      transition: transform 0.15s ease;
-    }
-  }
-
-  &[open] summary::before {
-    transform: rotate(90deg);
-  }
-
-  > .move-grid {
-    margin-top: 0.4rem;
-  }
 }
 
 @media (max-width: 640px) {

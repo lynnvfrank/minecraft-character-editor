@@ -1,6 +1,9 @@
 /**
- * Move panel (home view): walk the character around with a D-pad or the arrow/WASD keys,
- * replay recent moves, and pick from every animation and combo (sequence), each with an emoji.
+ * Home-view panels for playing with the character:
+ * - Move (left): D-pad / arrow keys / WASD to walk, plus Recent (last moves played).
+ * - All moves (right): every animation as an emoji tile, alphabetical.
+ * Combos (sequences) are built but hidden for now (SHOW_COMBOS); they'll come back as part of a
+ * record/save-your-own-moves feature.
  */
 import * as THREE from 'three';
 import type { SequenceStep } from '../animation';
@@ -27,6 +30,9 @@ export type MovePanelDeps = {
 /** How far one D-pad press walks, in world units. */
 const STEP_DISTANCE = 1.6;
 const COLLAPSED_KEY = 'movePanel.collapsed';
+const MOVES_COLLAPSED_KEY = 'movesPanel.collapsed';
+/** Combos (sequences) are hidden until the record/save-moves feature replaces them. */
+const SHOW_COMBOS = false;
 
 const RECENT_KEY = 'movePanel.recent';
 const RECENT_MAX = 6;
@@ -98,16 +104,16 @@ const HOME_SVG =
 
 type Dir = 'up' | 'down' | 'left' | 'right';
 
-function readCollapsed(): boolean {
+function readCollapsed(key: string): boolean {
   try {
-    return localStorage.getItem(COLLAPSED_KEY) === '1';
+    return localStorage.getItem(key) === '1';
   } catch {
     return false;
   }
 }
-function writeCollapsed(v: boolean): void {
+function writeCollapsed(key: string, v: boolean): void {
   try {
-    localStorage.setItem(COLLAPSED_KEY, v ? '1' : '0');
+    localStorage.setItem(key, v ? '1' : '0');
   } catch {
     /* storage unavailable: just don't remember */
   }
@@ -123,25 +129,38 @@ function button(className: string, html: string, label: string): HTMLButtonEleme
   return b;
 }
 
-export function createMovePanel(deps: MovePanelDeps) {
+/** A collapsible floating panel with the editor-panel look; returns its body to fill. */
+function makePanel(id: string, title: string, ariaLabel: string, collapsedKey: string, extraClass = '') {
   const root = document.createElement('aside');
-  root.id = 'move-panel';
-  root.className = 'move-panel';
-  root.setAttribute('aria-label', 'Move the character');
-  root.classList.toggle('collapsed', readCollapsed());
+  root.id = id;
+  root.className = `move-panel ${extraClass}`.trim();
+  root.setAttribute('aria-label', ariaLabel);
+  root.classList.toggle('collapsed', readCollapsed(collapsedKey));
 
-  // Collapsed pill / header toggle
-  const toggle = button('move-panel-toggle', '<span class="move-panel-title">Move</span><span class="move-panel-chevron" aria-hidden="true">▾</span>', 'Show or hide the Move panel');
+  const toggle = button(
+    'move-panel-toggle',
+    `<span class="move-panel-title">${title}</span><span class="move-panel-chevron" aria-hidden="true">▾</span>`,
+    `Show or hide ${title}`
+  );
   toggle.setAttribute('aria-expanded', String(!root.classList.contains('collapsed')));
   toggle.addEventListener('click', () => {
     const collapsed = !root.classList.contains('collapsed');
     root.classList.toggle('collapsed', collapsed);
     toggle.setAttribute('aria-expanded', String(!collapsed));
-    writeCollapsed(collapsed);
+    writeCollapsed(collapsedKey, collapsed);
   });
 
   const body = document.createElement('div');
   body.className = 'move-panel-body';
+  root.append(toggle, body);
+  // Same layer as the other floating panels (Design button etc.).
+  (document.getElementById('app-lower-left-panels')?.parentElement ?? document.body).appendChild(root);
+  return { root, body };
+}
+
+export function createMovePanel(deps: MovePanelDeps) {
+  const { body } = makePanel('move-panel', 'Move', 'Move the character', COLLAPSED_KEY);
+  const { body: movesBody } = makePanel('moves-panel', 'All moves', 'All moves', MOVES_COLLAPSED_KEY, 'move-panel--right');
 
   // --- D-pad ---
   const pad = document.createElement('div');
@@ -173,25 +192,17 @@ export function createMovePanel(deps: MovePanelDeps) {
   recentEmpty.className = 'move-hint move-recent-empty';
   recentEmpty.textContent = 'Moves you play show up here';
 
-  // --- All moves / Combos drawers (alphabetical) ---
-  const drawer = (title: string, open: boolean) => {
-    const d = document.createElement('details');
-    d.className = 'move-more';
-    d.open = open;
-    const summary = document.createElement('summary');
-    summary.textContent = title;
-    const grid = document.createElement('div');
-    grid.className = 'move-grid';
-    d.append(summary, grid);
-    return { d, grid };
-  };
-  const allMoves = drawer('All moves', true);
-  const combos = drawer('Combos', false);
+  body.append(pad, padHint, recentTitle, recentGrid, recentEmpty);
 
-  body.append(pad, padHint, recentTitle, recentGrid, recentEmpty, allMoves.d, combos.d);
-  root.append(toggle, body);
-  // Same layer as the other floating panels (Design button etc.).
-  (document.getElementById('app-lower-left-panels')?.parentElement ?? document.body).appendChild(root);
+  // --- Right panel: All moves (alphabetical), then Combos (hidden for now) ---
+  const movesGrid = document.createElement('div');
+  movesGrid.className = 'move-grid';
+  const combosTitle = document.createElement('h3');
+  combosTitle.className = 'move-section-title';
+  combosTitle.textContent = 'Combos';
+  const combosGrid = document.createElement('div');
+  combosGrid.className = 'move-grid';
+  movesBody.append(movesGrid, combosTitle, combosGrid);
 
   // --- Actions ---
   function takeControl() {
@@ -326,7 +337,7 @@ export function createMovePanel(deps: MovePanelDeps) {
       }))
       .sort(byLabel);
 
-    const comboTiles: Tile[] = sequences
+    const comboTiles: Tile[] = (SHOW_COMBOS ? sequences : [])
       .map((sq) => ({
         id: `combo:${sq.id}`,
         emoji: COMBO_EMOJI[sq.id] ?? '✨',
@@ -337,9 +348,9 @@ export function createMovePanel(deps: MovePanelDeps) {
 
     for (const t of [...moveTiles, ...comboTiles]) tiles.set(t.id, t);
 
-    allMoves.grid.replaceChildren(...moveTiles.map(tileButton));
-    combos.grid.replaceChildren(...comboTiles.map(tileButton));
-    combos.d.hidden = comboTiles.length === 0;
+    movesGrid.replaceChildren(...moveTiles.map(tileButton));
+    combosGrid.replaceChildren(...comboTiles.map(tileButton));
+    combosTitle.hidden = combosGrid.hidden = comboTiles.length === 0;
     renderRecent();
   }
 
