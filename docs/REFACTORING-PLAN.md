@@ -8,7 +8,7 @@ The ideas are already in the code: a layer taxonomy (`docs/concepts/TAXONOMY.md`
 
 | File | Lines | Problem |
 |---|---|---|
-| `src/main.ts` | ~1040 (was 1579) | Bootstrap, routing, preview route, creator 3D preview, arm model, frame loop, all as top-level `let`s |
+| `src/main.ts` | ~830 (was 1579) | Bootstrap, routing, preview route, creator 3D preview, arm model, frame loop, all as top-level `let`s |
 | `src/creator/blockyEditor.ts` | 1326 | Canvas painting, input, rendering in one module |
 | `src/creator.ts` | 999 | ~40 exported getters/setters: a facade over `creatorState` that bypasses the slices |
 | `src/animation/manager.ts` | 854 | Clip loading, sequencing, turning, idle logic together |
@@ -65,12 +65,27 @@ these with one `AppContext` (scene, characters, animation manager, state) that `
 to each controller. The remaining big blocks are the 3D thumbnail capture exports (~200 lines →
 `viewer/capture3DThumbnail.ts`) and `main()` itself.
 
-### Phase 2: one creator state API
+### Phase 2: AppContext and a tested creator state (done)
 
-- Replace the getter/setter exports in `src/creator.ts` with slices in `src/state/creatorSlices.ts`
-  (layer visibility, locks, focused creation, active tool, edit mode). Callers subscribe instead of polling.
-- Leave `creator.ts` as `initCreator()` + panel wiring; rename to `src/creator/index.ts` once the facade is gone.
-- Add a test per slice (like `lib/subscribable.test.ts`).
+- [x] `src/controllers/appContext.ts`: typed service registry (`provide` / `get` / `tryGet`, tested).
+      `main()` provides scene, characters, animation, creatorPose, viewerUI, transitions and characterAI.
+      The duplicate `controllerRefs` object and 13 reassigned `let` placeholders are gone.
+- [x] 3D thumbnail capture → `src/viewer/thumbnailCapture.ts`. The full-outfit and per-part captures
+      shared ~80% of their code; they now share one render path. The readPixels → ImageData flip and
+      sRGB conversion is pure and tested (`captureHelpers.ts`).
+- [x] Layer visibility split into `creator/layerVisibility.ts` (state only) and `layerVisibilityDom.ts`
+      (checkbox sync, drag-to-toggle). 16 characterization tests were written against the old code first.
+
+Result: `main.ts` ~1040 → ~830 lines, tests 80 → 104.
+
+**Changed from the original plan:** the getters/setters in `creator.ts` already write `CreatorState` and
+notify the matching slice (`setFocusedCreationEnabled` → `creatorFocusedCreationSlice`, layer setters →
+`creatorLayerSlice`, ...), so replacing them wholesale would be churn. The real gap was that the logic behind
+them had no tests and was mixed with DOM code. Remaining work of that kind, for later:
+
+- `setEditMode` in `creator.ts` mixes the mode change with wardrobe side effects and URL sync; pull the
+  pure transition rules (save/restore layers, which panels to show) into a tested function.
+- `colorActions` / swatches: same treatment as layer visibility.
 
 ### Phase 3: split the big feature modules
 
