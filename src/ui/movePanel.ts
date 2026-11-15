@@ -1,7 +1,8 @@
 /**
  * Home-view panels for playing with the character:
- * - Move (left): D-pad / arrow keys / WASD to walk, plus Recent (last moves played).
- * - All moves (right): every animation as an emoji tile, alphabetical.
+ * - Move: D-pad / arrow keys / WASD to walk, plus Recent (last 3 moves played).
+ * - All moves: every animation as an emoji tile, alphabetical.
+ * Both sit side by side in the top-left corner, like the editor's left column.
  * Combos (sequences) are built but hidden for now (SHOW_COMBOS); they'll come back as part of a
  * record/save-your-own-moves feature.
  */
@@ -35,7 +36,7 @@ const MOVES_COLLAPSED_KEY = 'movesPanel.collapsed';
 const SHOW_COMBOS = false;
 
 const RECENT_KEY = 'movePanel.recent';
-const RECENT_MAX = 6;
+const RECENT_MAX = 3;
 
 /** Emoji and a short friendly name per animation key. Unknown keys fall back to a clapperboard and the manifest label. */
 const MOVE_INFO: Record<string, { emoji: string; label: string }> = {
@@ -126,11 +127,16 @@ function button(className: string, html: string, label: string): HTMLButtonEleme
   b.innerHTML = html;
   b.title = label;
   b.setAttribute('aria-label', label);
+  // Mouse/touch clicks shouldn't leave the button focused (it would look held down).
+  // Keyboard activation (detail === 0) keeps focus for keyboard users.
+  b.addEventListener('click', (e) => {
+    if (e.detail > 0) b.blur();
+  });
   return b;
 }
 
 /** A collapsible floating panel with the editor-panel look; returns its body to fill. */
-function makePanel(id: string, title: string, ariaLabel: string, collapsedKey: string, extraClass = '') {
+function makePanel(parent: HTMLElement, id: string, title: string, ariaLabel: string, collapsedKey: string, extraClass = '') {
   const root = document.createElement('aside');
   root.id = id;
   root.className = `move-panel ${extraClass}`.trim();
@@ -153,14 +159,17 @@ function makePanel(id: string, title: string, ariaLabel: string, collapsedKey: s
   const body = document.createElement('div');
   body.className = 'move-panel-body';
   root.append(toggle, body);
-  // Same layer as the other floating panels (Design button etc.).
-  (document.getElementById('app-lower-left-panels')?.parentElement ?? document.body).appendChild(root);
+  parent.appendChild(root);
   return { root, body };
 }
 
 export function createMovePanel(deps: MovePanelDeps) {
-  const { body } = makePanel('move-panel', 'Move', 'Move the character', COLLAPSED_KEY);
-  const { body: movesBody } = makePanel('moves-panel', 'All moves', 'All moves', MOVES_COLLAPSED_KEY, 'move-panel--right');
+  // Row container in the top-left; same layer as the other floating panels (Design button etc.).
+  const row = document.createElement('div');
+  row.className = 'move-panels';
+  (document.getElementById('app-lower-left-panels')?.parentElement ?? document.body).appendChild(row);
+  const { body } = makePanel(row, 'move-panel', 'Move', 'Move the character', COLLAPSED_KEY);
+  const { body: movesBody } = makePanel(row, 'moves-panel', 'All moves', 'All moves', MOVES_COLLAPSED_KEY, 'move-panel--moves');
 
   // --- D-pad ---
   const pad = document.createElement('div');
@@ -316,7 +325,7 @@ export function createMovePanel(deps: MovePanelDeps) {
   }
 
   function renderRecent() {
-    const shown = recent.map((id) => tiles.get(id)).filter((t): t is Tile => !!t);
+    const shown = recent.map((id) => tiles.get(id)).filter((t): t is Tile => !!t).slice(0, RECENT_MAX);
     recentGrid.replaceChildren(...shown.map(tileButton));
     recentEmpty.hidden = shown.length > 0;
     recentGrid.hidden = shown.length === 0;

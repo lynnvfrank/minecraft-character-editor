@@ -3,14 +3,26 @@
 // 8px radius, small bold title, quiet buttons. Docked top-left above the Design button, like the editor's
 // left control column, and slides in/out from the left edge with the same keyframes.
 
-.move-panel {
+// Both panels sit side by side in the top-left corner, above the Design button.
+.move-panels {
   position: absolute;
   top: 0.75rem;
   left: 0.75rem;
   z-index: 20;
-  width: 250px;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
   // Leave room below for the Design button in the bottom-left corner.
   max-height: calc(100% - 0.75rem - 90px);
+}
+
+body:not([data-route='viewer']) .move-panels {
+  display: none;
+}
+
+.move-panel {
+  width: 196px;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -36,31 +48,15 @@
   }
 }
 
-body:not([data-route='viewer']) .move-panel {
-  display: none;
+// All moves: a little wider for the tile grid.
+.move-panel--moves {
+  width: 232px;
 }
 
 // Design clicked: slide out while the camera moves into the creator.
 body[data-home-exiting='1'] .move-panel {
   animation: creator-slide-out-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   pointer-events: none;
-}
-
-// All moves: the right-hand twin, docked top-right like the editor's library column.
-.move-panel--right {
-  left: auto;
-  right: 0.75rem;
-  // Leave room below for the ? and day/night buttons in the bottom-right corner.
-  max-height: calc(100% - 0.75rem - 110px);
-  animation-name: creator-slide-in-right;
-
-  &.collapsed {
-    align-items: flex-end;
-  }
-}
-
-body[data-home-exiting='1'] .move-panel--right {
-  animation-name: creator-slide-out-right;
 }
 
 .move-panel-toggle {
@@ -103,28 +99,41 @@ body[data-home-exiting='1'] .move-panel--right {
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
 
-  &:hover {
-    background: rgba(var(--fg-rgb), 0.12);
-    border-color: rgba(var(--fg-rgb), 0.3);
+  // Hover shade only on devices with a real pointer (on touch it would stick after a tap).
+  @media (hover: hover) {
+    &:hover {
+      background: rgba(var(--fg-rgb), 0.12);
+      border-color: rgba(var(--fg-rgb), 0.3);
+    }
   }
 
+  // Darker only while actually held, or for the brief flash after a key press.
   &:active,
   &.pressed {
     background: rgba(var(--fg-rgb), 0.18);
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(var(--fg-rgb), 0.45);
+    outline-offset: 1px;
   }
 }
 
 // --- D-pad -----------------------------------------------------------------
 .move-dpad {
   display: grid;
-  grid-template-columns: repeat(3, 40px);
-  grid-template-rows: repeat(3, 40px);
+  grid-template-columns: repeat(3, 34px);
+  grid-template-rows: repeat(3, 34px);
   gap: 4px;
   justify-content: center;
   width: max-content;
   margin: 0.15rem auto 0;
   // Round pad behind the arrows.
-  padding: 8px;
+  padding: 6px;
   border-radius: 50%;
   background: rgba(var(--fg-rgb), 0.06);
 }
@@ -154,7 +163,7 @@ body[data-home-exiting='1'] .move-panel--right {
 }
 
 .move-section-title {
-  margin: 0.7rem 0 0.4rem;
+  margin: 0.5rem 0 0.3rem;
   font-size: 0.8rem;
   font-weight: 600;
   color: rgba(var(--fg-rgb), 0.9);
@@ -164,7 +173,7 @@ body[data-home-exiting='1'] .move-panel--right {
 .move-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
+  gap: 3px;
 }
 
 .move-tile {
@@ -173,10 +182,10 @@ body[data-home-exiting='1'] .move-panel--right {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
-  height: 60px;
-  padding: 0.3rem 0.2rem;
+  height: 48px;
+  padding: 0.2rem 0.15rem;
 
   &.pressed .move-tile-icon {
     animation: move-pop 0.45s ease;
@@ -184,19 +193,19 @@ body[data-home-exiting='1'] .move-panel--right {
 }
 
 .move-tile-icon {
-  font-size: 1.3rem;
-  line-height: 1.2;
+  font-size: 1.1rem;
+  line-height: 1.15;
 }
 
-// Up to two lines, then ellipsis; the full name is in the tooltip.
+// One line, then ellipsis; the full name is in the tooltip.
 .move-tile-label {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
   max-width: 100%;
-  font-size: 0.64rem;
-  line-height: 1.15;
+  font-size: 0.62rem;
+  line-height: 1.2;
   text-align: center;
   overflow-wrap: break-word;
   color: rgba(var(--fg-rgb), 0.8);
@@ -213,8 +222,9 @@ body[data-home-exiting='1'] .move-panel--right {
   margin: 0;
 }
 
+// Narrow screens: stack the two panels instead of side by side.
 @media (max-width: 640px) {
-  .move-panel {
-    width: 220px;
+  .move-panels {
+    flex-direction: column;
   }
 }
