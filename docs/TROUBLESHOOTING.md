@@ -71,12 +71,10 @@ location.reload();
 | `npm run dev:log:info` | All systems at info | All systems at info, relayed to server |
 | `npm run dev:log:debug` | All systems at debug | All systems at debug, relayed to server |
 | `npm run dev:log:trace` | All systems at trace | All systems at trace (throttled), relayed to server |
-| `npm run dev:debug` | Same as dev:log:debug | — |
-| `npm run dev:trace` | Same as dev:log:trace | — |
 
 **Usage:**
 
-1. Run `npm run dev:log` (or `dev:debug` / `dev:trace`)
+1. Run `npm run dev:log` (or `dev:log:debug` / `dev:log:trace`)
 2. The terminal prints a ready-to-use URL with the same logging parameters. Open it in your browser (or Cursor Simple Browser — see below).
 3. Logs appear in both the **browser DevTools console** and the **terminal** where npm runs
 
@@ -118,7 +116,7 @@ LOG_RELAY=1 LOG_LEVEL=debug LOG_SYSTEMS=* npm run dev
 
 ## Common Issues
 
-- **No logs in terminal** → Ensure `npm run dev:log` (or `dev:debug` / `dev:trace`) and `?logRelay=1` in URL, or `localStorage.setItem('viewer-log-relay', 'true')`
+- **No logs in terminal** → Ensure `npm run dev:log` (or `dev:log:debug` / `dev:log:trace`) and `?logRelay=1` in URL, or `localStorage.setItem('viewer-log-relay', 'true')`
 - **Too much output** → Use `?log=animation:info` to limit systems/levels
 - **Animation not playing** → Check `?log=animation,stateMachine,messaging:trace` for sequence steps and fade events
 - **Character not moving** → Check `?log=animation:info` for walk start/end

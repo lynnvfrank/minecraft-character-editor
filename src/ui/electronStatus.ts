@@ -8,8 +8,6 @@ declare global {
   interface Window {
     electronAPI?: {
       getStatus: () => Promise<{ running: boolean; port: number; url: string; isFirstRun?: boolean }>;
-      startServer: () => Promise<{ port: number; url: string }>;
-      stopServer: () => Promise<{ port: number }>;
     };
   }
 }

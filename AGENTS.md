@@ -36,7 +36,7 @@ npm run build
 - **Logging** is opt-in per system via URL, e.g. `?log=animation:debug`. The dev server prints the full list on start.
 - **Naming and licensing.** Never put "Minecraft" in user-facing names (trademark). The bundled skins and Mixamo
   clips are for testing only. Read `docs/ATTRIBUTION-ASSESSMENT.md` before adding or shipping assets.
-- **Electron** (`npm run electron:dev`) serves the built app from an embedded Express/Socket.IO server on port 5190
+- **Electron** (`npm run electron`) serves the built app from an embedded Express/Socket.IO server on port 5190
   (a free port if that's taken). Closing the window quits on Windows/Linux; on macOS it hides to the dock/tray.
   It's single-instance: a second launch focuses the first window.
 

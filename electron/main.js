@@ -196,12 +196,4 @@ ipcMain.handle('getStatus', () => ({
   isFirstRun
 }));
 
-ipcMain.handle('startServer', async () => {
-  await startAppServer();
-  return { port: serverPort, url: `http://localhost:${serverPort}` };
-});
 
-ipcMain.handle('stopServer', async () => {
-  await stopAppServer();
-  return { port: serverPort };
-});
