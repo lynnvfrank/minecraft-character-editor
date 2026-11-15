@@ -1,24 +1,21 @@
-node_modules
-.DS_Store
+# Dependencies
+node_modules/
 package-lock.json
-dist
-*.code-workspace
+
+# Build output
+dist/
+release/
 *.tgz
-release
 
-# Cursor generated files
-.cursor/*.log
-
-# Generated wardrobe assets (keep source skins in wardrobe/skins)
+# Generated wardrobe assets (source skins live in public/wardrobe/skins/)
 public/wardrobe/parts/
 public/wardrobe/skins/previews/
 
-# Guard Ruby gems
-scripts/guard/vendor/
-scripts/guard/.bundle/
-
-# Python cache
-scripts/__pycache__/
-# Local environment (personal tooling)
+# Local and editor files
 .env
+.DS_Store
+*.code-workspace
+.vscode/
+.cursor/
 .foundry/
+.claude/settings.local.json

@@ -36,9 +36,8 @@ Licenses confirmed from installed `node_modules/*/package.json`.
 
 ### Dev / tooling only (not shipped)
 
-vite (MIT), sass (MIT), typescript (Apache-2.0), tsx (MIT), electron-builder (MIT), puppeteer (Apache-2.0), canvas (MIT), cross-env (MIT), chokidar (MIT), turbowatch (BSD-3-Clause), @qdrant/js-client-rest (Apache-2.0).
+vite (MIT), sass (MIT), typescript (Apache-2.0), tsx (MIT), electron-builder (MIT), puppeteer (Apache-2.0), canvas (MIT), cross-env (MIT).
 
-**Note:** `chokidar`, `turbowatch` and `@qdrant/js-client-rest` are listed under `dependencies` but are only used by scripts. Moving them to `devDependencies` keeps them out of the packaged app.
 
 **Action:** none beyond the About panel listing. All are permissive; MIT/BSD require keeping the copyright notice, which the full license text in `node_modules` and the About panel cover.
 
