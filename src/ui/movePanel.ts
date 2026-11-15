@@ -1,6 +1,6 @@
 /**
  * Move panel (home view): walk the character around with a D-pad or the arrow/WASD keys,
- * and trigger tricks (backflip, dance, wave...) plus every other animation and sequence.
+ * replay recent moves, and pick from every animation and combo (sequence), each with an emoji.
  */
 import * as THREE from 'three';
 import type { SequenceStep } from '../animation';
@@ -28,16 +28,68 @@ export type MovePanelDeps = {
 const STEP_DISTANCE = 1.6;
 const COLLAPSED_KEY = 'movePanel.collapsed';
 
-const TRICKS: { key: string; label: string; icon: string }[] = [
-  { key: 'backflip', label: 'Flip', icon: '🤸' },
-  { key: 'jump', label: 'Jump', icon: '🦘' },
-  { key: 'dancing-twerk', label: 'Dance', icon: '💃' },
-  { key: 'waving', label: 'Wave', icon: '👋' },
-  { key: 'clapping', label: 'Clap', icon: '👏' },
-  { key: 'blow-akiss', label: 'Kiss', icon: '😘' },
-  { key: 'laughing', label: 'Laugh', icon: '😂' },
-  { key: 'standing-thumbs-up', label: 'Yay!', icon: '👍' },
-];
+const RECENT_KEY = 'movePanel.recent';
+const RECENT_MAX = 6;
+
+/** Emoji and a short friendly name per animation key. Unknown keys fall back to a clapperboard and the manifest label. */
+const MOVE_INFO: Record<string, { emoji: string; label: string }> = {
+  acknowledging: { emoji: '🙂', label: 'Say Hi' },
+  'arm-stretching': { emoji: '🙆', label: 'Stretch' },
+  backflip: { emoji: '🤸', label: 'Backflip' },
+  bashful: { emoji: '😊', label: 'Bashful' },
+  'blow-akiss': { emoji: '😘', label: 'Blow a Kiss' },
+  bored: { emoji: '😑', label: 'Bored' },
+  clapping: { emoji: '👏', label: 'Clap' },
+  crying: { emoji: '😢', label: 'Cry' },
+  'dancing-twerk': { emoji: '💃', label: 'Dance' },
+  excited: { emoji: '🤩', label: 'Excited' },
+  'female-walk': { emoji: '🚶', label: 'Strut' },
+  'happy-idle': { emoji: '😌', label: 'Happy Idle' },
+  happy: { emoji: '😄', label: 'Happy' },
+  'hard-head-nod': { emoji: '🤘', label: 'Head Nod' },
+  idle: { emoji: '🧍', label: 'Idle' },
+  jump: { emoji: '🦘', label: 'Jump' },
+  laughing: { emoji: '😂', label: 'Laugh' },
+  laying: { emoji: '🛌', label: 'Lie Down' },
+  'look-around': { emoji: '👀', label: 'Look Around' },
+  pointing: { emoji: '👉', label: 'Point' },
+  'quick-informal-bow': { emoji: '🙇', label: 'Bow' },
+  shrugging: { emoji: '🤷', label: 'Shrug' },
+  'sit-to-stand': { emoji: '⬆️', label: 'Stand Up' },
+  'sitting-clap': { emoji: '🙌', label: 'Sitting Clap' },
+  'sitting-talking': { emoji: '💬', label: 'Sitting Talk' },
+  'sitting-yell': { emoji: '📣', label: 'Sitting Yell' },
+  'stand-to-sit': { emoji: '🪑', label: 'Sit Down' },
+  'standing-thumbs-up': { emoji: '👍', label: 'Thumbs Up' },
+  surprised: { emoji: '😮', label: 'Surprised' },
+  texting: { emoji: '📱', label: 'Texting' },
+  thinking: { emoji: '🤔', label: 'Thinking' },
+  'thoughtful-head-shake': { emoji: '🙅', label: 'Head Shake' },
+  waving: { emoji: '👋', label: 'Wave' },
+  yawn: { emoji: '🥱', label: 'Yawn' },
+};
+
+/** Emoji per combo (sequence id). Unknown ids fall back to sparkles. */
+const COMBO_EMOJI: Record<string, string> = {
+  'wave-and-happy': '👋',
+  'walk-in-clap-walk-back': '👏',
+  'excited-then-thinking': '🤔',
+  'greet-wave': '🙋',
+  'wave-thumbs-up': '👍',
+  'walk-forward-bow': '🙇',
+  'excited-surprised': '😲',
+  'thinking-nod': '💡',
+  'shy-then-wave': '😊',
+  'walk-closer-wave-walk-back': '🚶',
+  'greet-walk-happy': '😄',
+  'excited-approach-clap': '🙌',
+  'happy-walk-laugh': '😂',
+};
+
+/** Movement building blocks (turns, walk phases) are not fun on their own; leave them out. */
+const HIDDEN_MOVES = /^(walking|start-walking|stop-walking|start-walking-movement|stop-walking-movement|left-turn|right-turn|walking-backwards)$/;
+
+type Tile = { id: string; emoji: string; label: string; run: (btn: HTMLElement) => void };
 
 const ARROW_SVG = (rotateDeg: number) =>
   `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="transform:rotate(${rotateDeg}deg)"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -111,28 +163,32 @@ export function createMovePanel(deps: MovePanelDeps) {
   padHint.className = 'move-hint';
   padHint.textContent = 'Arrow keys or WASD work too';
 
-  // --- Tricks ---
-  const tricksLabel = document.createElement('h3');
-  tricksLabel.className = 'move-section-title';
-  tricksLabel.textContent = 'Tricks';
-  const tricks = document.createElement('div');
-  tricks.className = 'move-tricks';
+  // --- Recent: last moves played, newest first, tap to play again ---
+  const recentTitle = document.createElement('h3');
+  recentTitle.className = 'move-section-title';
+  recentTitle.textContent = 'Recent';
+  const recentGrid = document.createElement('div');
+  recentGrid.className = 'move-grid';
+  const recentEmpty = document.createElement('p');
+  recentEmpty.className = 'move-hint move-recent-empty';
+  recentEmpty.textContent = 'Moves you play show up here';
 
-  // --- All moves drawer ---
-  const more = document.createElement('details');
-  more.className = 'move-more';
-  const moreSummary = document.createElement('summary');
-  moreSummary.textContent = 'All moves';
-  const moreList = document.createElement('div');
-  moreList.className = 'move-chip-list';
-  const combosTitle = document.createElement('h3');
-  combosTitle.className = 'move-section-title';
-  combosTitle.textContent = 'Combos';
-  const combosList = document.createElement('div');
-  combosList.className = 'move-chip-list';
-  more.append(moreSummary, moreList, combosTitle, combosList);
+  // --- All moves / Combos drawers (alphabetical) ---
+  const drawer = (title: string, open: boolean) => {
+    const d = document.createElement('details');
+    d.className = 'move-more';
+    d.open = open;
+    const summary = document.createElement('summary');
+    summary.textContent = title;
+    const grid = document.createElement('div');
+    grid.className = 'move-grid';
+    d.append(summary, grid);
+    return { d, grid };
+  };
+  const allMoves = drawer('All moves', true);
+  const combos = drawer('Combos', false);
 
-  body.append(pad, padHint, tricksLabel, tricks, more);
+  body.append(pad, padHint, recentTitle, recentGrid, recentEmpty, allMoves.d, combos.d);
   root.append(toggle, body);
   // Same layer as the other floating panels (Design button etc.).
   (document.getElementById('app-lower-left-panels')?.parentElement ?? document.body).appendChild(root);
@@ -190,6 +246,7 @@ export function createMovePanel(deps: MovePanelDeps) {
     el.classList.remove('pressed');
     void el.offsetWidth; // restart the animation
     el.classList.add('pressed');
+    window.setTimeout(() => el.classList.remove('pressed'), 450);
   }
 
   // Keyboard: arrows / WASD on the home view, unless typing or a dialog is open.
@@ -210,34 +267,80 @@ export function createMovePanel(deps: MovePanelDeps) {
     walk(dir);
   });
 
-  /** Fill tricks and the All moves drawer once animations and sequences are known. */
+  // --- Tiles and recents ---
+  const tiles = new Map<string, Tile>();
+
+  function tileButton(t: Tile): HTMLButtonElement {
+    const b = button(
+      'move-tile',
+      `<span class="move-tile-icon" aria-hidden="true">${t.emoji}</span><span class="move-tile-label">${t.label}</span>`,
+      t.label
+    );
+    b.dataset.move = t.id;
+    b.addEventListener('click', () => {
+      t.run(b);
+      pushRecent(t.id);
+    });
+    return b;
+  }
+
+  function readRecent(): string[] {
+    try {
+      const v = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+  let recent = readRecent();
+
+  function pushRecent(id: string) {
+    recent = [id, ...recent.filter((x) => x !== id)].slice(0, RECENT_MAX);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+    } catch {
+      /* storage unavailable: recents last for this visit only */
+    }
+    renderRecent();
+  }
+
+  function renderRecent() {
+    const shown = recent.map((id) => tiles.get(id)).filter((t): t is Tile => !!t);
+    recentGrid.replaceChildren(...shown.map(tileButton));
+    recentEmpty.hidden = shown.length > 0;
+    recentGrid.hidden = shown.length === 0;
+  }
+
+  /** Build the tiles once animations and sequences are known. */
   function setMoves(animations: AnimationEntry[], sequences: Sequence[]) {
-    const available = new Set(animations.map((a) => a.key));
-    tricks.innerHTML = '';
-    for (const t of TRICKS) {
-      if (!available.has(t.key)) continue;
-      const b = button('move-trick', `<span class="move-trick-icon" aria-hidden="true">${t.icon}</span><span class="move-trick-label">${t.label}</span>`, t.label);
-      b.addEventListener('click', () => play(t.key, b));
-      tricks.appendChild(b);
-    }
+    tiles.clear();
+    const byLabel = (a: Tile, b: Tile) => a.label.localeCompare(b.label);
 
-    // Movement building blocks (turns, walk phases) aren't fun on their own; leave them out.
-    const hidden = /^(walking|start-walking|stop-walking|start-walking-movement|stop-walking-movement|left-turn|right-turn|walking-backwards)$/;
-    moreList.innerHTML = '';
-    for (const a of animations) {
-      if (hidden.test(a.key)) continue;
-      const b = button('move-chip', a.label.replace(/([a-z])([A-Z])/g, '$1 $2'), a.label);
-      b.addEventListener('click', () => play(a.key, b));
-      moreList.appendChild(b);
-    }
+    const moveTiles: Tile[] = animations
+      .filter((a) => !HIDDEN_MOVES.test(a.key))
+      .map((a) => ({
+        id: `move:${a.key}`,
+        emoji: MOVE_INFO[a.key]?.emoji ?? '🎬',
+        label: MOVE_INFO[a.key]?.label ?? a.label.replace(/([a-z])([A-Z])/g, '$1 $2'),
+        run: (btn: HTMLElement) => play(a.key, btn),
+      }))
+      .sort(byLabel);
 
-    combosList.innerHTML = '';
-    for (const s of sequences) {
-      const b = button('move-chip move-chip-combo', s.label, s.label);
-      b.addEventListener('click', () => playCombo(s, b));
-      combosList.appendChild(b);
-    }
-    combosTitle.hidden = sequences.length === 0;
+    const comboTiles: Tile[] = sequences
+      .map((sq) => ({
+        id: `combo:${sq.id}`,
+        emoji: COMBO_EMOJI[sq.id] ?? '✨',
+        label: sq.label,
+        run: (btn: HTMLElement) => playCombo(sq, btn),
+      }))
+      .sort(byLabel);
+
+    for (const t of [...moveTiles, ...comboTiles]) tiles.set(t.id, t);
+
+    allMoves.grid.replaceChildren(...moveTiles.map(tileButton));
+    combos.grid.replaceChildren(...comboTiles.map(tileButton));
+    combos.d.hidden = comboTiles.length === 0;
+    renderRecent();
   }
 
   return { setMoves };
