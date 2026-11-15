@@ -3,13 +3,14 @@
 // 8px radius, small bold title, quiet buttons. Docked top-left above the Design button, like the editor's
 // left control column, and slides in/out from the left edge with the same keyframes.
 
-// Both panels sit side by side in the top-left corner, above the Design button.
+// Move on top, All moves underneath, in the top-left corner above the Design button.
 .move-panels {
   position: absolute;
   top: 0.75rem;
   left: 0.75rem;
   z-index: 20;
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   gap: 0.5rem;
   // Leave room below for the Design button in the bottom-left corner.
@@ -21,7 +22,9 @@ body:not([data-route='viewer']) .move-panels {
 }
 
 .move-panel {
-  width: 196px;
+  // Same width as the Design button below, so the left column lines up.
+  width: 250px;
+  flex: 0 0 auto;
   max-height: 100%;
   display: flex;
   flex-direction: column;
@@ -48,9 +51,10 @@ body:not([data-route='viewer']) .move-panels {
   }
 }
 
-// All moves: a little wider for the tile grid.
+// All moves takes the remaining height and scrolls.
 .move-panel--moves {
-  width: 232px;
+  flex: 0 1 auto;
+  min-height: 0;
 }
 
 // Design clicked: slide out while the camera moves into the creator.
@@ -222,9 +226,4 @@ body[data-home-exiting='1'] .move-panel {
   margin: 0;
 }
 
-// Narrow screens: stack the two panels instead of side by side.
-@media (max-width: 640px) {
-  .move-panels {
-    flex-direction: column;
-  }
-}
+

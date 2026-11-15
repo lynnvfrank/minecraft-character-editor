@@ -2,7 +2,7 @@
  * Home-view panels for playing with the character:
  * - Move: D-pad / arrow keys / WASD to walk, plus Recent (last 3 moves played).
  * - All moves: every animation as an emoji tile, alphabetical.
- * Both sit side by side in the top-left corner, like the editor's left column.
+ * Stacked in the top-left corner (Move, then All moves), like the editor's left column.
  * Combos (sequences) are built but hidden for now (SHOW_COMBOS); they'll come back as part of a
  * record/save-your-own-moves feature.
  */
