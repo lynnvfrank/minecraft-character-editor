@@ -18,8 +18,6 @@ const LIBRARIES: Credit[] = [
   { name: 'Express', detail: 'Local server', license: 'MIT', url: 'https://expressjs.com' },
   { name: 'Electron', detail: 'Desktop app shell (includes Chromium and Node.js)', license: 'MIT', url: 'https://www.electronjs.org' },
   { name: 'electron-store', detail: 'Settings storage', license: 'MIT', url: 'https://github.com/sindresorhus/electron-store' },
-  { name: 'dotenv', detail: 'Configuration', license: 'BSD-2-Clause', url: 'https://github.com/motdotla/dotenv' },
-  { name: 'minimatch', detail: 'Pattern matching', license: 'BlueOak-1.0.0', url: 'https://github.com/isaacs/minimatch' },
   { name: 'Vite, Sass, TypeScript', detail: 'Build tooling', license: 'MIT / Apache-2.0' },
 ];
 
