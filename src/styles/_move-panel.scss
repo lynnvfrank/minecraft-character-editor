@@ -104,7 +104,12 @@ body[data-home-exiting='1'] .move-panel {
   grid-template-rows: repeat(3, 40px);
   gap: 4px;
   justify-content: center;
-  margin: 0.15rem 0 0;
+  width: max-content;
+  margin: 0.15rem auto 0;
+  // Round pad behind the arrows.
+  padding: 8px;
+  border-radius: 50%;
+  background: rgba(var(--fg-rgb), 0.06);
 }
 
 .move-dpad-btn {
