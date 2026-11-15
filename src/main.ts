@@ -40,7 +40,6 @@ import {
   flushDeferredWardrobeLibraryPanelsAfterCamera,
 } from './creator';
 import { EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
-import { createIcon } from './creator/icons';
 import { createCharacterController } from './controllers/character';
 import {
   type CharacterState,
@@ -93,6 +92,8 @@ import { registerArmModelPanelContext } from './creator/armModelPanel';
 import { createPreviewCameraController } from './controllers/previewCamera';
 import { createPreviewRouteRuntime } from './controllers/previewRouteRuntime';
 import { createCreatorPreviewController } from './controllers/creatorPreview';
+import { createRouter } from './controllers/router';
+import { createRouteButtons } from './ui/routeButtons';
 import { createArmModelState } from './state/armModelState';
 import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
@@ -171,7 +172,6 @@ type Sequence = { id: string; label: string; steps: SequenceStep[] };
 
 /** Resolved after main() creates the transition handler. */
 let getCreatorTransitionInFlight: () => boolean = () => false;
-let lastAppliedRouteInfo: RouteInfo | null = null;
 
 const PREVIEW_BASE_SKIN_CANDIDATES = getPreviewBaseSkinCandidates(FALLBACK_SKINS[0]?.path);
 
@@ -237,46 +237,12 @@ function logTransition(stage: string, extra: Record<string, unknown> = {}) {
   logger.info('transition', stage, payload);
 }
 
-function updateRouteButtonsState() {
-  const inFlight = getCreatorTransitionInFlight();
-  const designBtn = document.getElementById('enter-creator-btn') as HTMLButtonElement | null;
-  const homeBtn = document.getElementById('enter-viewer-btn') as HTMLButtonElement | null;
-  if (designBtn) {
-    designBtn.disabled = inFlight;
-    const textEl = designBtn.querySelector('.creator-home-btn-text');
-    if (textEl) textEl.textContent = inFlight ? 'Designing...' : 'Design';
-  }
-  if (homeBtn) {
-    homeBtn.disabled = inFlight;
-    const textEl = homeBtn.querySelector('.creator-home-btn-text');
-    if (textEl) textEl.textContent = 'Home';
-  }
-}
-
 let creatorPoseController: CreatorPoseController;
 let focusedCreationController: FocusedCreationController | null = null;
 let characterController: ReturnType<typeof createCharacterController>;
 let viewerUIController: ReturnType<typeof createViewerUIController>;
 let characterEventsController: ReturnType<typeof createCharacterEventsController>;
 let animationLoopController: ReturnType<typeof createAnimationLoopController>;
-
-function setupCreatorTransitionButton(
-  transitionHandler: { enterCreator: () => Promise<void> }
-) {
-  const btn = document.getElementById('enter-creator-btn') as HTMLButtonElement | null;
-  if (!btn) return;
-  const icon = createIcon('modeCreator', { width: 22, height: 22 });
-  const span = document.createElement('span');
-  span.className = 'creator-home-btn-text';
-  span.textContent = 'Design';
-  btn.textContent = '';
-  btn.appendChild(icon);
-  btn.appendChild(span);
-  btn.addEventListener('click', () => {
-    void transitionHandler.enterCreator();
-  });
-  updateRouteButtonsState();
-}
 
 function resumeHomeMode() {
   const char = getCharacter(getPrimaryCharacterId());
@@ -293,24 +259,6 @@ function resumeHomeMode() {
 
 const CREATOR_EXIT_ANIMATION_MS = 450;
 
-function setupViewerTransitionButton(
-  transitionHandler: { exitCreator: () => Promise<void> }
-) {
-  const btn = document.getElementById('enter-viewer-btn') as HTMLButtonElement | null;
-  if (!btn) return;
-  const icon = createIcon('modeHome', { width: 22, height: 22 });
-  const span = document.createElement('span');
-  span.className = 'creator-home-btn-text';
-  span.textContent = 'Home';
-  btn.textContent = '';
-  btn.appendChild(icon);
-  btn.appendChild(span);
-  btn.addEventListener('click', () => {
-    void transitionHandler.exitCreator();
-  });
-  updateRouteButtonsState();
-}
-
 function ensureViewerFullWidthLayout() {
   const app = document.getElementById('app');
   const wrapper = document.getElementById('creator-view-wrapper');
@@ -322,98 +270,7 @@ function ensureViewerFullWidthLayout() {
 }
 
 function applyRoute(routeInfo?: RouteInfo): void {
-  const info = routeInfo ?? getRouteInfo();
-  const route = info.route;
-  document.body.dataset.route = route;
-  if (route === 'creator') {
-    previewRuntime.exit();
-    const desiredMode = info.creatorMode ?? EDIT_MODE_WARDROBE;
-    if (lastAppliedRouteInfo?.route === 'creator') {
-      if (getEditMode() !== desiredMode) {
-        setEditMode(desiredMode, { syncUrl: false });
-        updateCreator3DViewPlacement();
-      }
-      updateRouteButtonsState();
-      lastAppliedRouteInfo = info;
-      return;
-    }
-    if (getEditMode() !== desiredMode) {
-      setEditMode(desiredMode, { syncUrl: false });
-    }
-    creatorPoseController.applyCreatorCharacterPose();
-    initCreator();
-    // Re-apply creator layout for current mode (especially when returning in 2D).
-    updateCreator3DViewPlacement();
-    const mode = getEditMode();
-    if (mode === '3d' || mode === '2d') {
-      requestAnimationFrame(() => {
-        if (getRoute() === 'creator' && getEditMode() === mode) {
-          creatorPoseController.applyCreatorCharacterPose();
-        }
-      });
-    }
-    window.setTimeout(() => {
-      const entryMode = getEditMode();
-      if (
-        entryMode === EDIT_MODE_WARDROBE &&
-        getFocusedCreationEnabled() &&
-        getRoute() === 'creator'
-      ) {
-        const char = getCharacter(getPrimaryCharacterId());
-        if (char) {
-          const preset = getPreviewPreset('fullOutfit');
-          const origin = char.container.position;
-          const position = new THREE.Vector3(
-            preset.cameraPosition.x + origin.x,
-            preset.cameraPosition.y + origin.y,
-            preset.cameraPosition.z + origin.z
-          );
-          const target = new THREE.Vector3(
-            preset.cameraTarget.x + origin.x,
-            preset.cameraTarget.y + origin.y,
-            preset.cameraTarget.z + origin.z
-          );
-          try {
-            const ctx = getSceneContext();
-            ctx.camera.fov = preset.fov ?? 35;
-            ctx.camera.updateProjectionMatrix();
-          } catch {
-            // scene not ready
-          }
-          creatorPoseController.snapCameraToCreatorView({ position, target });
-        } else {
-          creatorPoseController.snapCameraToCreatorView(creatorPoseController.getCreatorCameraPose());
-        }
-      } else {
-        creatorPoseController.snapCameraToCreatorView(creatorPoseController.getCreatorCameraPose());
-      }
-    }, 0);
-    window.setTimeout(() => {
-      updateCreator3DViewPlacement();
-      window.dispatchEvent(new Event('resize'));
-      const c = getCharacter(getPrimaryCharacterId());
-      if (c?.currentSkin) {
-        const shouldLoad = !getCreatorCanvasPopulated() || c.currentSkin !== lastCreatorLoadedPath;
-        if (shouldLoad) {
-          loadSkinFromPath(c.currentSkin);
-          lastCreatorLoadedPath = c.currentSkin;
-        }
-      }
-    }, 0);
-  } else if (route === 'preview') {
-    ensureViewerFullWidthLayout();
-    creatorPoseController.lockCharacterToCreatorIdle();
-    window.setTimeout(() => {
-      void previewRuntime.sync();
-      window.dispatchEvent(new Event('resize'));
-    }, 0);
-  } else {
-    ensureViewerFullWidthLayout();
-    previewRuntime.exit();
-    resumeHomeMode();
-  }
-  updateRouteButtonsState();
-  lastAppliedRouteInfo = info;
+  router.apply(routeInfo ?? getRouteInfo());
 }
 
 // -----------------------------------------------------------------------------
@@ -492,7 +349,6 @@ function onWindowResize() {
 }
 
 /** Path last loaded into creator (from gallery or route enter). Used to know when to reload from char.currentSkin (user picked different skin in home). */
-let lastCreatorLoadedPath: string | null = null;
 const skinCompositor = createSkinCompositor();
 const previewCamera = createPreviewCameraController({
   getSceneContext: () => sceneContext,
@@ -519,6 +375,27 @@ const previewRuntime = createPreviewRouteRuntime({
   getSkinPaths: () => skinsList.map((skin) => skin.path),
   baseSkinCandidates: PREVIEW_BASE_SKIN_CANDIDATES,
   fallbackSkinPath: FALLBACK_SKINS[0]?.path ?? null,
+});
+const routeButtons = createRouteButtons(() => getCreatorTransitionInFlight());
+const router = createRouter({
+  creator: {
+    init: initCreator,
+    getEditMode,
+    setEditMode,
+    getFocusedCreationEnabled,
+    getCanvasPopulated: getCreatorCanvasPopulated,
+    loadSkinFromPath,
+  },
+  defaultCreatorMode: EDIT_MODE_WARDROBE,
+  creatorPose: () => creatorPoseController,
+  previewRuntime,
+  getRoute,
+  getPrimaryCharacter: () => getCharacter(getPrimaryCharacterId()),
+  getSceneContext: () => sceneContext,
+  updateCreatorViewPlacement: updateCreator3DViewPlacement,
+  ensureViewerLayout: ensureViewerFullWidthLayout,
+  resumeHome: resumeHomeMode,
+  onApplied: () => routeButtons.update(),
 });
 const focusAutoDisableBoundControls = new WeakSet<object>();
 let lastCreatorCameraInputWasMouse = false;
@@ -619,7 +496,7 @@ function setupCreatorPreviewDirtySubscription(): void {
       const char = getCharacter(getPrimaryCharacterId());
       if (char) {
         char.currentSkin = path;
-        lastCreatorLoadedPath = path;
+        router.noteCreatorLoadedPath(path);
         viewerUIController.highlightActiveSkin(getPrimaryCharacterId(), path);
       }
     }
@@ -1047,7 +924,7 @@ async function main(): Promise<void> {
     setActiveTool,
     getCreatorHash,
     sleep,
-    updateRouteButtonsState,
+    updateRouteButtonsState: routeButtons.update,
     logTransition,
     animationManager,
     resumeHomeMode,
@@ -1056,8 +933,7 @@ async function main(): Promise<void> {
   controllerRefs.creatorPoseController = creatorPoseController;
   controllerRefs.getCreatorTransitionInFlight = creatorTransitionHandler.getTransitionInFlight;
   getCreatorTransitionInFlight = creatorTransitionHandler.getTransitionInFlight;
-  setupCreatorTransitionButton(creatorTransitionHandler);
-  setupViewerTransitionButton(creatorTransitionHandler);
+  routeButtons.setup(creatorTransitionHandler);
 
   characterEventsController = createCharacterEventsController({
     getCharacter,

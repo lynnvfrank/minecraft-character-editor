@@ -8,7 +8,7 @@ The ideas are already in the code: a layer taxonomy (`docs/concepts/TAXONOMY.md`
 
 | File | Lines | Problem |
 |---|---|---|
-| `src/main.ts` | ~1400 (was 1579) | Bootstrap, routing, preview route, creator 3D preview, arm model, frame loop, all as top-level `let`s |
+| `src/main.ts` | ~1040 (was 1579) | Bootstrap, routing, preview route, creator 3D preview, arm model, frame loop, all as top-level `let`s |
 | `src/creator/blockyEditor.ts` | 1326 | Canvas painting, input, rendering in one module |
 | `src/creator.ts` | 999 | ~40 exported getters/setters: a facade over `creatorState` that bypasses the slices |
 | `src/animation/manager.ts` | 854 | Clip loading, sequencing, turning, idle logic together |
@@ -40,7 +40,7 @@ Three communication paths, each with one job:
 Each phase is one PR that leaves the app working. Verify with typecheck, tests, and loading both `/` and
 `/#/creator` in a browser.
 
-### Phase 1: empty `main.ts` into feature modules (started)
+### Phase 1: empty `main.ts` into feature modules (done)
 
 Move each `// ---` section of `main.ts` into a module that owns its state through a factory:
 
@@ -48,16 +48,22 @@ Move each `// ---` section of `main.ts` into a module that owns its state throug
       `maskHiddenLayerRegions` with tests.
 - [x] Preview camera presets + debug panel → `src/controllers/previewCamera.ts` (tests for preset matching
       and signatures). `previewRoute.ts` URL parsing now has tests too.
-- [ ] Preview route skin sync and capture API (`syncPreviewRouteState`, `installPreviewCaptureRuntimeApi`)
-      → `src/controllers/previewRouteRuntime.ts`
+- [x] Preview route skin sync and `window.__previewCapture` → `src/controllers/previewRouteRuntime.ts`
+      (`pickPreviewBaseSkin` tested).
 - [x] Arm model setting/detection → `src/state/armModelState.ts` (tested); `main.ts` subscribes to swap the rig.
-- [ ] Creator 3D preview texture and dirty flag → `src/controllers/creatorPreview.ts`
-- [ ] `createOnFrameUpdate` (~225 lines) → merge into `controllers/animationLoop.ts`
-- [ ] `applyRoute` + transition buttons → `controllers/router.ts` driven by the mode machine
+- [x] Creator 3D preview texture, dirty flag and per-route frame work → `src/controllers/creatorPreview.ts`
+      (`createRouteDirtyTracker` tested). The frame hook turned out to be ~25 lines, so it stays a callback
+      into `animationLoop.ts` rather than being merged.
+- [x] `applyRoute` → `src/controllers/router.ts` (`presetPoseAt`, `shouldReloadCreatorSkin` tested);
+      Design/Home buttons → `src/ui/routeButtons.ts` (+ pure `routeButtonState.ts`, tested).
 
-Introduce one `AppContext` object (scene, characters, animation manager, state) that `main()` builds and
-passes to each controller, replacing the late-bound `let getCharacter = ...` / `let fadeToAction = ...`
-placeholders.
+Result: `main.ts` 1579 → ~1040 lines, tests 43 → 80.
+
+**Carried into Phase 2:** `main.ts` still declares controllers as late-bound `let`s (`getCharacter`,
+`fadeToAction`, `creatorPoseController`, ...) because `main()` builds them after module evaluation. Replace
+these with one `AppContext` (scene, characters, animation manager, state) that `main()` builds and passes
+to each controller. The remaining big blocks are the 3D thumbnail capture exports (~200 lines →
+`viewer/capture3DThumbnail.ts`) and `main()` itself.
 
 ### Phase 2: one creator state API
 
