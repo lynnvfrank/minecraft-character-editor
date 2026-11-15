@@ -99,8 +99,8 @@ import { initAboutPanel } from './ui/aboutPanel';
 import {
   initElectronStatus,
 } from './ui';
-import { linearToSrgb } from './viewer/captureHelpers';
-import { createSkinCompositor, buildLayerVisibleState, loadCachedImage } from './viewer/skinCompositor';
+import { createThumbnailCapture } from './viewer/thumbnailCapture';
+import { createSkinCompositor, loadCachedImage } from './viewer/skinCompositor';
 import { registerCapture3DThumbnail, registerCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
 import {
   initScene as initViewerScene,
@@ -109,14 +109,10 @@ import {
   logMeshNames,
   createDebugTexture,
   applySkinToModel,
-  applyCreatorLayerVisibility,
-  applyCreatorLayerVisibilityForCapture,
   setupCreator3DPaint,
   setupCreatorCameraLight,
   updateOrbitControlsForEditMode,
   recreateOrbitControls,
-  getPreviewPreset,
-  type PreviewPresetKey,
   type SceneContext,
 } from './viewer';
 
@@ -400,10 +396,6 @@ const router = createRouter({
 const focusAutoDisableBoundControls = new WeakSet<object>();
 let lastCreatorCameraInputWasMouse = false;
 
-function nextAnimationFrame(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
-}
-
 function bindFocusedModeAutoDisableOnMouseCameraMove(): void {
   const ctx = app.tryGet('scene');
   if (!ctx?.renderer || !ctx?.controls) return;
@@ -501,204 +493,6 @@ function setupCreatorPreviewDirtySubscription(): void {
       }
     }
   });
-}
-
-// -----------------------------------------------------------------------------
-// Exported capture API (used by creator for gallery thumbnails)
-// -----------------------------------------------------------------------------
-
-/**
- * Capture a thumbnail of the 3D character with the current creator skin.
- * Uses a separate camera so the main 3D view is never modified.
- * Uses fullOutfit preset to match preview-generated thumbnails.
- */
-export async function captureCreator3DThumbnail(size: number = 128): Promise<string | null> {
-  const ctx = app.tryGet('scene');
-  const char = getCharacter(getPrimaryCharacterId());
-  if (!char || !ctx || !ctx.renderer || !ctx.scene || !ctx.container) return null;
-
-  creatorPreview.markDirty();
-  await nextAnimationFrame();
-  await nextAnimationFrame();
-
-  const preset = getPreviewPreset('fullOutfit');
-  const capturePos = new THREE.Vector3(
-    preset.cameraPosition.x,
-    preset.cameraPosition.y,
-    preset.cameraPosition.z
-  );
-  const captureTarget = new THREE.Vector3(
-    preset.cameraTarget.x,
-    preset.cameraTarget.y,
-    preset.cameraTarget.z
-  );
-
-  const captureCamera = new THREE.PerspectiveCamera(
-    preset.fov ?? 35,
-    1,
-    0.1,
-    100
-  );
-  captureCamera.position.copy(capturePos);
-  captureCamera.lookAt(captureTarget);
-  captureCamera.updateProjectionMatrix();
-
-  const renderTarget = new THREE.WebGLRenderTarget(size, size, {
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
-  });
-
-  ctx.renderer.setRenderTarget(renderTarget);
-  ctx.renderer.setViewport(0, 0, size, size);
-  ctx.renderer.setScissor(0, 0, size, size);
-  ctx.renderer.setScissorTest(true);
-  ctx.renderer.render(ctx.scene, captureCamera);
-  ctx.renderer.setScissorTest(false);
-  ctx.renderer.setRenderTarget(null);
-
-  const w = ctx.container.clientWidth;
-  const h = ctx.container.clientHeight;
-  ctx.renderer.setViewport(0, 0, w, h);
-  ctx.renderer.setScissor(0, 0, w, h);
-  ctx.renderer.setScissorTest(false);
-
-  const pixels = new Uint8Array(size * size * 4);
-  ctx.renderer.readRenderTargetPixels(renderTarget, 0, 0, size, size, pixels);
-  renderTarget.dispose();
-
-  const outCanvas = document.createElement('canvas');
-  outCanvas.width = size;
-  outCanvas.height = size;
-  const canvasCtx = outCanvas.getContext('2d');
-  if (!canvasCtx) return null;
-
-  const imgData = canvasCtx.createImageData(size, size);
-  for (let y = 0; y < size; y++) {
-    const srcRow = (size - 1 - y) * size * 4;
-    const dstRow = y * size * 4;
-    for (let x = 0; x < size; x++) {
-      const src = srcRow + x * 4;
-      const dst = dstRow + x * 4;
-      const r = pixels[src]! / 255;
-      const g = pixels[src + 1]! / 255;
-      const b = pixels[src + 2]! / 255;
-      const a = pixels[src + 3]! / 255;
-      imgData.data[dst] = Math.round(linearToSrgb(r) * 255);
-      imgData.data[dst + 1] = Math.round(linearToSrgb(g) * 255);
-      imgData.data[dst + 2] = Math.round(linearToSrgb(b) * 255);
-      imgData.data[dst + 3] = Math.round(a * 255);
-    }
-  }
-  canvasCtx.putImageData(imgData, 0, 0);
-  return outCanvas.toDataURL('image/png');
-}
-
-/**
- * Capture a per-part thumbnail of the 3D character using the part's preview preset.
- * Uses part-specific camera and layer visibility so only relevant layers are shown.
- */
-export async function captureCreator3DPartThumbnail(
-  part: PreviewPresetKey,
-  size: number = 128
-): Promise<string | null> {
-  const ctx = app.tryGet('scene');
-  const char = getCharacter(getPrimaryCharacterId());
-  if (!char || !ctx || !ctx.renderer || !ctx.scene || !ctx.container) return null;
-
-  const preset = getPreviewPreset(part);
-  const layerVisible = buildLayerVisibleState(preset.visibleLayers);
-  const canvas = getCreatorSkinCanvas();
-  const workSize = getCreatorWorkSize();
-  const maskedCanvas = skinCompositor.buildLayerMaskedCanvas(canvas, layerVisible, {}, workSize);
-  if (!maskedCanvas) return null;
-
-  creatorPreview.markDirty();
-  await nextAnimationFrame();
-  await nextAnimationFrame();
-
-  const captureTexture = new THREE.CanvasTexture(maskedCanvas);
-  captureTexture.colorSpace = THREE.SRGBColorSpace;
-  captureTexture.magFilter = THREE.NearestFilter;
-  captureTexture.minFilter = THREE.NearestFilter;
-  captureTexture.generateMipmaps = false;
-  captureTexture.wrapS = captureTexture.wrapT = THREE.ClampToEdgeWrapping;
-  captureTexture.flipY = true;
-
-  applySkinToModel(char.model, captureTexture, char.texturePreset, char.alphaMode, char.currentSkin);
-  applyCreatorLayerVisibilityForCapture(char.model, layerVisible, char.modelPath);
-
-  const capturePos = new THREE.Vector3(
-    preset.cameraPosition.x,
-    preset.cameraPosition.y,
-    preset.cameraPosition.z
-  );
-  const captureTarget = new THREE.Vector3(
-    preset.cameraTarget.x,
-    preset.cameraTarget.y,
-    preset.cameraTarget.z
-  );
-  const captureCamera = new THREE.PerspectiveCamera(
-    preset.fov ?? 35,
-    1,
-    0.1,
-    100
-  );
-  captureCamera.position.copy(capturePos);
-  captureCamera.lookAt(captureTarget);
-  captureCamera.updateProjectionMatrix();
-
-  const renderTarget = new THREE.WebGLRenderTarget(size, size, {
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
-  });
-  ctx.renderer.setRenderTarget(renderTarget);
-  ctx.renderer.setViewport(0, 0, size, size);
-  ctx.renderer.setScissor(0, 0, size, size);
-  ctx.renderer.setScissorTest(true);
-  ctx.renderer.render(ctx.scene, captureCamera);
-  ctx.renderer.setScissorTest(false);
-  ctx.renderer.setRenderTarget(null);
-
-  const w = ctx.container.clientWidth;
-  const h = ctx.container.clientHeight;
-  ctx.renderer.setViewport(0, 0, w, h);
-  ctx.renderer.setScissor(0, 0, w, h);
-  ctx.renderer.setScissorTest(false);
-
-  const pixels = new Uint8Array(size * size * 4);
-  ctx.renderer.readRenderTargetPixels(renderTarget, 0, 0, size, size, pixels);
-  renderTarget.dispose();
-  captureTexture.dispose();
-
-  applyCreatorLayerVisibility(char.model, {});
-
-  const outCanvas = document.createElement('canvas');
-  outCanvas.width = size;
-  outCanvas.height = size;
-  const canvasCtx = outCanvas.getContext('2d');
-  if (!canvasCtx) return null;
-
-  const imgData = canvasCtx.createImageData(size, size);
-  for (let y = 0; y < size; y++) {
-    const srcRow = (size - 1 - y) * size * 4;
-    const dstRow = y * size * 4;
-    for (let x = 0; x < size; x++) {
-      const src = srcRow + x * 4;
-      const dst = dstRow + x * 4;
-      const r = pixels[src]! / 255;
-      const g = pixels[src + 1]! / 255;
-      const b = pixels[src + 2]! / 255;
-      const a = pixels[src + 3]! / 255;
-      imgData.data[dst] = Math.round(linearToSrgb(r) * 255);
-      imgData.data[dst + 1] = Math.round(linearToSrgb(g) * 255);
-      imgData.data[dst + 2] = Math.round(linearToSrgb(b) * 255);
-      imgData.data[dst + 3] = Math.round(a * 255);
-    }
-  }
-  canvasCtx.putImageData(imgData, 0, 0);
-
-  creatorPreview.markDirty();
-  return outCanvas.toDataURL('image/png');
 }
 
 // -----------------------------------------------------------------------------
@@ -1010,8 +804,16 @@ async function main(): Promise<void> {
     await loadSkinFromPath(initialSkin.path);
   }
 
-  registerCapture3DThumbnail(captureCreator3DThumbnail);
-  registerCapture3DPartThumbnail(captureCreator3DPartThumbnail);
+  const thumbnails = createThumbnailCapture({
+    getSceneContext: () => sceneContext,
+    getPrimaryCharacter: () => getCharacter(getPrimaryCharacterId()),
+    getSkinCanvas: getCreatorSkinCanvas,
+    getWorkSize: getCreatorWorkSize,
+    compositor: skinCompositor,
+    markPreviewDirty: creatorPreview.markDirty,
+  });
+  registerCapture3DThumbnail(thumbnails.captureFull);
+  registerCapture3DPartThumbnail(thumbnails.capturePart);
 
   setupCreator3DPaint({
     getControls: () => sceneContext!.controls,
