@@ -247,10 +247,35 @@ export function createCharacterAI(deps: CharacterAIDeps) {
     return animationManager.walkTo(target, speed);
   }
 
+  /** True while a walk, turn-then-walk or sequence is running. */
+  function isMovingOrBusy(): boolean {
+    return (
+      animationManager.isBusy() ||
+      !!animationManager.isWalking?.() ||
+      !!animationManager.isInWalkToPhase?.()
+    );
+  }
+
+  /**
+   * The user is driving the character directly (Move panel). Count it as activity and drop any
+   * in-progress noticing/approaching flow so the AI doesn't walk her somewhere else.
+   */
+  function userTookControl(): void {
+    const now = Date.now();
+    lastInteractionTime = now;
+    lastExplicitActivityTime = now;
+    microEmoteEndTime = 0;
+    animationManager.setLastActivity();
+    if (state !== 'idle') {
+      animationManager.stopIdleWanderer();
+      state = 'idle';
+    }
+  }
+
   /** Play a random micro-emote (idle variation) */
   function playMicroEmote(): void {
     const char = getCharacter(CHAR_ID);
-    if (!char || animationManager.isBusy()) return;
+    if (!char || isMovingOrBusy()) return;
 
     const emote = IDLE_MICRO_EMOTES[Math.floor(Math.random() * IDLE_MICRO_EMOTES.length)];
     const action = getAction(CHAR_ID, emote);
@@ -260,14 +285,15 @@ export function createCharacterAI(deps: CharacterAIDeps) {
     action.clampWhenFinished = true;
     fadeToAction(char, action, 0.3);
 
-    // After emote duration, return to idle
+    // After emote duration, return to idle, but only if this emote is still what's showing.
+    // By then the user may have started a walk or a trick; fading to idle would freeze the legs.
     const duration = 1.5 + Math.random() * 1;
     microEmoteEndTime = Date.now() + duration * 1000;
     setTimeout(() => {
       const c = getCharacter(CHAR_ID);
-      if (c?.idleAction && state === 'idle') {
-        fadeToAction(c, c.idleAction!, 0.4);
-      }
+      if (!c?.idleAction || state !== 'idle' || isMovingOrBusy()) return;
+      if (action.getEffectiveWeight() < 0.5) return;
+      fadeToAction(c, c.idleAction!, 0.4);
     }, duration * 1000);
   }
 
@@ -290,7 +316,13 @@ export function createCharacterAI(deps: CharacterAIDeps) {
 
     const duration = 1.2 + Math.random() * 0.5;
     setTimeout(() => {
-      if (state === 'noticing') transitionToApproaching();
+      if (state !== 'noticing') return;
+      // The user took over in the meantime (walk, sequence): don't hijack it.
+      if (isMovingOrBusy()) {
+        state = 'idle';
+        return;
+      }
+      transitionToApproaching();
     }, duration * 1000);
   }
 
@@ -319,7 +351,7 @@ export function createCharacterAI(deps: CharacterAIDeps) {
     // Stay in interacting for a few seconds, then back to idle
     setTimeout(() => {
       if (state === 'interacting') transitionToIdle();
-    }, 3 + Math.random() * 2);
+    }, (3 + Math.random() * 2) * 1000);
   }
 
   function transitionToIdle(): void {
@@ -412,6 +444,7 @@ export function createCharacterAI(deps: CharacterAIDeps) {
   return {
     update,
     onUserActivity,
+    userTookControl,
     interruptCurrentBehavior,
     walkToScreenCenter,
     setLastActivity: () => {

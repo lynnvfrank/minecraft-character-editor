@@ -98,6 +98,7 @@ import { registerArmModelPanelContext } from './creator/armModelPanel';
 import { createSubscribable } from './lib/subscribable';
 import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
+import { createMovePanel } from './ui/movePanel';
 import {
   SKIN_LAYER_BOUNDS,
   LAYER_KEYS,
@@ -1311,6 +1312,13 @@ async function main(): Promise<void> {
   sceneContext = initViewerScene(container, params) as AppSceneContext;
   initTheme();
   initAboutPanel();
+  const movePanel = createMovePanel({
+    getRoute,
+    getCamera: () => sceneContext?.camera ?? null,
+    getCharacterPosition: () => getCharacter(getPrimaryCharacterId())?.container.position ?? null,
+    getAnimationManager: () => controllerRefs.animationManager,
+    onUserControl: () => characterAI?.userTookControl(),
+  });
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();
 
@@ -1342,6 +1350,7 @@ async function main(): Promise<void> {
       viewerUIController.setupAnimationButtons(anims);
       viewerUIController.setupSkinPreviews(skins);
       viewerUIController.setupSequenceButtons(sequences as Sequence[]);
+      movePanel.setMoves(anims, sequences as Sequence[]);
     },
     getSequencesList: () => sequencesList,
     onPreviewRouteAfterCharacterReady: () => void syncPreviewRouteState(),
