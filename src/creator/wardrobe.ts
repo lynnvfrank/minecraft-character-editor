@@ -11,8 +11,6 @@ import {
   WORK_SIZE,
   RESOLUTION_MULTIPLIER,
   getPartBounds,
-  WARDROBE_COMPOSITE_KEYS,
-  isLayerKey,
 } from '../skin';
 import { cloneImageData } from './canvasCoords';
 import { CREATOR_WARDROBE_LIBRARY_PANEL_TRANSITION_MS } from '../config/creatorWardrobeMotion';
@@ -26,6 +24,15 @@ import {
   WARDROBE_PART_KEYS,
 } from './wardrobeLayers';
 import {
+  WARDROBE_ORIGINAL,
+  createDefaultWardrobeSelections,
+  isWardrobeOverlayPart,
+  applyMutuallyExclusiveCompositeClears,
+  getWardrobeResolvePartOrder,
+  getWardrobeResolveStep,
+  type WardrobeSelectionState,
+} from './wardrobeSelection';
+import {
   buildWardrobeLibraryPanels,
   ensureWardrobeLibraryHoverPreviewBound,
   getWardrobeLibraryPanelIdsForLayer,
@@ -38,11 +45,7 @@ import {
   subscribeWardrobeHoverPreview,
 } from './wardrobeHoverPreview';
 
-/** Sentinel for "use base skin" on overlay parts. Base parts use null. */
-export const WARDROBE_ORIGINAL = '__original__' as const;
-const WARDROBE_OVERLAY_KEYS = ['hat', 'jacket', 'sleeves', 'pants'] as const;
-
-type WardrobeSelectionState = Record<WardrobePartKey, string | null>;
+export { WARDROBE_ORIGINAL };
 type WardrobeLibraryState = Record<WardrobePartKey, SkinEntry[]>;
 
 export type WardrobeDeps = {
@@ -104,22 +107,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
   let wardrobeLibrariesLoaded = false;
   let wardrobeLibrariesPromise: Promise<void> | null = null;
   const wardrobeImageCache = new Map<string, Promise<HTMLImageElement>>();
-  const wardrobeSelections: WardrobeSelectionState = {
-    hat: WARDROBE_ORIGINAL,
-    head: null,
-    jacket: WARDROBE_ORIGINAL,
-    body: null,
-    arms: null,
-    sleeves: WARDROBE_ORIGINAL,
-    pants: WARDROBE_ORIGINAL,
-    legs: null,
-    torso: null,
-    jacketGroup: null,
-    bottom: null,
-    center: null,
-    top: null,
-    all: null,
-  };
+  const wardrobeSelections: WardrobeSelectionState = createDefaultWardrobeSelections();
   let wardrobePreviewSelections: WardrobeSelectionState | null = null;
   const wardrobeLibraries: WardrobeLibraryState = {
     hat: [],
@@ -279,11 +267,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
   function resetWardrobeSelections(): void {
     wardrobeCompositeToken += 1;
     wardrobePreviewSelections = null;
-    for (const part of WARDROBE_PART_KEYS) {
-      wardrobeSelections[part] = WARDROBE_OVERLAY_KEYS.includes(part as (typeof WARDROBE_OVERLAY_KEYS)[number])
-        ? WARDROBE_ORIGINAL
-        : null;
-    }
+    Object.assign(wardrobeSelections, createDefaultWardrobeSelections());
   }
 
   function captureWardrobeBaseFromCurrentCanvas(path: string | null = getCreatorCurrentSkinPath()): void {
@@ -356,25 +340,6 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     });
   }
 
-  /**
-   * Default order paints upper atomics before `torso` / `center`, so composite images would
-   * overwrite atomic previews. Committed state clears overlapping composites when atomics win.
-   * For hover preview we keep composites + atomics — draw `center` before jacket/body/sleeves/arms
-   * and `torso` before body/arms so library hovers only replace matching UVs.
-   */
-  function getWardrobeResolvePartOrder(): readonly WardrobePartKey[] {
-    const keys = [...WARDROBE_PART_KEYS];
-    const torsoIdx = keys.indexOf('torso');
-    if (torsoIdx !== -1) keys.splice(torsoIdx, 1);
-    const centerIdx = keys.indexOf('center');
-    if (centerIdx !== -1) keys.splice(centerIdx, 1);
-    const jacketIdx = keys.indexOf('jacket');
-    if (jacketIdx !== -1) keys.splice(jacketIdx, 0, 'center');
-    const bodyIdx = keys.indexOf('body');
-    if (bodyIdx !== -1) keys.splice(bodyIdx, 0, 'torso');
-    return keys;
-  }
-
   async function resolveWardrobeComposite(
     selections: WardrobeSelectionState = getEffectiveSelections()
   ): Promise<void> {
@@ -396,24 +361,13 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     srcCtx.imageSmoothingEnabled = false;
 
     for (const part of getWardrobeResolvePartOrder()) {
-      const selected = selections[part];
-      const isOverlay =
-        (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(part) &&
-        !WARDROBE_COMPOSITE_KEYS.includes(part as (typeof WARDROBE_COMPOSITE_KEYS)[number]);
-
-      if (selected === null) {
-        if (isOverlay) {
-          clearPartBoundsToTransparent(destCtx, part);
-        }
-        continue;
-      }
-      if (selected === WARDROBE_ORIGINAL) {
-        continue;
-      }
+      const step = getWardrobeResolveStep(part, selections[part]);
+      if (step.kind === 'clear') clearPartBoundsToTransparent(destCtx, part);
+      if (step.kind !== 'draw') continue;
 
       let img: HTMLImageElement;
       try {
-        img = await loadWardrobeImage(selected);
+        img = await loadWardrobeImage(step.path);
       } catch {
         continue;
       }
@@ -446,68 +400,6 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     updateAllUndoRedoButtons();
   }
 
-  /**
-   * Composites are painted after atomics in resolve order; a stale composite path would
-   * overwrite valid atomics (e.g. top after user picks a head library item).
-   * Composite rows (`torso`, `center`, `jacketGroup`) exclude each other when picking another composite;
-   * atomic chest/arms/jacket/sleeves selections clear `torso` and `jacketGroup` but keep `center` so the
-   * composite still supplies regions the atomics do not paint.
-   * Atomic body/arms/jacket/sleeves commits keep `center` as well — {@link getWardrobeResolvePartOrder}
-   * paints `center` before atomics so e.g. chest can switch to an atomic body while arms stay from Upper Body.
-   * Hover previews also keep `torso` / `jacketGroup` until commit where applicable.
-   */
-  function applyMutuallyExclusiveCompositeClears(
-    selections: WardrobeSelectionState,
-    partBeingSet: WardrobePartKey,
-    options?: { hoverPreview?: boolean }
-  ): void {
-    const hoverPreview = options?.hoverPreview === true;
-    selections.all = null;
-
-    if (
-      partBeingSet === 'torso' ||
-      partBeingSet === 'center' ||
-      partBeingSet === 'jacketGroup'
-    ) {
-      if (partBeingSet !== 'torso') selections.torso = null;
-      if (partBeingSet !== 'center') {
-        // Hovering the Jacket composite strip (`jacketGroup`) must not drop a committed Upper
-        // Body (`center`) until the user commits — same idea as atomic hover preserving composites.
-        if (!(hoverPreview && partBeingSet === 'jacketGroup')) {
-          selections.center = null;
-        }
-      }
-      if (partBeingSet !== 'jacketGroup') selections.jacketGroup = null;
-    }
-
-    if (!isLayerKey(partBeingSet)) return;
-
-    if (partBeingSet === 'head' || partBeingSet === 'hat') {
-      selections.top = null;
-    }
-    if (
-      partBeingSet === 'body' ||
-      partBeingSet === 'arms' ||
-      partBeingSet === 'jacket' ||
-      partBeingSet === 'sleeves'
-    ) {
-      const preserveUpperCompositesOnAtomicHover =
-        hoverPreview &&
-        (partBeingSet === 'body' ||
-          partBeingSet === 'arms' ||
-          partBeingSet === 'jacket' ||
-          partBeingSet === 'sleeves');
-      if (!preserveUpperCompositesOnAtomicHover) {
-        selections.jacketGroup = null;
-        selections.torso = null;
-        // Do not clear selections.center — it underlays these atomics in resolve order.
-      }
-    }
-    if (partBeingSet === 'legs' || partBeingSet === 'pants') {
-      selections.bottom = null;
-    }
-  }
-
   async function applyWardrobePartSelection(part: WardrobePartKey, path: string | null): Promise<void> {
     if (!wardrobeBaseSkinData) {
       captureWardrobeBaseFromCurrentCanvas(getCreatorCurrentSkinPath());
@@ -533,7 +425,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     const effectiveSelections = getEffectiveSelections();
 
     WARDROBE_PART_PANEL_CONFIGS.forEach((config) => {
-      const isOverlay = (WARDROBE_OVERLAY_KEYS as readonly string[]).includes(config.key);
+      const isOverlay = isWardrobeOverlayPart(config.key);
       renderWardrobeLibraryPanel({
         partKey: config.key,
         selectorId: config.selectorId,
