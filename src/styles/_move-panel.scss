@@ -1,0 +1,255 @@
+// Move panel: home view only (see src/ui/movePanel.ts).
+$move-rainbow: linear-gradient(135deg, #ffb3c7 0%, #ffd8a8 25%, #fff3a8 45%, #b8f2d0 65%, #a8d8ff 82%, #d4b8ff 100%);
+
+.move-panel {
+  position: fixed;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 45;
+  width: 236px;
+  // Leave room for the ? and day/night buttons in the bottom-right corner.
+  max-height: calc(100vh - 200px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  background: rgba(var(--panel-rgb), 0.82);
+  border: 1px solid rgba(var(--fg-rgb), 0.14);
+  box-shadow: 0 10px 32px rgba(var(--shadow-rgb), 0.35);
+  backdrop-filter: blur(14px);
+  color: var(--text);
+  overflow: hidden;
+  transition: width 0.2s ease;
+
+  // Pastel strip along the top edge, same family as the Design button.
+  &::before {
+    content: '';
+    height: 4px;
+    flex: 0 0 auto;
+    background: $move-rainbow;
+  }
+
+  &.collapsed {
+    width: auto;
+
+    .move-panel-body {
+      display: none;
+    }
+  }
+}
+
+body:not([data-route='viewer']) .move-panel {
+  display: none;
+}
+
+.move-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover .move-panel-toggle-icon {
+    transform: rotate(-12deg) scale(1.1);
+  }
+}
+
+.move-panel-toggle-icon {
+  font-size: 1.15rem;
+  transition: transform 0.15s ease;
+}
+
+.move-panel-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 14px 14px;
+}
+
+// --- D-pad -----------------------------------------------------------------
+.move-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(3, 48px);
+  gap: 4px;
+  justify-content: center;
+  margin: 4px auto 0;
+  padding: 8px;
+  width: max-content;
+  border-radius: 50%;
+  background: rgba(var(--fg-rgb), 0.06);
+}
+
+.move-dpad-btn {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(var(--fg-rgb), 0.16);
+  border-radius: 12px;
+  background: rgba(var(--panel-rgb), 0.95);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(var(--shadow-rgb), 0.25);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.15s ease;
+
+  &:hover {
+    background: $move-rainbow;
+    color: #1f2747;
+  }
+
+  &:active,
+  &.pressed {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 rgba(var(--shadow-rgb), 0.25);
+  }
+}
+
+.move-dpad-up { grid-area: 1 / 2; }
+.move-dpad-left { grid-area: 2 / 1; }
+.move-dpad-home { grid-area: 2 / 2; border-radius: 50%; opacity: 0.85; }
+.move-dpad-right { grid-area: 2 / 3; }
+.move-dpad-down { grid-area: 3 / 2; }
+
+.move-hint {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+.move-section-title {
+  margin: 14px 0 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.65;
+}
+
+// --- Tricks ----------------------------------------------------------------
+.move-tricks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.move-trick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 2px 5px;
+  border: 1px solid rgba(var(--fg-rgb), 0.12);
+  border-radius: 12px;
+  background: rgba(var(--fg-rgb), 0.05);
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    border-color: rgba(var(--fg-rgb), 0.3);
+    background: rgba(var(--fg-rgb), 0.1);
+  }
+
+  &.pressed .move-trick-icon {
+    animation: move-pop 0.45s ease;
+  }
+}
+
+.move-trick-icon {
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+.move-trick-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.6rem;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+@keyframes move-pop {
+  0% { transform: scale(1) rotate(0); }
+  40% { transform: scale(1.35) rotate(-12deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+// --- All moves drawer --------------------------------------------------------
+.move-more {
+  margin-top: 12px;
+
+  summary {
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    opacity: 0.8;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &::before {
+      content: '▸ ';
+      display: inline-block;
+      transition: transform 0.15s ease;
+    }
+  }
+
+  &[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  > .move-chip-list {
+    margin-top: 8px;
+  }
+}
+
+.move-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.move-chip {
+  padding: 4px 9px;
+  border: 1px solid rgba(var(--fg-rgb), 0.14);
+  border-radius: 999px;
+  background: rgba(var(--fg-rgb), 0.05);
+  color: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:hover,
+  &.pressed {
+    background: $move-rainbow;
+    border-color: transparent;
+    color: #1f2747;
+  }
+}
+
+.move-chip-combo {
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .move-panel {
+    top: auto;
+    bottom: 64px;
+    transform: none;
+    max-height: 60vh;
+  }
+}
