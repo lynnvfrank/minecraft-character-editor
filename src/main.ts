@@ -9,7 +9,6 @@ import {
   createAnimationManager,
   type SequenceStep,
   type TurnStrategy,
-  type CharacterStateLike,
 } from './animation';
 import { getPreviewBaseSkinCandidates } from './config/scene.config';
 import {
@@ -51,7 +50,6 @@ import { createCreatorPoseController, type CreatorPoseController } from './contr
 import { createCreatorCameraController } from './controllers/creatorCameraController';
 import {
   createFocusedCreationController,
-  type FocusedCreationController,
 } from './controllers/focusedCreationController';
 import {
   startModeActor,
@@ -93,6 +91,7 @@ import { createPreviewCameraController } from './controllers/previewCamera';
 import { createPreviewRouteRuntime } from './controllers/previewRouteRuntime';
 import { createCreatorPreviewController } from './controllers/creatorPreview';
 import { createRouter } from './controllers/router';
+import { createAppContext } from './controllers/appContext';
 import { createRouteButtons } from './ui/routeButtons';
 import { createArmModelState } from './state/armModelState';
 import { initTheme } from './ui/theme';
@@ -164,6 +163,17 @@ type AppRoute = 'creator' | 'viewer' | 'preview';
 type RouteInfo = { route: AppRoute; creatorMode: EditMode | null };
 /** Extended scene context with typed characters. Populated in main() after initViewerScene. */
 type AppSceneContext = SceneContext & { characters: Record<string, CharacterState> };
+/** Services main() builds at startup; read them via `app` (see controllers/appContext.ts). */
+type AppServices = {
+  scene: AppSceneContext;
+  characters: ReturnType<typeof createCharacterController>;
+  animation: ReturnType<typeof createAnimationManager>;
+  creatorPose: CreatorPoseController;
+  viewerUI: ReturnType<typeof createViewerUIController>;
+  transitions: { getTransitionInFlight: () => boolean };
+  characterAI: ReturnType<typeof createCharacterAI> | null;
+};
+const app = createAppContext<AppServices>();
 /** Composite sequences loaded from /sequences/index.json */
 type Sequence = { id: string; label: string; steps: SequenceStep[] };
 // -----------------------------------------------------------------------------
@@ -171,7 +181,9 @@ type Sequence = { id: string; label: string; steps: SequenceStep[] };
 // -----------------------------------------------------------------------------
 
 /** Resolved after main() creates the transition handler. */
-let getCreatorTransitionInFlight: () => boolean = () => false;
+function getCreatorTransitionInFlight(): boolean {
+  return app.tryGet('transitions')?.getTransitionInFlight() ?? false;
+}
 
 const PREVIEW_BASE_SKIN_CANDIDATES = getPreviewBaseSkinCandidates(FALLBACK_SKINS[0]?.path);
 
@@ -187,19 +199,15 @@ function getCreatorHash(mode: EditMode = EDIT_MODE_WARDROBE): string {
   return `#/creator/${mode}`;
 }
 
-let sceneContext: AppSceneContext | null = null;
 
 function getSceneContext(): AppSceneContext {
-  if (!sceneContext) throw new Error('Scene not initialized');
-  return sceneContext;
+  return app.get('scene');
 }
 
-let getCharacter: (id: string) => CharacterState | undefined = (id) =>
-  sceneContext?.characters[id] as CharacterState | undefined;
-/** Set by main() from characterController. Used by resumeHomeMode and other callbacks. */
-let fadeToAction: (char: CharacterStateLike, action: THREE.AnimationAction, duration?: number) => void = () => {};
+function getCharacter(id: string): CharacterState | undefined {
+  return app.tryGet('scene')?.characters[id] as CharacterState | undefined;
+}
 
-let animationManager: ReturnType<typeof createAnimationManager> | null = null;
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
 function logTransition(stage: string, extra: Record<string, unknown> = {}) {
@@ -221,7 +229,7 @@ function logTransition(stage: string, extra: Record<string, unknown> = {}) {
       payload.actionDuration = Number((char.currentAction.getClip()?.duration ?? 0).toFixed(3));
     }
   }
-  const ctx = sceneContext;
+  const ctx = app.tryGet('scene');
   if (ctx && ctx.camera && ctx.controls) {
     payload.cameraPos = {
       x: Number(ctx.camera.position.x.toFixed(3)),
@@ -237,34 +245,28 @@ function logTransition(stage: string, extra: Record<string, unknown> = {}) {
   logger.info('transition', stage, payload);
 }
 
-let creatorPoseController: CreatorPoseController;
-let focusedCreationController: FocusedCreationController | null = null;
-let characterController: ReturnType<typeof createCharacterController>;
-let viewerUIController: ReturnType<typeof createViewerUIController>;
-let characterEventsController: ReturnType<typeof createCharacterEventsController>;
-let animationLoopController: ReturnType<typeof createAnimationLoopController>;
 
 function resumeHomeMode() {
   const char = getCharacter(getPrimaryCharacterId());
   if (char?.idleAction) {
     char.idleAction.setLoop(THREE.LoopRepeat, Infinity);
     char.idleAction.clampWhenFinished = false;
-    fadeToAction(char, char.idleAction, 0.3);
+    app.tryGet('characters')?.fadeToAction(char, char.idleAction, 0.3);
   }
-  const reacted = characterAI?.onUserActivity(true) ?? false;
+  const reacted = app.tryGet('characterAI')?.onUserActivity(true) ?? false;
   if (!reacted) {
-    animationManager?.runOneWanderStep?.();
+    app.tryGet('animation')?.runOneWanderStep?.();
   }
 }
 
 const CREATOR_EXIT_ANIMATION_MS = 450;
 
 function ensureViewerFullWidthLayout() {
-  const app = document.getElementById('app');
+  const appEl = document.getElementById('app');
   const wrapper = document.getElementById('creator-view-wrapper');
-  if (!app || !wrapper) return;
-  if (app.parentElement !== wrapper) {
-    wrapper.appendChild(app);
+  if (!appEl || !wrapper) return;
+  if (appEl.parentElement !== wrapper) {
+    wrapper.appendChild(appEl);
   }
   onWindowResize();
 }
@@ -286,8 +288,6 @@ if (!container) {
 let skinsList: SkinEntry[] = [];
 let animationsList: AnimationEntry[] = [];
 let sequencesList: Sequence[] = [];
-let socketManager: ReturnType<typeof createSocketManager> | null = null;
-let characterAI: ReturnType<typeof createCharacterAI> | null = null;
 
 // Defer initial routing until after module evaluation finishes.
 // `applyRoute()` may touch preview-related vars/functions that are declared later in this file,
@@ -329,16 +329,16 @@ function setupUserActivityListeners() {
     const now = Date.now();
     if (now - lastMouseReport < MOUSE_THROTTLE_MS) return;
     lastMouseReport = now;
-    characterAI?.onUserActivity(false);
+    app.tryGet('characterAI')?.onUserActivity(false);
   });
   document.addEventListener('keydown', () => {
     if (getRoute() !== 'viewer') return;
-    characterAI?.onUserActivity(true);
+    app.tryGet('characterAI')?.onUserActivity(true);
   });
 }
 
 function onWindowResize() {
-  const ctx = sceneContext;
+  const ctx = app.tryGet('scene');
   if (!ctx || !ctx.container || !ctx.camera || !ctx.renderer) return;
   const width = ctx.container.clientWidth;
   const height = ctx.container.clientHeight;
@@ -351,7 +351,7 @@ function onWindowResize() {
 /** Path last loaded into creator (from gallery or route enter). Used to know when to reload from char.currentSkin (user picked different skin in home). */
 const skinCompositor = createSkinCompositor();
 const previewCamera = createPreviewCameraController({
-  getSceneContext: () => sceneContext,
+  getSceneContext: () => app.tryGet('scene') ?? null,
   defaultFov: DEFAULT_SCENE_FOV,
   showDebugPanel: SHOW_PREVIEW_CAMERA_CONTROLS,
   isPreviewRoute: () => getRoute() === 'preview',
@@ -369,7 +369,7 @@ const previewRuntime = createPreviewRouteRuntime({
   routeController: previewRouteController,
   camera: previewCamera,
   compositor: skinCompositor,
-  getSceneContext: () => sceneContext,
+  getSceneContext: () => app.tryGet('scene') ?? null,
   getPrimaryCharacter: () => getCharacter(getPrimaryCharacterId()),
   isPreviewRoute: () => getRoute() === 'preview',
   getSkinPaths: () => skinsList.map((skin) => skin.path),
@@ -387,11 +387,11 @@ const router = createRouter({
     loadSkinFromPath,
   },
   defaultCreatorMode: EDIT_MODE_WARDROBE,
-  creatorPose: () => creatorPoseController,
+  creatorPose: () => app.get('creatorPose'),
   previewRuntime,
   getRoute,
   getPrimaryCharacter: () => getCharacter(getPrimaryCharacterId()),
-  getSceneContext: () => sceneContext,
+  getSceneContext: () => app.tryGet('scene') ?? null,
   updateCreatorViewPlacement: updateCreator3DViewPlacement,
   ensureViewerLayout: ensureViewerFullWidthLayout,
   resumeHome: resumeHomeMode,
@@ -405,7 +405,7 @@ function nextAnimationFrame(): Promise<void> {
 }
 
 function bindFocusedModeAutoDisableOnMouseCameraMove(): void {
-  const ctx = sceneContext;
+  const ctx = app.tryGet('scene');
   if (!ctx?.renderer || !ctx?.controls) return;
   const canvas = ctx.renderer.domElement;
   if (!canvas) return;
@@ -453,17 +453,17 @@ function bindFocusedModeAutoDisableOnMouseCameraMove(): void {
 // -----------------------------------------------------------------------------
 
 function updateCreator3DViewPlacement() {
-  if (getRoute() !== 'creator' || !sceneContext) return;
-  const app = document.getElementById('app');
+  if (getRoute() !== 'creator' || !app.tryGet('scene')) return;
+  const appEl = document.getElementById('app');
   const wrapper = document.getElementById('creator-view-wrapper');
   const slot = document.getElementById('creator-3d-preview-slot');
-  if (!app || !wrapper || !slot) return;
+  if (!appEl || !wrapper || !slot) return;
   const mode = getEditMode();
   const show3DInMainArea = mode === '3d' || mode === 'wardrobe';
   if (show3DInMainArea) {
-    const ctx = sceneContext;
-    if (app.parentElement !== wrapper) {
-      wrapper.appendChild(app);
+    const ctx = app.get('scene');
+    if (appEl.parentElement !== wrapper) {
+      wrapper.appendChild(appEl);
       const prevControls = ctx.controls;
       ctx.controls = recreateOrbitControls(ctx.camera, ctx.renderer, prevControls);
       prevControls.dispose();
@@ -472,8 +472,8 @@ function updateCreator3DViewPlacement() {
     }
     onWindowResize();
   } else {
-    if (app.parentElement !== slot) {
-      slot.appendChild(app);
+    if (appEl.parentElement !== slot) {
+      slot.appendChild(appEl);
     }
     onWindowResize();
   }
@@ -486,7 +486,7 @@ function setupCreatorPreviewDirtySubscription(): void {
   creatorLayerSlice.subscribe(() => markDirty());
   creatorModeSlice.subscribe((detail) => {
     if (getRoute() !== 'creator') return;
-    creatorPoseController.applyCreatorCharacterPose(detail);
+    app.get('creatorPose').applyCreatorCharacterPose(detail);
   });
   creatorSkinLoadSlice.subscribe((detail) => {
     markDirty();
@@ -497,7 +497,7 @@ function setupCreatorPreviewDirtySubscription(): void {
       if (char) {
         char.currentSkin = path;
         router.noteCreatorLoadedPath(path);
-        viewerUIController.highlightActiveSkin(getPrimaryCharacterId(), path);
+        app.get('viewerUI').highlightActiveSkin(getPrimaryCharacterId(), path);
       }
     }
   });
@@ -513,7 +513,7 @@ function setupCreatorPreviewDirtySubscription(): void {
  * Uses fullOutfit preset to match preview-generated thumbnails.
  */
 export async function captureCreator3DThumbnail(size: number = 128): Promise<string | null> {
-  const ctx = sceneContext;
+  const ctx = app.tryGet('scene');
   const char = getCharacter(getPrimaryCharacterId());
   if (!char || !ctx || !ctx.renderer || !ctx.scene || !ctx.container) return null;
 
@@ -601,7 +601,7 @@ export async function captureCreator3DPartThumbnail(
   part: PreviewPresetKey,
   size: number = 128
 ): Promise<string | null> {
-  const ctx = sceneContext;
+  const ctx = app.tryGet('scene');
   const char = getCharacter(getPrimaryCharacterId());
   if (!char || !ctx || !ctx.renderer || !ctx.scene || !ctx.container) return null;
 
@@ -712,6 +712,7 @@ const armModelState = createArmModelState({
 
 /** Swap the primary character's rig when the resolved arm model changes. */
 function applyArmModelToCharacter(): void {
+  const characterController = app.tryGet('characters');
   if (!characterController) return;
   const char = getCharacter(getPrimaryCharacterId());
   if (!char) return;
@@ -771,26 +772,19 @@ async function main(): Promise<void> {
     document.body.dataset.editMode = initialRoute.creatorMode ?? EDIT_MODE_WARDROBE;
   }
 
-  sceneContext = initViewerScene(container, params) as AppSceneContext;
+  const sceneContext = app.provide('scene', initViewerScene(container, params) as AppSceneContext);
   initTheme();
   initAboutPanel();
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();
 
-  const controllerRefs = {
-    creatorPoseController: null as CreatorPoseController | null,
-    animationManager: null as ReturnType<typeof createAnimationManager> | null,
-    getCharacter: ((id: string) => sceneContext?.characters[id]) as (id: string) => CharacterState | undefined,
-    getCreatorTransitionInFlight: (() => false) as () => boolean,
-  };
-
-  viewerUIController = createViewerUIController({
-    getCharacter: (id) => controllerRefs.getCharacter(id),
+  const viewerUIController = app.provide('viewerUI', createViewerUIController({
+    getCharacter,
     getPrimaryCharacterId,
-    getAnimationManager: () => controllerRefs.animationManager,
-  });
+    getAnimationManager: () => app.tryGet('animation') ?? null,
+  }));
 
-  characterController = createCharacterController({
+  const characterController = createCharacterController({
     getSceneContext,
     preprocessSkinTexture,
     applySkinToModel,
@@ -808,9 +802,9 @@ async function main(): Promise<void> {
     },
     getSequencesList: () => sequencesList,
     onPreviewRouteAfterCharacterReady: () => void previewRuntime.sync(),
-    getCreatorPoseController: () => controllerRefs.creatorPoseController,
-    getCreatorTransitionInFlight: () => controllerRefs.getCreatorTransitionInFlight(),
-    getAnimationManager: () => controllerRefs.animationManager,
+    getCreatorPoseController: () => app.tryGet('creatorPose') ?? null,
+    getCreatorTransitionInFlight,
+    getAnimationManager: () => app.tryGet('animation') ?? null,
     highlightActiveButton: (charId, action) => viewerUIController.highlightActiveButton(charId, action),
     highlightActiveSkin: (charId, path) => {
       viewerUIController.highlightActiveSkin(charId, path);
@@ -820,12 +814,11 @@ async function main(): Promise<void> {
     logModelInfo: LOG_MODEL_INFO,
   });
 
-  controllerRefs.getCharacter = characterController.getCharacter;
-  getCharacter = characterController.getCharacter;
-  fadeToAction = characterController.fadeToAction;
+  app.provide('characters', characterController);
+  const fadeToAction = characterController.fadeToAction;
   const getAction = characterController.getAction;
 
-  animationManager = createAnimationManager({
+  const animationManager = createAnimationManager({
     getCharacter,
     fadeToAction,
     getAction,
@@ -833,9 +826,9 @@ async function main(): Promise<void> {
     clock: sceneContext!.clock,
     getTurnStrategy: () => turnStrategy,
   });
-  controllerRefs.animationManager = animationManager;
+  app.provide('animation', animationManager);
 
-  creatorPoseController = createCreatorPoseController({
+  const creatorPoseController = createCreatorPoseController({
     getCharacter,
     getPrimaryCharacterId,
     getEditMode,
@@ -850,6 +843,8 @@ async function main(): Promise<void> {
     easeOutCubic,
   });
 
+  app.provide('creatorPose', creatorPoseController);
+
   createCreatorCameraController({
     getSceneContext,
     getRoute,
@@ -857,8 +852,7 @@ async function main(): Promise<void> {
     creatorPoseController,
   });
 
-  focusedCreationController?.dispose();
-  focusedCreationController = createFocusedCreationController({
+  createFocusedCreationController({
     getFocusedCreationEnabled,
     getRoute,
     getEditMode,
@@ -910,7 +904,7 @@ async function main(): Promise<void> {
   }
   sequencesList = sequences;
 
-  socketManager = createSocketManager();
+  const socketManager = createSocketManager();
 
   const creatorTransitionHandler = createCreatorTransitionHandler({
     getRoute,
@@ -930,12 +924,10 @@ async function main(): Promise<void> {
     resumeHomeMode,
     CREATOR_EXIT_ANIMATION_MS
   });
-  controllerRefs.creatorPoseController = creatorPoseController;
-  controllerRefs.getCreatorTransitionInFlight = creatorTransitionHandler.getTransitionInFlight;
-  getCreatorTransitionInFlight = creatorTransitionHandler.getTransitionInFlight;
+  app.provide('transitions', { getTransitionInFlight: creatorTransitionHandler.getTransitionInFlight });
   routeButtons.setup(creatorTransitionHandler);
 
-  characterEventsController = createCharacterEventsController({
+  const characterEventsController = createCharacterEventsController({
     getCharacter,
     getPrimaryCharacterId,
     getRoute,
@@ -944,12 +936,14 @@ async function main(): Promise<void> {
     switchSkin: characterController.switchSkin,
     getAction,
     fadeToAction,
-    getCharacterAI: () => characterAI,
+    getCharacterAI: () => app.tryGet('characterAI') ?? null,
     animationManager,
     highlightActiveButton: viewerUIController.highlightActiveButton,
   });
 
+  let animationLoopController: ReturnType<typeof createAnimationLoopController>;
   if (isTestMode) {
+    app.provide('characterAI', null);
     animationLoopController = createAnimationLoopController({
       getSceneContext,
       getRoute,
@@ -972,14 +966,15 @@ async function main(): Promise<void> {
       turnStrategies: TURN_STRATEGIES
     });
   } else {
-    characterAI = createCharacterAI({
+    const characterAI = createCharacterAI({
       getCharacter,
       fadeToAction,
       getAction,
       getCamera: () => sceneContext!.camera,
       getClock: () => sceneContext!.clock,
-      animationManager: animationManager!
+      animationManager,
     });
+    app.provide('characterAI', characterAI);
     animationLoopController = createAnimationLoopController({
       getSceneContext,
       getRoute,
