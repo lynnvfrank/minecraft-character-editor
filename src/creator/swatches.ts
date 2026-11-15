@@ -8,7 +8,7 @@ import { isValidHex, normalizeHex, rgbToHex, hexToRgb } from '../lib/color';
 import { getCreatorPanelsContainer } from './container';
 import type { SwatchesContext, SwatchPaletteId } from './api';
 import type { CreatorState } from '../state';
-import { creatorScope } from './lifecycle';
+import type { DisposableScope } from './lifecycle';
 
 /** Squared RGB distance between two hex colors (faster than sqrt). */
 export function colorDistanceSq(a: string, b: string): number {
@@ -166,7 +166,7 @@ export function updateSwatchSlots(slots: HTMLButtonElement[], ctx: SwatchesConte
   }
 }
 
-export function buildSwatchesPanel(ctx: SwatchesContext): void {
+export function buildSwatchesPanel(ctx: SwatchesContext, scope: DisposableScope): void {
   const container = getCreatorPanelsContainer();
   if (!container) return;
 
@@ -267,16 +267,16 @@ export function buildSwatchesPanel(ctx: SwatchesContext): void {
     if (swatchesMinimized) updateHeaderCollapsedDisplay();
   };
 
-  creatorScope.track(creatorSwatchHistorySlice.subscribe(() => {
+  scope.track(creatorSwatchHistorySlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     refreshSlots();
   }));
-  creatorScope.track(creatorSwatchPaletteSlice.subscribe(() => {
+  scope.track(creatorSwatchPaletteSlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     updateTabsActive();
     refreshSlots();
   }));
-  creatorScope.track(creatorSkinLoadSlice.subscribe(() => {
+  scope.track(creatorSkinLoadSlice.subscribe(() => {
     if (document.body.dataset.route !== 'creator') return;
     refreshSlots();
   }));

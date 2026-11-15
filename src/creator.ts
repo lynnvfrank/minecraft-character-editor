@@ -52,6 +52,7 @@ import type { WardrobeLayerKey } from './creator/wardrobeLayers';
 import { createColorActions, extractColorsFromSkin } from './creator/swatches';
 import { createSkinGalleryApi } from './creator/skinGallery';
 import { creatorScope } from './creator/lifecycle';
+import { mountPanels, type CreatorPanel } from './creator/panels';
 
 // --- Imports: events, state, lib, viewer ---
 import { createCreatorState } from './state';
@@ -368,29 +369,43 @@ function buildCreatorPanels(): void {
     updateCanvasCursor,
   };
 
-  buildColorToolbar(colorToolbarCtx);
-  buildColorPickerPanel(colorPickerCtx);
-  buildSwatchesPanel(swatchesCtx);
-  buildSkinLayersPanel(skinLayersCtx);
-  buildEditorToolsPanel(editorToolsCtx);
-  buildWardrobeLibraryPanels();
-  buildWardrobePartsPanel({
-    getEditMode: () => state.editMode,
-    getSelectedLayer: () => wardrobeApi.getWardrobeSelectedLayer(),
-    setSelectedLayer: (layer) => wardrobeApi.setWardrobeSelectedLayer(layer),
-  });
-  buildSaveDownloadPanel({
-    onSave: skinGalleryApi.saveCurrentSkinToOutfits,
-    onDownload: skinGalleryApi.downloadCurrentSkin,
-  });
-  buildArmModelPanel();
-  buildTexturePositionPanel();
-  buildCameraControls({
-    getFocusedCreationEnabled: () => state.focusedCreationEnabled,
-    setFocusedCreationEnabled,
-    subscribeFocusedCreationChanged: (cb) =>
-      creatorScope.track(creatorFocusedCreationSlice.subscribe(() => cb())),
-  });
+  const panels: CreatorPanel[] = [
+    { name: 'colorToolbar', mount: () => buildColorToolbar(colorToolbarCtx) },
+    { name: 'colorPicker', mount: (scope) => buildColorPickerPanel(colorPickerCtx, scope) },
+    { name: 'swatches', mount: (scope) => buildSwatchesPanel(swatchesCtx, scope) },
+    { name: 'skinLayers', mount: (scope) => buildSkinLayersPanel(skinLayersCtx, scope) },
+    { name: 'editorTools', mount: (scope) => buildEditorToolsPanel(editorToolsCtx, scope) },
+    { name: 'wardrobeLibraries', mount: () => buildWardrobeLibraryPanels() },
+    {
+      name: 'wardrobeParts',
+      mount: () =>
+        buildWardrobePartsPanel({
+          getEditMode: () => state.editMode,
+          getSelectedLayer: () => wardrobeApi.getWardrobeSelectedLayer(),
+          setSelectedLayer: (layer) => wardrobeApi.setWardrobeSelectedLayer(layer),
+        }),
+    },
+    {
+      name: 'saveDownload',
+      mount: () =>
+        buildSaveDownloadPanel({
+          onSave: skinGalleryApi.saveCurrentSkinToOutfits,
+          onDownload: skinGalleryApi.downloadCurrentSkin,
+        }),
+    },
+    { name: 'armModel', mount: (scope) => buildArmModelPanel(scope) },
+    { name: 'texturePosition', mount: (scope) => buildTexturePositionPanel(scope) },
+    {
+      name: 'cameraControls',
+      mount: (scope) =>
+        buildCameraControls({
+          getFocusedCreationEnabled: () => state.focusedCreationEnabled,
+          setFocusedCreationEnabled,
+          subscribeFocusedCreationChanged: (cb) => scope.track(creatorFocusedCreationSlice.subscribe(() => cb())),
+        }),
+    },
+  ];
+  mountPanels(panels, creatorScope);
   modePanelTransitions.applyModePanelsImmediate(state.editMode);
 }
 

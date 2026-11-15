@@ -2,9 +2,9 @@ import type { CreatorTexturePositionDetail } from '../events/appEvents';
 import { creatorTexturePositionSlice } from '../state/creatorSlices';
 import { TOOL_LABELS, type DrawingTool } from './api';
 import { getCreatorPanelsContainer } from './container';
-import { creatorScope } from './lifecycle';
+import type { DisposableScope } from './lifecycle';
 
-export function buildTexturePositionPanel(): void {
+export function buildTexturePositionPanel(scope: DisposableScope): void {
   const container = getCreatorPanelsContainer();
   if (!container) return;
 
@@ -48,7 +48,7 @@ export function buildTexturePositionPanel(): void {
     textSpan.textContent = '—';
   };
 
-  creatorScope.track(creatorTexturePositionSlice.subscribe((detail: CreatorTexturePositionDetail) => {
+  scope.track(creatorTexturePositionSlice.subscribe((detail: CreatorTexturePositionDetail) => {
     if (document.body.dataset.route !== 'creator') return;
     const { skinX, skinY, tool, currentColor, hoverColor } = detail;
 
