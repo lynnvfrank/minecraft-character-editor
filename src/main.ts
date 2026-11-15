@@ -1317,7 +1317,7 @@ async function main(): Promise<void> {
     getCamera: () => sceneContext?.camera ?? null,
     getCharacterPosition: () => getCharacter(getPrimaryCharacterId())?.container.position ?? null,
     getAnimationManager: () => controllerRefs.animationManager,
-    onUserControl: () => characterAI?.onUserActivity(true),
+    onUserControl: () => characterAI?.userTookControl(),
   });
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();

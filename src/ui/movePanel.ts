@@ -174,7 +174,9 @@ export function createMovePanel(deps: MovePanelDeps) {
   function play(key: string, btn?: HTMLElement) {
     if (deps.getRoute() !== 'viewer') return;
     if (btn) flash(btn);
-    // The animation-play handler already stops movement and quiets the idle AI.
+    // Claim control first so the idle AI doesn't treat this as "user came back" and walk over.
+    // The animation-play handler then stops any movement and plays the clip.
+    deps.onUserControl();
     publish(APP_EVENTS['app:character:animation-play'], { name: key });
   }
 
