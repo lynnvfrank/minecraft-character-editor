@@ -73,8 +73,27 @@ function createNoiseTexture(): THREE.Texture {
 
 export const BLOCK_WORLD_NAME = 'block-world';
 
-/** Build the scene group for `world`. Call `dispose` on the result's userData when removing it. */
-export function createBlockWorldMesh(world: BlockWorld): THREE.Group {
+export type BlockWorldMesh = {
+  group: THREE.Group;
+  /**
+   * Hide every above-ground block within `radius` of the segment eye→focus (so nothing stands
+   * between the camera and the character), or pass null to show everything again.
+   */
+  setCutaway: (cut: { eye: THREE.Vector3; focus: THREE.Vector3; radius: number } | null) => void;
+  dispose: () => void;
+};
+
+/** Distance from point p to segment a→b. */
+function distToSegment(p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3): number {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const len2 = abx * abx + aby * aby + abz * abz;
+  let t = len2 > 0 ? ((p.x - a.x) * abx + (p.y - a.y) * aby + (p.z - a.z) * abz) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t), p.z - (a.z + abz * t));
+}
+
+/** Build the scene objects for `world`. */
+export function createBlockWorldMesh(world: BlockWorld): BlockWorldMesh {
   const group = new THREE.Group();
   group.name = BLOCK_WORLD_NAME;
 
@@ -93,6 +112,8 @@ export function createBlockWorldMesh(world: BlockWorld): THREE.Group {
   const pos = new THREE.Vector3();
   const scale = new THREE.Vector3();
   const color = new THREE.Color();
+  /** Per mesh: its blocks and which instances are currently cut away. */
+  const meshes: { mesh: THREE.InstancedMesh; blocks: typeof world.blocks; hidden: Uint8Array }[] = [];
 
   for (const [kind, blocks] of byKind) {
     const style = STYLES[kind];
@@ -126,8 +147,37 @@ export function createBlockWorldMesh(world: BlockWorld): THREE.Group {
     // Instances span the whole map; the default bounding sphere is the unit box's.
     mesh.computeBoundingSphere();
     group.add(mesh);
+    meshes.push({ mesh, blocks, hidden: new Uint8Array(blocks.length) });
   }
 
-  group.userData.dispose = () => disposables.forEach((d) => d.dispose());
-  return group;
+  const center = new THREE.Vector3();
+  const hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+
+  function setCutaway(cut: { eye: THREE.Vector3; focus: THREE.Vector3; radius: number } | null): void {
+    for (const { mesh, blocks, hidden } of meshes) {
+      let changed = false;
+      blocks.forEach((b, i) => {
+        let hide = 0;
+        // Ground-level blocks (tops at or below y = 0) never block the view of someone standing on them.
+        if (cut && b.y + b.sy / 2 > 0.01) {
+          center.set(b.x, b.y, b.z);
+          const reach = cut.radius + Math.max(b.sx, b.sy, b.sz) * 0.5;
+          if (distToSegment(center, cut.eye, cut.focus) < reach) hide = 1;
+        }
+        if (hidden[i] === hide) return;
+        hidden[i] = hide;
+        changed = true;
+        if (hide) {
+          mesh.setMatrixAt(i, hiddenMatrix);
+        } else {
+          pos.set(b.x, b.y, b.z);
+          scale.set(b.sx, b.sy, b.sz);
+          mesh.setMatrixAt(i, m.compose(pos, q, scale));
+        }
+      });
+      if (changed) mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  return { group, setCutaway, dispose: () => disposables.forEach((d) => d.dispose()) };
 }

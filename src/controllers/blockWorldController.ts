@@ -4,7 +4,8 @@
  * trees and the pond: a CrowdNav for the crowd and planWalk/clampWalkTarget for the animation
  * manager (the selected character's Move panel and AI walks).
  *
- * The village only shows in the home view; the creator and preview keep the plain ground disc.
+ * The village shows in the home view and the editor; preview keeps the plain ground disc, and
+ * thumbnail captures hide it (viewer/thumbnailCapture.ts).
  * Turn it off with `?world=0`.
  */
 import * as THREE from 'three';
@@ -24,7 +25,8 @@ export type BlockWorldController = ReturnType<typeof createBlockWorldController>
 
 export function createBlockWorldController(scene: THREE.Scene) {
   const world: BlockWorld = buildBlockWorld();
-  const group = createBlockWorldMesh(world);
+  const view = createBlockWorldMesh(world);
+  const group = view.group;
   group.visible = false;
   scene.add(group);
 
@@ -57,10 +59,33 @@ export function createBlockWorldController(scene: THREE.Scene) {
     return path ? path.map((p) => new THREE.Vector3(p.x, 0, p.z)) : null;
   }
 
+  /** Editor camera: hide blocks between it and the character (see setCutaway). */
+  const CUTAWAY_RADIUS = 0.9;
+  const lastEye = new THREE.Vector3(Infinity, 0, 0);
+  const lastFocus = new THREE.Vector3(Infinity, 0, 0);
+  let cutawayOn = false;
+
+  /** Per frame, editor only: keep the view from the camera to `focus` clear of walls and trees. */
+  function updateCutaway(eye: THREE.Vector3 | null, focus: THREE.Vector3 | null): void {
+    if (!eye || !focus) {
+      if (cutawayOn) view.setCutaway(null);
+      cutawayOn = false;
+      return;
+    }
+    if (cutawayOn && eye.distanceToSquared(lastEye) < 1e-6 && focus.distanceToSquared(lastFocus) < 1e-6) return;
+    lastEye.copy(eye);
+    lastFocus.copy(focus);
+    cutawayOn = true;
+    view.setCutaway({ eye, focus, radius: CUTAWAY_RADIUS });
+  }
+
   let shown: boolean | null = null;
-  /** Per frame: the village shows in the home view only, in place of the ground disc. */
+  /**
+   * Per frame: the village shows in the home view and the editor (the character stays where it
+   * was), in place of the ground disc. Preview renders keep the plain ground.
+   */
   function update(r: Route): void {
-    const show = r === 'viewer';
+    const show = r === 'viewer' || r === 'creator';
     if (show === shown) return;
     shown = show;
     group.visible = show;
@@ -73,6 +98,7 @@ export function createBlockWorldController(scene: THREE.Scene) {
     clampWalkTarget,
     planWalk,
     update,
+    updateCutaway,
     /** Distance from the origin the camera may pan to (the map's corner). */
     roamRadius: Math.hypot(halfSize, halfSize),
   };

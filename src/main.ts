@@ -680,6 +680,7 @@ async function main(): Promise<void> {
     creatorCameraOffsetFromCharacter: CREATOR_CAMERA_OFFSET_FROM_CHARACTER,
     creatorTargetOffsetFromCharacter: CREATOR_TARGET_OFFSET_FROM_CHARACTER,
     creatorIdleTransitionMinDurationSec: CREATOR_IDLE_TRANSITION_MIN_DURATION_SEC,
+    getCharacterYaw: () => animationManager.getFacing(),
     easeOutCubic,
   });
 
@@ -781,9 +782,22 @@ async function main(): Promise<void> {
     highlightActiveButton: viewerUIController.highlightActiveButton,
   });
 
+  const cutawayFocus = new THREE.Vector3();
   /** Crowd, selection and camera follow. The world stops while the creator is open. */
   function onWorldUpdate(delta: number, route: AppRoute): void {
     blockWorld?.update(route);
+    if (blockWorld) {
+      // Editor (and the camera move into it): keep walls and trees out from between camera and character.
+      const editing = route === 'creator' || (route === 'viewer' && getCreatorTransitionInFlight());
+      const char = editing ? getCharacter(getPrimaryCharacterId()) : undefined;
+      if (char) {
+        cutawayFocus.copy(char.container.position);
+        cutawayFocus.y += 1; // chest height
+        blockWorld.updateCutaway(sceneContext.camera.position, cutawayFocus);
+      } else {
+        blockWorld.updateCutaway(null, null);
+      }
+    }
     crowd.update(delta, route, !getCreatorTransitionInFlight());
     app.tryGet('selection')?.update(delta, route);
     const target = sceneContext.controls.target;
@@ -880,6 +894,7 @@ async function main(): Promise<void> {
     (window as unknown as Record<string, unknown>).__world = {
       crowd,
       blockWorld,
+      animation: animationManager,
       selection: app.get('selection'),
       characters: sceneContext.characters,
       scene: sceneContext,
@@ -907,6 +922,10 @@ async function main(): Promise<void> {
     getWorkSize: getCreatorWorkSize,
     compositor: skinCompositor,
     markPreviewDirty: creatorPreview.markDirty,
+    getCharacterAnchor: () => {
+      const p = getCharacter(getPrimaryCharacterId())?.container.position;
+      return { x: p?.x ?? 0, y: p?.y ?? 0, z: p?.z ?? 0, yaw: creatorPoseController.getCharacterYaw() };
+    },
   });
   registerCapture3DThumbnail(thumbnails.captureFull);
   registerCapture3DPartThumbnail(thumbnails.capturePart);

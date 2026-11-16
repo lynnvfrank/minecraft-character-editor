@@ -28,6 +28,12 @@ export type CreatorPoseDeps = {
   creatorTargetOffsetFromCharacter: THREE.Vector3;
   creatorIdleTransitionMinDurationSec: number;
   easeOutCubic: (t: number) => number;
+  /**
+   * The way the character faces once it settles (animation manager's facing). `model.rotation.y`
+   * alone is wrong while a turn clip is still blending out: it is offset by the clip's root yaw
+   * (up to 180°), which put the camera behind the character.
+   */
+  getCharacterYaw?: () => number;
 };
 
 export type CreatorPoseController = {
@@ -40,6 +46,8 @@ export type CreatorPoseController = {
   snapCameraToCreatorView: (pose?: CameraPose) => void;
   animateCameraToCreatorView: (pose?: CameraPose) => Promise<void>;
   isCreatorIdleCompletingTransition: () => boolean;
+  /** See CreatorPoseDeps.getCharacterYaw. */
+  getCharacterYaw: () => number;
 };
 
 export function createCreatorPoseController(deps: CreatorPoseDeps): CreatorPoseController {
@@ -161,6 +169,11 @@ export function createCreatorPoseController(deps: CreatorPoseDeps): CreatorPoseC
     return remaining > 0.05 ? Math.min(remaining, 4) : 0;
   }
 
+  function getCharacterYaw(): number {
+    if (deps.getCharacterYaw) return deps.getCharacterYaw();
+    return deps.getCharacter(deps.getPrimaryCharacterId())?.model.rotation.y ?? 0;
+  }
+
   function getCreatorCameraPose(): CameraPose {
     const char = deps.getCharacter(deps.getPrimaryCharacterId());
     if (!char) {
@@ -170,7 +183,7 @@ export function createCreatorPoseController(deps: CreatorPoseDeps): CreatorPoseC
       };
     }
 
-    const yaw = char.model.rotation.y;
+    const yaw = getCharacterYaw();
     const upAxis = new THREE.Vector3(0, 1, 0);
     const cameraOffset = deps.creatorCameraOffsetFromCharacter.clone().applyAxisAngle(upAxis, yaw);
     const targetOffset = deps.creatorTargetOffsetFromCharacter.clone().applyAxisAngle(upAxis, yaw);
@@ -274,5 +287,6 @@ export function createCreatorPoseController(deps: CreatorPoseDeps): CreatorPoseC
     snapCameraToCreatorView,
     animateCameraToCreatorView,
     isCreatorIdleCompletingTransition,
+    getCharacterYaw,
   };
 }

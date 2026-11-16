@@ -4,5 +4,7 @@ export type {
   PreviewPresetKey,
   PreviewVector,
   PreviewViewport,
-  PreviewPreset
+  PreviewPreset,
+  CharacterAnchor
 } from './preview';
+export { placeAroundCharacter } from './preview';
