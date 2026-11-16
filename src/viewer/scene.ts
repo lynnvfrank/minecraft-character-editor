@@ -309,6 +309,11 @@ export function addGround(scene: THREE.Scene): void {
   scene.add(ground);
 }
 
+/** Show or hide the ground disc (the home view's block village replaces it). */
+export function setGroundVisible(visible: boolean): void {
+  rig?.scene.getObjectByName('ground')?.traverse((o) => (o.visible = visible));
+}
+
 export function applyShadowToModel(model: THREE.Group): void {
   model.traverse((obj) => {
     if ((obj as THREE.Mesh).isMesh) {

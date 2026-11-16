@@ -178,7 +178,8 @@ export function createCrowdController(deps: CrowdControllerDeps) {
   }
 
   function setCrowdVisible(visible: boolean): void {
-    zoneRing.visible = visible;
+    // With a walkable world the whole map is the zone; the ring would cut through houses.
+    zoneRing.visible = visible && !config.nav;
     for (const agent of sim.list()) {
       const char = getChar(agent.id);
       if (char) char.container.visible = visible;
@@ -196,7 +197,9 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     if (route !== 'viewer' || !running) return;
     const step = Math.min(dt, 0.1); // a backgrounded tab returns with a huge delta
     checkPending(step);
-    handleEvents(sim.tick(step));
+    // The selected character isn't in the sim; the crowd keeps clear of it.
+    const primary = getChar(deps.getPrimaryCharacterId())?.container.position;
+    handleEvents(sim.tick(step, primary ? [{ x: primary.x, z: primary.z }] : []));
     applyTransforms();
   }
 

@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCrowdSim, DEFAULT_CROWD_CONFIG, type CrowdConfig, type CrowdEvent } from './crowd';
+import { createNavGrid, findPath, isClearAt, setBlocked } from '../lib/gridPath';
 
 /** Deterministic PRNG (mulberry32) so runs are repeatable. */
 function seeded(seed: number): () => number {
@@ -117,5 +118,136 @@ describe('crowd sim', () => {
     assert.equal(sim.size(), 1);
     assert.ok(sim.remove('runningboy-old'));
     assert.equal(sim.size(), 0);
+  });
+
+  test('with navigation, agents come in through a gate and never walk through a wall', () => {
+    // 12×12 open field (centered on the origin) with a wall across the middle and a gap at one end.
+    const grid = createNavGrid(12, 12, -6, -6, 1);
+    for (let c = 0; c < 10; c++) setBlocked(grid, c, 6);
+    const spots = [{ x: -4.5, z: -4.5 }, { x: -4.5, z: 4.5 }, { x: 3.5, z: -3.5 }, { x: 2.5, z: 3.5 }];
+    const gates = [{ x: -5.5, z: -5.5 }];
+    const sim = makeSim({
+      maxAgents: 2,
+      stay: [10, 20],
+      nav: { spots, gates, findPath: (a, b) => findPath(grid, a, b, { radius: 0.3 }) },
+    });
+    const ids = new Set<string>();
+    let despawned = 0;
+    for (let i = 0; i < 4000; i++) {
+      for (const e of sim.tick(0.05)) {
+        if (e.type === 'spawn-request') {
+          const id = sim.reserve();
+          if (id) {
+            assert.deepEqual({ x: sim.get(id)!.x, z: sim.get(id)!.z }, gates[0]);
+            sim.activate(id);
+            ids.add(id);
+          }
+        }
+        if (e.type === 'despawn') despawned++;
+      }
+      for (const a of sim.list()) {
+        // Body center may brush a wall corner at most by the turn-in-place tolerance.
+        assert.ok(isClearAt(grid, a, 0.25), `agent ${a.id} inside a wall at ${a.x.toFixed(2)},${a.z.toFixed(2)}`);
+      }
+    }
+    assert.ok(ids.size >= 2, 'agents spawned');
+    assert.ok(despawned >= 1, 'agents left through the gate');
+  });
+
+  /** Smallest center-to-center distance between any two active agents (and outside bodies). */
+  function minSpacing(sim: ReturnType<typeof makeSim>, bodies: { x: number; z: number }[] = []): number {
+    const pts = [...sim.list().filter((a) => a.phase !== 'loading'), ...bodies];
+    let min = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) min = Math.min(min, Math.hypot(pts[i]!.x - pts[j]!.x, pts[i]!.z - pts[j]!.z));
+    }
+    return min;
+  }
+
+  /** Spawn on request and activate right away, like the controller once models are loaded. */
+  function runCrowd(sim: ReturnType<typeof makeSim>, seconds: number, onTick: () => void, bodies: { x: number; z: number }[] = []) {
+    for (let t = 0; t < seconds; t += 0.05) {
+      for (const e of sim.tick(0.05, bodies)) {
+        if (e.type === 'spawn-request') {
+          const id = sim.reserve();
+          if (id) sim.activate(id);
+        }
+      }
+      onTick();
+    }
+  }
+
+  test('a busy crowd keeps its personal space', () => {
+    // Small zone and many agents so paths cross constantly.
+    const sim = makeSim({ maxAgents: 8, zoneRadius: 3, spawnInterval: [0.3, 0.8], stay: [20, 40] });
+    const ps = DEFAULT_CROWD_CONFIG.personalSpace;
+    let worst = Infinity;
+    let busiest = 0;
+    runCrowd(sim, 120, () => {
+      worst = Math.min(worst, minSpacing(sim));
+      busiest = Math.max(busiest, sim.list().filter((a) => a.phase !== 'loading').length);
+    });
+    assert.ok(busiest >= 6, `crowd got busy (${busiest})`);
+    assert.ok(worst > ps * 0.9, `two agents got within ${worst.toFixed(2)} (personal space ${ps})`);
+  });
+
+  test('two agents walking head-on pass each other instead of stalling', () => {
+    const sim = makeSim({ maxAgents: 0 });
+    const a = sim.addAgentAt('a', -3, 0, Math.PI / 2);
+    const b = sim.addAgentAt('b', 3, 0, -Math.PI / 2);
+    // Send them straight at each other along the same line.
+    for (const [agent, x] of [[a, 3], [b, -3]] as const) {
+      agent.phase = 'walking';
+      agent.target = { x, z: 0 };
+      agent.prevDist = Infinity;
+    }
+    let minGap = Infinity;
+    for (let t = 0; t < 15 && (a.phase === 'walking' || b.phase === 'walking'); t += 0.05) {
+      sim.tick(0.05);
+      minGap = Math.min(minGap, Math.hypot(a.x - b.x, a.z - b.z));
+    }
+    assert.ok(a.x > 2.9 && b.x < -2.9, `they got past each other (a.x=${a.x.toFixed(2)}, b.x=${b.x.toFixed(2)})`);
+    assert.ok(minGap > DEFAULT_CROWD_CONFIG.personalSpace * 0.9, `closest ${minGap.toFixed(2)}`);
+  });
+
+  test('the crowd keeps clear of an outside body and walks around it', () => {
+    const sim = makeSim({ maxAgents: 6, zoneRadius: 3, spawnInterval: [0.3, 0.8], stay: [20, 40] });
+    const body = { x: 0, z: 0 };
+    let worst = Infinity;
+    runCrowd(sim, 90, () => {
+      for (const a of sim.list()) if (a.phase !== 'loading') worst = Math.min(worst, Math.hypot(a.x, a.z));
+    }, [body]);
+    assert.ok(worst > DEFAULT_CROWD_CONFIG.personalSpace * 0.9, `agent came within ${worst.toFixed(2)} of the body`);
+  });
+
+  test('an idle agent bumped by an outside body walks off', () => {
+    const sim = makeSim({ maxAgents: 0 });
+    const a = sim.addAgentAt('a', 0.3, 0, 0);
+    a.timer = 100;
+    sim.tick(0.05, [{ x: 0, z: 0 }]);
+    assert.equal(a.phase, 'walking');
+    assert.ok(Math.hypot(a.x, a.z) >= DEFAULT_CROWD_CONFIG.personalSpace * 0.99);
+  });
+
+  test('a walker blocked for good gives up and picks something else', () => {
+    // Corridor one cell wide, with someone standing in it for ever.
+    const grid = createNavGrid(9, 3, -4.5, -1.5, 1);
+    for (let c = 0; c < 9; c++) { setBlocked(grid, c, 0); setBlocked(grid, c, 2); }
+    const nav = {
+      spots: [{ x: 3, z: 0 }, { x: -3, z: 0 }],
+      gates: [],
+      findPath: (p: { x: number; z: number }, q: { x: number; z: number }) => findPath(grid, p, q),
+      isClear: (p: { x: number; z: number }) => isClearAt(grid, p, 0.2),
+    };
+    const sim = makeSim({ maxAgents: 0, nav });
+    const blocker = sim.addAgentAt('blocker', 0, 0, 0);
+    sim.hold(blocker.id);
+    const w = sim.addAgentAt('walker', -3, 0, Math.PI / 2);
+    w.phase = 'walking';
+    w.target = { x: 3, z: 0 };
+    w.prevDist = Infinity;
+    for (let t = 0; t < 8; t += 0.05) sim.tick(0.05);
+    assert.notEqual(w.phase, 'walking', 'still pushing against the blocker');
+    assert.ok(w.x < -0.5, 'never walked through the blocker');
   });
 });

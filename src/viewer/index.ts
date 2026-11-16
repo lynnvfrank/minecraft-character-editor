@@ -15,8 +15,11 @@ export {
   isCreatorCameraLightEnabled,
   CREATOR_CAMERA_LIGHT_ENABLED,
   setSunFocus,
+  setGroundVisible,
   type SceneContext
 } from './scene';
+
+export { createBlockWorldMesh, BLOCK_WORLD_NAME } from './blockWorldMesh';
 
 export {
   applySkinToModel,

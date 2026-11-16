@@ -6,7 +6,7 @@
  */
 
 import * as THREE from 'three';
-import type { PreviewPresetKey } from '../domain';
+import { placeAroundCharacter, type PreviewPresetKey } from '../domain';
 import {
   creatorFocusedCreationSlice,
   creatorModeSlice,
@@ -52,22 +52,17 @@ function wardrobeLayerToPreviewPresetKey(layer: WardrobeLayerKey): PreviewPreset
   return layer as PreviewPresetKey;
 }
 
+/** The preset's view of `char`, wherever it stands and whichever way it faces. */
 function buildCameraPoseFromPreset(
   preset: ReturnType<typeof getPreviewPreset>,
-  char: CharacterState
+  char: CharacterState,
+  yaw: number
 ): CameraPose {
-  const origin = char.container.position;
-  const position = new THREE.Vector3(
-    preset.cameraPosition.x + origin.x,
-    preset.cameraPosition.y + origin.y,
-    preset.cameraPosition.z + origin.z
-  );
-  const target = new THREE.Vector3(
-    preset.cameraTarget.x + origin.x,
-    preset.cameraTarget.y + origin.y,
-    preset.cameraTarget.z + origin.z
-  );
-  return { position, target };
+  const { x, y, z } = char.container.position;
+  const anchor = { x, y, z, yaw };
+  const p = placeAroundCharacter(preset.cameraPosition, anchor);
+  const t = placeAroundCharacter(preset.cameraTarget, anchor);
+  return { position: new THREE.Vector3(p.x, p.y, p.z), target: new THREE.Vector3(t.x, t.y, t.z) };
 }
 
 export function createFocusedCreationController(
@@ -106,7 +101,7 @@ export function createFocusedCreationController(
       const char = deps.getCharacter(deps.getPrimaryCharacterId());
       if (!char) return;
       const preset = getPreviewPreset(wardrobeLayerToPreviewPresetKey(previewLayer));
-      const pose = buildCameraPoseFromPreset(preset, char);
+      const pose = buildCameraPoseFromPreset(preset, char, deps.creatorPoseController.getCharacterYaw());
       pose.fov = preset.fov ?? 35;
       void deps.creatorPoseController.animateCameraToCreatorView(pose);
     }
@@ -122,7 +117,7 @@ export function createFocusedCreationController(
     const char = deps.getCharacter(deps.getPrimaryCharacterId());
     if (!char) return null;
     const preset = getPreviewPreset(wardrobeLayerToPreviewPresetKey(previewLayer));
-    const pose = buildCameraPoseFromPreset(preset, char);
+    const pose = buildCameraPoseFromPreset(preset, char, deps.creatorPoseController.getCharacterYaw());
     pose.fov = preset.fov ?? 35;
     return pose;
   }
