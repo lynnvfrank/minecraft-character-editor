@@ -56,6 +56,11 @@ type AnimationManagerDeps = {
   clock?: THREE.Clock;
   /** @deprecated Ignored. Turns now use root-yaw compensation for any angle. */
   getTurnStrategy?: () => TurnStrategy;
+  /**
+   * Clamp a walk target into the walkable area (in place). When given, it replaces the
+   * camera-aligned trapezoid, e.g. the home view's round creative zone.
+   */
+  clampWalkTarget?: (target: THREE.Vector3) => void;
 };
 
 function randomInRange(min: number, max: number): number {
@@ -362,8 +367,12 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     const start = root.position.clone();
     let end =
       target instanceof THREE.Vector3 ? target.clone() : new THREE.Vector3(...target);
-    const bounds = getBounds();
-    if (bounds) clampToTrapezoid(end, bounds);
+    if (deps.clampWalkTarget) {
+      deps.clampWalkTarget(end);
+    } else {
+      const bounds = getBounds();
+      if (bounds) clampToTrapezoid(end, bounds);
+    }
     const distance = start.distanceTo(end);
     const durationSec = Math.max(distance / Math.max(speed, 0.1), 0.1);
 
@@ -653,8 +662,12 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
         aw.root.position.copy(aw.end);
         t = 1;
       }
-      const bounds = getBounds();
-      if (bounds) clampToTrapezoid(aw.root.position, bounds);
+      // With a custom walk area only the target is clamped: the walk may start outside it
+      // (a character picked while still walking in) and must not snap inside.
+      if (!deps.clampWalkTarget) {
+        const bounds = getBounds();
+        if (bounds) clampToTrapezoid(aw.root.position, bounds);
+      }
 
       if (char && facing != null) {
         // Steer smoothly toward the walk direction (handles small angles the turn skipped).

@@ -29,6 +29,10 @@ export type AnimationLoopDeps = {
   characterAI: { update: (delta: number) => void } | null;
   /** Called each frame before render; route-specific updates (preview texture, camera panel, etc.) */
   onFrameUpdate: (route: 'creator' | 'viewer' | 'preview') => void;
+  /** Skip a character's mixer this frame (the crowd freezes while the creator is open). */
+  shouldUpdateCharacter?: (char: CharacterState) => boolean;
+  /** World simulation (crowd, selection, camera follow); runs after the animation manager. */
+  onWorldUpdate?: (delta: number, route: 'creator' | 'viewer' | 'preview') => void;
 };
 
 export type AnimationLoopController = {
@@ -46,7 +50,15 @@ export function createAnimationLoopController(deps: AnimationLoopDeps): Animatio
     animationManager,
     characterAI,
     onFrameUpdate,
+    shouldUpdateCharacter = () => true,
+    onWorldUpdate,
   } = deps;
+
+  function updateMixers(delta: number) {
+    for (const char of Object.values(getSceneContext().characters)) {
+      if (shouldUpdateCharacter(char)) char.mixer.update(delta);
+    }
+  }
 
   let paused = false;
 
@@ -121,9 +133,10 @@ export function createAnimationLoopController(deps: AnimationLoopDeps): Animatio
   function stepOneFrame() {
     const ctx = getSceneContext();
     const delta = 1 / 60;
-    Object.values(ctx.characters).forEach((char) => char.mixer.update(delta));
+    updateMixers(delta);
     if (animationManager) animationManager.tick(delta);
     characterAI?.update(delta);
+    onWorldUpdate?.(delta, getRoute());
     ctx.controls.update();
     ctx.renderer.render(ctx.scene, ctx.camera);
 
@@ -140,9 +153,10 @@ export function createAnimationLoopController(deps: AnimationLoopDeps): Animatio
     if (paused) return;
 
     const delta = ctx.clock.getDelta();
-    Object.values(ctx.characters).forEach((char) => char.mixer.update(delta));
+    updateMixers(delta);
     if (animationManager) animationManager.tick(delta);
     if (getRoute() === 'viewer' && !getCreatorTransitionInFlight()) characterAI?.update(delta);
+    onWorldUpdate?.(delta, route);
     ctx.controls.update();
     ctx.renderer.render(ctx.scene, ctx.camera);
   }

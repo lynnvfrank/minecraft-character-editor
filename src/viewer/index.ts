@@ -14,6 +14,7 @@ export {
   setCreatorCameraLightEnabled,
   isCreatorCameraLightEnabled,
   CREATOR_CAMERA_LIGHT_ENABLED,
+  setSunFocus,
   type SceneContext
 } from './scene';
 

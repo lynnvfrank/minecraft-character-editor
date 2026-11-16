@@ -49,8 +49,9 @@ export function initScene(
 
   addLights(scene, renderer);
   addGround(scene);
-  // Subtle atmospheric fade into the background.
-  scene.fog = new THREE.Fog(0x050710, 8, 18);
+  // Subtle atmospheric fade into the background. Far enough out that the whole creative zone
+  // stays clear, close enough that characters walking in appear out of the haze.
+  scene.fog = new THREE.Fog(0x050710, 14, 36);
 
   const clock = new THREE.Clock();
   return { scene, camera, renderer, controls, clock, characters: {}, container };
@@ -176,7 +177,7 @@ export function setLightingPreset(id: LightingPresetId): void {
   scene.environmentIntensity = p.envIntensity;
   applySky();
   hemi.color.setHex(p.hemi[0]); hemi.groundColor.setHex(p.hemi[1]); hemi.intensity = p.hemi[2];
-  sun.color.setHex(p.sun[0]); sun.intensity = p.sun[1]; sun.position.set(p.sun[2], p.sun[3], p.sun[4]);
+  sun.color.setHex(p.sun[0]); sun.intensity = p.sun[1]; sun.position.set(p.sun[2] + sunFocus.x, p.sun[3], p.sun[4] + sunFocus.z);
   rim.color.setHex(p.rim[0]); rim.intensity = p.rim[1]; rim.visible = p.rim[1] > 0;
   fill.color.setHex(p.fill[0]); fill.intensity = p.fill[1];
   // Toggle self-shadowing on every character mesh (ground keeps receiving shadows).
@@ -237,6 +238,26 @@ export function addLights(scene: THREE.Scene, renderer?: THREE.WebGLRenderer): v
   rig = { scene, renderer, hemi: hemiLight, sun, rim, fill: fillLight };
 }
 
+/** Ground point the sun's shadow frustum is centered on (see setSunFocus). */
+const sunFocus = { x: 0, z: 0 };
+
+/**
+ * Center the sun's (tight) shadow frustum on a ground point, normally where the camera looks.
+ * Keeps shadows crisp anywhere in the home view's creative space, not just at the origin.
+ * Shifts the sun by the change in focus so lighting presets keep their direction.
+ */
+export function setSunFocus(x: number, z: number): void {
+  if (!rig) return;
+  const dx = x - sunFocus.x;
+  const dz = z - sunFocus.z;
+  if (dx === 0 && dz === 0) return;
+  sunFocus.x = x;
+  sunFocus.z = z;
+  rig.sun.position.x += dx;
+  rig.sun.position.z += dz;
+  rig.sun.target.position.set(x, 1, z);
+}
+
 /** Default on/off for the camera-following light. Set to false to disable at startup. */
 export const CREATOR_CAMERA_LIGHT_ENABLED = true;
 
@@ -271,9 +292,11 @@ export function isCreatorCameraLightEnabled(): boolean {
 }
 
 const GROUND_DEFAULT_COLOR = 0x1b1f3b;
+/** Ground disc radius: past the crowd's entry circle and into the fog. */
+const GROUND_RADIUS = 40;
 
 export function addGround(scene: THREE.Scene): void {
-  const geo = new THREE.CircleGeometry(8, 64);
+  const geo = new THREE.CircleGeometry(GROUND_RADIUS, 96);
   const mat = new THREE.MeshStandardMaterial({
     color: GROUND_DEFAULT_COLOR,
     metalness: 0.0,
