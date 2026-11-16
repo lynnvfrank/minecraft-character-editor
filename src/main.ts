@@ -45,6 +45,9 @@ import {
   buildCharacterConfig,
 } from './controllers/characterTypes';
 import { createCharacterEventsController } from './controllers/characterEvents';
+import { createCrowdController, type CrowdController } from './controllers/crowdController';
+import { createSelectionController, type SelectionController } from './controllers/selectionController';
+import { DEFAULT_CROWD_CONFIG } from './animation/crowd';
 import { createAnimationLoopController } from './controllers/animationLoop';
 import { createCreatorPoseController, type CreatorPoseController } from './controllers/creatorPose';
 import { createCreatorCameraController } from './controllers/creatorCameraController';
@@ -114,6 +117,7 @@ import {
   setupCreatorCameraLight,
   updateOrbitControlsForEditMode,
   recreateOrbitControls,
+  setSunFocus,
   type SceneContext,
 } from './viewer';
 
@@ -169,6 +173,8 @@ type AppServices = {
   viewerUI: ReturnType<typeof createViewerUIController>;
   transitions: { getTransitionInFlight: () => boolean };
   characterAI: ReturnType<typeof createCharacterAI> | null;
+  crowd: CrowdController;
+  selection: SelectionController;
 };
 const app = createAppContext<AppServices>();
 /** Composite sequences loaded from /sequences/index.json */
@@ -250,6 +256,8 @@ function resumeHomeMode() {
     char.idleAction.clampWhenFinished = false;
     app.tryGet('characters')?.fadeToAction(char, char.idleAction, 0.3);
   }
+  // Still selected after the creator: stay put and wait for the user.
+  if (app.tryGet('selection')?.isSelected()) return;
   const reacted = app.tryGet('characterAI')?.onUserActivity(true) ?? false;
   if (!reacted) {
     app.tryGet('animation')?.runOneWanderStep?.();
@@ -491,6 +499,7 @@ function setupCreatorPreviewDirtySubscription(): void {
         char.currentSkin = path;
         router.noteCreatorLoadedPath(path);
         app.get('viewerUI').highlightActiveSkin(getPrimaryCharacterId(), path);
+        app.tryGet('selection')?.refresh();
       }
     }
   });
@@ -574,8 +583,9 @@ async function main(): Promise<void> {
     getRoute,
     getCamera: () => sceneContext?.camera ?? null,
     getCharacterPosition: () => getCharacter(getPrimaryCharacterId())?.container.position ?? null,
-    getAnimationManager: () => controllerRefs.animationManager,
-    onUserControl: () => characterAI?.userTookControl(),
+    getAnimationManager: () => app.tryGet('animation') ?? null,
+    onUserControl: () => app.tryGet('characterAI')?.userTookControl(),
+    canControl: () => app.tryGet('selection')?.isSelected() ?? false,
   });
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();
@@ -628,8 +638,27 @@ async function main(): Promise<void> {
     getCamera: () => sceneContext!.camera,
     clock: sceneContext!.clock,
     getTurnStrategy: () => turnStrategy,
+    clampWalkTarget: (target) => {
+      // Keep walks inside the creative zone (round, centered on the origin).
+      const r = Math.hypot(target.x, target.z);
+      const max = DEFAULT_CROWD_CONFIG.zoneRadius;
+      if (r > max) target.multiplyScalar(max / r);
+      target.y = 0;
+    },
   });
   app.provide('animation', animationManager);
+
+  const crowd = app.provide('crowd', createCrowdController({
+    getSceneContext,
+    getPrimaryCharacterId,
+    loadCharacter: characterController.loadCharacter,
+    fadeToAction,
+    getAction,
+    getSkins: () => skinsList,
+    getAnimations: () => animationsList,
+    resolveModelPath: async (skinPath) =>
+      ARM_MODEL_PATHS[(await detectArmModelFromPath(skinPath)) ?? 'classic'],
+  }));
 
   const creatorPoseController = createCreatorPoseController({
     getCharacter,
@@ -744,6 +773,14 @@ async function main(): Promise<void> {
     highlightActiveButton: viewerUIController.highlightActiveButton,
   });
 
+  /** Crowd, selection and camera follow. The world stops while the creator is open. */
+  function onWorldUpdate(delta: number, route: AppRoute): void {
+    crowd.update(delta, route, !getCreatorTransitionInFlight());
+    app.tryGet('selection')?.update(delta, route);
+    const target = sceneContext.controls.target;
+    setSunFocus(target.x, target.z);
+  }
+
   let animationLoopController: ReturnType<typeof createAnimationLoopController>;
   if (isTestMode) {
     app.provide('characterAI', null);
@@ -756,6 +793,8 @@ async function main(): Promise<void> {
       animationManager,
       characterAI: null,
       onFrameUpdate: creatorPreview.onFrame,
+      shouldUpdateCharacter: (char) => crowd.shouldUpdateCharacter(char, getRoute()),
+      onWorldUpdate,
     });
     setupTestControls({
       animationManager,
@@ -787,6 +826,8 @@ async function main(): Promise<void> {
       animationManager,
       characterAI,
       onFrameUpdate: creatorPreview.onFrame,
+      shouldUpdateCharacter: (char) => crowd.shouldUpdateCharacter(char, getRoute()),
+      onWorldUpdate,
     });
     setFacingLogContextProvider(() => ({
       state: characterAI?.getState(),
@@ -797,6 +838,42 @@ async function main(): Promise<void> {
     setupUserActivityListeners();
     characterEventsController.setupCharacterEventSubscribers();
     characterEventsController.setupSocketEvents(socketManager);
+  }
+
+  app.provide('selection', createSelectionController({
+    getSceneContext,
+    getRoute,
+    getTransitionInFlight: getCreatorTransitionInFlight,
+    getPrimaryCharacterId,
+    crowd,
+    animationManager,
+    characterAI: app.tryGet('characterAI') ?? null,
+    fadeToAction,
+    onPrimaryChanged: (char) => {
+      viewerUIController.highlightActiveSkin(char.id, char.currentSkin);
+      previewRuntime.invalidate();
+      if (armModelState.isAuto()) {
+        void detectArmModelFromPath(char.currentSkin).then((model) => {
+          setDetectedArmModel(model);
+          applyArmModelToCharacter();
+        });
+      } else {
+        applyArmModelToCharacter();
+      }
+    },
+    getSkinLabel: (path) =>
+      skinsList.find((s) => s.path === path)?.label ?? path.split('/').pop()?.replace(/[.]png$/i, '') ?? 'Character',
+    roamRadius: DEFAULT_CROWD_CONFIG.edgeRadius + 6,
+  }));
+
+  if (import.meta.env.DEV) {
+    // Dev-only handle for poking at the home world from the console.
+    (window as unknown as Record<string, unknown>).__world = {
+      crowd,
+      selection: app.get('selection'),
+      characters: sceneContext.characters,
+      scene: sceneContext,
+    };
   }
 
   const initialSkin = skins.find((skin) => skin.path === FALLBACK_SKINS[0]?.path) ?? skins[0]!;

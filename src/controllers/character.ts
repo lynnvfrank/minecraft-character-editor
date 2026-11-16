@@ -13,6 +13,7 @@ import type { TexturePreset, AlphaMode } from '../viewer';
 import type { CharacterState, CharacterConfig } from './characterTypes';
 import type { SkinEntry, AnimationEntry } from '../domain';
 import type { CharacterStateLike } from '../animation';
+import { getPrimaryCharacterId } from '../domain';
 
 /** Packed animation GLBs (scripts/pack-animations.mjs), fetched once and shared by all characters. */
 const packedClipCache = new Map<string, Promise<Map<string, THREE.AnimationClip>>>();
@@ -203,11 +204,15 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
     );
   }
 
-  /** When a one-shot clip finishes, return to idle (or the creator pose). */
-  function attachFinishedHandler(mixer: THREE.AnimationMixer, charId: string): void {
+  /**
+   * When a one-shot clip finishes, return to idle (or the creator pose). Primary character only:
+   * crowd characters run their own clips (controllers/crowdController.ts). Looked up by mixer, not
+   * id, because selecting a crowd character swaps it into the primary slot.
+   */
+  function attachFinishedHandler(mixer: THREE.AnimationMixer): void {
     mixer.addEventListener('finished', () => {
-      const char = getCharacter(charId);
-      if (!char || char.mixer !== mixer) return;
+      const char = Object.values(getSceneContext().characters).find((c) => c.mixer === mixer);
+      if (!char || char.id !== getPrimaryCharacterId()) return;
       if (getRoute() === 'creator') {
         const cpc = getCreatorPoseController();
         if (cpc?.isCreatorIdleCompletingTransition()) return;
@@ -220,6 +225,8 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
       fadeToAction(char, char.idleAction!, 0.3);
     });
   }
+
+  let primaryReady = false;
 
   /** Model load is async; remember the latest request so rapid toggles settle on the last one. */
   const pendingModelSwap: Record<string, string> = {};
@@ -290,7 +297,7 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
           current.currentAction = nextCurrent;
           current.idleAction = idleKey ? actions[idleKey] : undefined;
           current.modelPath = modelPath;
-          attachFinishedHandler(mixer, charId);
+          attachFinishedHandler(mixer);
           mixer.update(0);
 
           logger.info('general', 'Model swapped', { charId, modelPath });
@@ -371,11 +378,12 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
                 clips,
               } as CharacterState;
 
-              attachFinishedHandler(mixer, config.id);
+              attachFinishedHandler(mixer);
 
               if (idleAction) fadeToAction(getSceneContext().characters[config.id] as CharacterState, idleAction, 0);
 
-              if (getRoute() === 'creator') {
+              const isPrimary = config.id === getPrimaryCharacterId();
+              if (isPrimary && getRoute() === 'creator') {
                 getCreatorPoseController()?.applyCreatorCharacterPose();
               }
 
@@ -383,11 +391,12 @@ export function createCharacterController(deps: CharacterControllerDeps): Charac
               mixer.update(0);
               container.visible = true;
 
-              if (Object.keys(getSceneContext().characters).length === 1) {
+              if (isPrimary && !primaryReady) {
+                primaryReady = true;
                 onFirstCharacterReady(skins, animationsList, getSequencesList());
               }
 
-              if (getRoute() === 'preview') {
+              if (isPrimary && getRoute() === 'preview') {
                 window.setTimeout(() => onPreviewRouteAfterCharacterReady(), 0);
               }
             }

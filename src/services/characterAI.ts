@@ -370,8 +370,26 @@ export function createCharacterAI(deps: CharacterAIDeps) {
     }
   }
 
+  /**
+   * Suspended while the user has the character selected: no wandering, noticing or micro-emotes,
+   * so it stands still and waits for the Move panel. Resuming starts again from idle.
+   */
+  let suspended = false;
+  function setSuspended(value: boolean): void {
+    if (suspended === value) return;
+    suspended = value;
+    lastExplicitActivityTime = Date.now();
+    if (value) {
+      interruptCurrentBehavior();
+      transitionToIdle();
+    } else {
+      state = 'idle';
+    }
+  }
+
   /** Called when user does something. explicit=true for chat/key/clicks; false for mousemove only. */
   function onUserActivity(explicit = false): boolean {
+    if (suspended) return false;
     const now = Date.now();
     const idleSec = (now - lastInteractionTime) / 1000;
     lastInteractionTime = now;
@@ -399,6 +417,11 @@ export function createCharacterAI(deps: CharacterAIDeps) {
     const explicitIdleSec = (now - lastExplicitActivityTime) / 1000;
 
     // --- State transitions ---
+    if (suspended) {
+      // Selected: keep looking around but never start anything on our own.
+      updateLookAt(deltaSec, char);
+      return;
+    }
     if (state === 'idle') {
       // Use explicitIdleSec for wander — mousemove doesn't reset it (she can wander while user watches)
       if (explicitIdleSec >= WANDER_START_SEC) {
@@ -454,6 +477,8 @@ export function createCharacterAI(deps: CharacterAIDeps) {
       animationManager.setLastActivity();
     },
     getState: () => state,
+    setSuspended,
+    isSuspended: () => suspended,
     resetHeadBone
   };
 }

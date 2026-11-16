@@ -26,6 +26,8 @@ export type MovePanelDeps = {
   } | null;
   /** Tell the idle AI the user is in control (so it stops wandering). */
   onUserControl: () => void;
+  /** False while no character is selected: the panels are hidden and keys pan the camera instead. */
+  canControl?: () => boolean;
 };
 
 /** How far one D-pad press walks, in world units. */
@@ -280,6 +282,7 @@ export function createMovePanel(deps: MovePanelDeps) {
     if (e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
     const dir = KEY_DIRS[e.code];
     if (!dir || deps.getRoute() !== 'viewer') return;
+    if (deps.canControl && !deps.canControl()) return;
     const t = e.target as HTMLElement | null;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     if (document.querySelector('.about-overlay:not([hidden])')) return;

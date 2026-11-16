@@ -1,0 +1,61 @@
+// Home-view selection (see src/controllers/selectionController.ts).
+// body[data-selection] is "selected" or "none". The Move panels and the Design button only make
+// sense with a character picked, so they show (sliding in) once one is selected.
+
+body[data-route='viewer'][data-selection='none'] {
+  .move-panels,
+  #enter-creator-btn {
+    display: none;
+  }
+}
+
+.selection-pill {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem 0.35rem 0.85rem;
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+  color: var(--text);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  max-width: calc(100% - 2rem);
+  pointer-events: auto;
+
+  &:not(.is-selected) {
+    padding-right: 0.85rem;
+    opacity: 0.85;
+  }
+}
+
+.selection-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selection-pill-close {
+  border: none;
+  background: rgba(var(--fg-rgb), 0.1);
+  color: inherit;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+
+  &:hover {
+    background: rgba(var(--fg-rgb), 0.2);
+  }
+}
+
+body:not([data-route='viewer']) .selection-pill {
+  display: none;
+}
