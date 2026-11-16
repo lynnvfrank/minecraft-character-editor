@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCrowdSim, DEFAULT_CROWD_CONFIG, type CrowdConfig, type CrowdEvent } from './crowd';
+import { createNavGrid, findPath, isClearAt, setBlocked } from '../lib/gridPath';
 
 /** Deterministic PRNG (mulberry32) so runs are repeatable. */
 function seeded(seed: number): () => number {
@@ -117,5 +118,39 @@ describe('crowd sim', () => {
     assert.equal(sim.size(), 1);
     assert.ok(sim.remove('runningboy-old'));
     assert.equal(sim.size(), 0);
+  });
+
+  test('with navigation, agents come in through a gate and never walk through a wall', () => {
+    // 12×12 open field (centered on the origin) with a wall across the middle and a gap at one end.
+    const grid = createNavGrid(12, 12, -6, -6, 1);
+    for (let c = 0; c < 10; c++) setBlocked(grid, c, 6);
+    const spots = [{ x: -4.5, z: -4.5 }, { x: -4.5, z: 4.5 }, { x: 3.5, z: -3.5 }, { x: 2.5, z: 3.5 }];
+    const gates = [{ x: -5.5, z: -5.5 }];
+    const sim = makeSim({
+      maxAgents: 2,
+      stay: [10, 20],
+      nav: { spots, gates, findPath: (a, b) => findPath(grid, a, b, { radius: 0.3 }) },
+    });
+    const ids = new Set<string>();
+    let despawned = 0;
+    for (let i = 0; i < 4000; i++) {
+      for (const e of sim.tick(0.05)) {
+        if (e.type === 'spawn-request') {
+          const id = sim.reserve();
+          if (id) {
+            assert.deepEqual({ x: sim.get(id)!.x, z: sim.get(id)!.z }, gates[0]);
+            sim.activate(id);
+            ids.add(id);
+          }
+        }
+        if (e.type === 'despawn') despawned++;
+      }
+      for (const a of sim.list()) {
+        // Body center may brush a wall corner at most by the turn-in-place tolerance.
+        assert.ok(isClearAt(grid, a, 0.25), `agent ${a.id} inside a wall at ${a.x.toFixed(2)},${a.z.toFixed(2)}`);
+      }
+    }
+    assert.ok(ids.size >= 2, 'agents spawned');
+    assert.ok(despawned >= 1, 'agents left through the gate');
   });
 });

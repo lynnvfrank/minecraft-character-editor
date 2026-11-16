@@ -178,7 +178,8 @@ export function createCrowdController(deps: CrowdControllerDeps) {
   }
 
   function setCrowdVisible(visible: boolean): void {
-    zoneRing.visible = visible;
+    // With a walkable world the whole map is the zone; the ring would cut through houses.
+    zoneRing.visible = visible && !config.nav;
     for (const agent of sim.list()) {
       const char = getChar(agent.id);
       if (char) char.container.visible = visible;

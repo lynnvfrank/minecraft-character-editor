@@ -61,7 +61,32 @@ type AnimationManagerDeps = {
    * camera-aligned trapezoid, e.g. the home view's round creative zone.
    */
   clampWalkTarget?: (target: THREE.Vector3) => void;
+  /**
+   * Route a walk around obstacles: waypoints from `from` to `to` (excluding `from`, ending at the
+   * possibly adjusted target). Return null for no route; the walk is then skipped.
+   * Without it, walks are a straight line.
+   */
+  planWalk?: (from: THREE.Vector3, to: THREE.Vector3) => THREE.Vector3[] | null;
 };
+
+/** Point at distance `d` along the polyline `points` (cumulative lengths in `cum`); writes `out`. */
+function samplePolyline(points: THREE.Vector3[], cum: number[], d: number, out: THREE.Vector3): number {
+  const last = points.length - 1;
+  if (d <= 0 || last === 0) {
+    out.copy(points[0]!);
+    return 0;
+  }
+  for (let i = 1; i <= last; i++) {
+    if (d <= cum[i]! || i === last) {
+      const segLen = cum[i]! - cum[i - 1]!;
+      const t = segLen > 1e-9 ? Math.min((d - cum[i - 1]!) / segLen, 1) : 1;
+      out.lerpVectors(points[i - 1]!, points[i]!, t);
+      return i - 1;
+    }
+  }
+  out.copy(points[last]!);
+  return last - 1;
+}
 
 function randomInRange(min: number, max: number): number {
   return min + Math.random() * (max - min);
@@ -108,6 +133,10 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     root: THREE.Group;
     start: THREE.Vector3;
     end: THREE.Vector3;
+    /** start, waypoints…, end (two points for a straight walk). */
+    points: THREE.Vector3[];
+    /** Cumulative distance along `points`. */
+    cum: number[];
     /** Duration of position lerp (main walking) */
     walkPhaseSec: number;
     /** Durations for transition clips (0 if clip missing) */
@@ -373,10 +402,23 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
       const bounds = getBounds();
       if (bounds) clampToTrapezoid(end, bounds);
     }
-    const distance = start.distanceTo(end);
+    let points = [start.clone(), end];
+    if (deps.planWalk) {
+      const route = deps.planWalk(start, end);
+      if (!route || route.length === 0) {
+        isInWalkTo = false;
+        return;
+      }
+      points = [start.clone(), ...route];
+      end = points[points.length - 1]!;
+    }
+    const cum = [0];
+    for (let i = 1; i < points.length; i++) cum.push(cum[i - 1]! + points[i - 1]!.distanceTo(points[i]!));
+    const distance = cum[cum.length - 1]!;
     const durationSec = Math.max(distance / Math.max(speed, 0.1), 0.1);
 
-    const targetFacing = Math.atan2(end.x - start.x, end.z - start.z);
+    const first = points[1]!;
+    const targetFacing = Math.atan2(first.x - start.x, first.z - start.z);
     await playTurnToFace(char, targetFacing, distance, gen, true);
     if (gen !== sequenceGeneration) return;
 
@@ -422,6 +464,8 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
         root,
         start,
         end,
+        points,
+        cum,
         walkPhaseSec,
         startPhaseSec,
         stopPhaseSec,
@@ -648,6 +692,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
       }
 
       let t: number;
+      let segment = 0;
       if (aw.phase === 0) {
         aw.root.position.copy(aw.start);
         t = 0;
@@ -656,10 +701,11 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
           (aw.elapsed - aw.startPhaseSec) / aw.walkPhaseSec,
           1
         );
-        aw.root.position.lerpVectors(aw.start, aw.end, walkT);
+        segment = samplePolyline(aw.points, aw.cum, walkT * aw.cum[aw.cum.length - 1]!, aw.root.position);
         t = walkT;
       } else {
         aw.root.position.copy(aw.end);
+        segment = aw.points.length - 2;
         t = 1;
       }
       // With a custom walk area only the target is clamped: the walk may start outside it
@@ -671,9 +717,11 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
 
       if (char && facing != null) {
         // Steer smoothly toward the walk direction (handles small angles the turn skipped).
-        // Use the full start→end heading, not position→end, so it never jitters near the end.
-        const dx = aw.end.x - aw.start.x;
-        const dz = aw.end.z - aw.start.z;
+        // Use the current leg's full heading, not position→end, so it never jitters near the end.
+        const legStart = aw.points[segment]!;
+        const legEnd = aw.points[segment + 1]!;
+        const dx = legEnd.x - legStart.x;
+        const dz = legEnd.z - legStart.z;
         if (dx * dx + dz * dz > 1e-6) {
           const walkTargetYaw = Math.atan2(dx, dz);
           const k = 1 - Math.exp(-WALK_STEER_RATE * deltaSec);

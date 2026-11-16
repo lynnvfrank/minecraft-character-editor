@@ -46,6 +46,7 @@ import {
 } from './controllers/characterTypes';
 import { createCharacterEventsController } from './controllers/characterEvents';
 import { createCrowdController, type CrowdController } from './controllers/crowdController';
+import { createBlockWorldController } from './controllers/blockWorldController';
 import { createSelectionController, type SelectionController } from './controllers/selectionController';
 import { DEFAULT_CROWD_CONFIG } from './animation/crowd';
 import { createAnimationLoopController } from './controllers/animationLoop';
@@ -631,6 +632,9 @@ async function main(): Promise<void> {
   const fadeToAction = characterController.fadeToAction;
   const getAction = characterController.getAction;
 
+  // Home view block village (?world=0 for the old open stage). Walks route around its buildings.
+  const blockWorld = params.get('world') === '0' ? null : createBlockWorldController(sceneContext.scene);
+
   const animationManager = createAnimationManager({
     getCharacter,
     fadeToAction,
@@ -638,13 +642,16 @@ async function main(): Promise<void> {
     getCamera: () => sceneContext!.camera,
     clock: sceneContext!.clock,
     getTurnStrategy: () => turnStrategy,
-    clampWalkTarget: (target) => {
-      // Keep walks inside the creative zone (round, centered on the origin).
-      const r = Math.hypot(target.x, target.z);
-      const max = DEFAULT_CROWD_CONFIG.zoneRadius;
-      if (r > max) target.multiplyScalar(max / r);
-      target.y = 0;
-    },
+    clampWalkTarget:
+      blockWorld?.clampWalkTarget ??
+      ((target) => {
+        // Keep walks inside the creative zone (round, centered on the origin).
+        const r = Math.hypot(target.x, target.z);
+        const max = DEFAULT_CROWD_CONFIG.zoneRadius;
+        if (r > max) target.multiplyScalar(max / r);
+        target.y = 0;
+      }),
+    planWalk: blockWorld?.planWalk,
   });
   app.provide('animation', animationManager);
 
@@ -658,6 +665,7 @@ async function main(): Promise<void> {
     getAnimations: () => animationsList,
     resolveModelPath: async (skinPath) =>
       ARM_MODEL_PATHS[(await detectArmModelFromPath(skinPath)) ?? 'classic'],
+    config: blockWorld ? { nav: blockWorld.crowdNav } : undefined,
   }));
 
   const creatorPoseController = createCreatorPoseController({
@@ -775,6 +783,7 @@ async function main(): Promise<void> {
 
   /** Crowd, selection and camera follow. The world stops while the creator is open. */
   function onWorldUpdate(delta: number, route: AppRoute): void {
+    blockWorld?.update(route);
     crowd.update(delta, route, !getCreatorTransitionInFlight());
     app.tryGet('selection')?.update(delta, route);
     const target = sceneContext.controls.target;
@@ -863,13 +872,14 @@ async function main(): Promise<void> {
     },
     getSkinLabel: (path) =>
       skinsList.find((s) => s.path === path)?.label ?? path.split('/').pop()?.replace(/[.]png$/i, '') ?? 'Character',
-    roamRadius: DEFAULT_CROWD_CONFIG.edgeRadius + 6,
+    roamRadius: blockWorld?.roamRadius ?? DEFAULT_CROWD_CONFIG.edgeRadius + 6,
   }));
 
   if (import.meta.env.DEV) {
     // Dev-only handle for poking at the home world from the console.
     (window as unknown as Record<string, unknown>).__world = {
       crowd,
+      blockWorld,
       selection: app.get('selection'),
       characters: sceneContext.characters,
       scene: sceneContext,

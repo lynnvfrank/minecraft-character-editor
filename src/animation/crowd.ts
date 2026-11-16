@@ -19,6 +19,8 @@ export type CrowdAgent = {
   facing: number;
   phase: CrowdPhase;
   target: XZ | null;
+  /** Waypoints still to walk after `target` (only with navigation). */
+  path: XZ[];
   /** Seconds left in the current idling/emoting phase. */
   timer: number;
   /** Seconds left before the agent heads for the exit. */
@@ -48,6 +50,21 @@ export type CrowdConfig = {
   /** How fast facing steers toward the walk direction (higher = snappier). */
   turnRate: number;
   random?: () => number;
+  nav?: CrowdNav;
+};
+
+/**
+ * Walkable world for the crowd (optional). Without it agents walk straight lines inside a circle;
+ * with it they pick spots on walkable ground, follow paths around obstacles, and come and go
+ * through gates (e.g. road ends at the edge of the map).
+ */
+export type CrowdNav = {
+  /** Candidate wander targets (walkable, reachable). */
+  spots: readonly XZ[];
+  /** Where agents appear and leave. */
+  gates: readonly XZ[];
+  /** Waypoints from `from` to `to` (excluding `from`), [] if already there, null if unreachable. */
+  findPath: (from: XZ, to: XZ) => XZ[] | null;
 };
 
 export type CrowdEvent =
@@ -107,6 +124,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
 
   /** A target inside the zone, spread away from other agents' positions and targets. */
   function pickZoneTarget(self: CrowdAgent): XZ {
+    const nav = config.nav;
     const r = config.zoneRadius * 0.85;
     const others: XZ[] = [];
     for (const a of agents.values()) {
@@ -117,7 +135,10 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     let best: XZ = { x: 0, z: 0 };
     let bestScore = -Infinity;
     for (let i = 0; i < TARGET_SAMPLES; i++) {
-      const p = pointOnCircle(r * Math.sqrt(random()), random() * Math.PI * 2);
+      const p =
+        nav && nav.spots.length > 0
+          ? nav.spots[Math.floor(random() * nav.spots.length)]!
+          : pointOnCircle(r * Math.sqrt(random()), random() * Math.PI * 2);
       const nearest = others.reduce((m, o) => Math.min(m, Math.hypot(o.x - p.x, o.z - p.z)), Infinity);
       // Prefer spread out, but don't send agents across the whole zone every time.
       const travel = Math.hypot(p.x - self.x, p.z - self.z);
@@ -136,12 +157,48 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     events.push({ type: 'phase', id: agent.id, phase, emote });
   }
 
+  function despawn(agent: CrowdAgent): void {
+    agents.delete(agent.id);
+    events.push({ type: 'despawn', id: agent.id });
+  }
+
   function startWalking(agent: CrowdAgent, phase: 'entering' | 'walking' | 'exiting', target: XZ): void {
-    agent.target = target;
+    let path: XZ[] | null = [target];
+    if (config.nav) {
+      path = config.nav.findPath(agent, target);
+      if (path === null || path.length === 0) {
+        // Unreachable (or already there): leaving agents just go; others take a breather instead.
+        if (phase === 'exiting') {
+          despawn(agent);
+          return;
+        }
+        agent.target = null;
+        agent.path = [];
+        agent.timer = between(config.idle);
+        setPhase(agent, 'idling');
+        return;
+      }
+    }
+    agent.target = path[0]!;
+    agent.path = path.slice(1);
     setPhase(agent, phase);
   }
 
+  function pickGate(near?: XZ): XZ | null {
+    const gates = config.nav?.gates ?? [];
+    if (gates.length === 0) return null;
+    if (!near) return gates[Math.floor(random() * gates.length)]!;
+    // Usually the nearest gate, sometimes another one, so exits aren't all the same road.
+    const sorted = [...gates].sort((a, b) => Math.hypot(a.x - near.x, a.z - near.z) - Math.hypot(b.x - near.x, b.z - near.z));
+    return random() < 0.7 ? sorted[0]! : sorted[Math.floor(random() * sorted.length)]!;
+  }
+
   function leave(agent: CrowdAgent): void {
+    const gate = pickGate(agent);
+    if (gate) {
+      startWalking(agent, 'exiting', gate);
+      return;
+    }
     const here = Math.atan2(agent.x, agent.z);
     const angle = here + (random() - 0.5) * 1.2;
     startWalking(agent, 'exiting', pointOnCircle(config.edgeRadius, angle));
@@ -150,6 +207,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
   /** Arrived somewhere in the zone (or finished a pause): decide what to do next. */
   function nextActivity(agent: CrowdAgent, justArrived: boolean): void {
     agent.target = null;
+    agent.path = [];
     if (agent.stayLeft <= 0) {
       leave(agent);
       return;
@@ -167,7 +225,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     startWalking(agent, 'walking', pickZoneTarget(agent));
   }
 
-  /** Turn toward the target, then walk. Returns true on arrival. */
+  /** Turn toward the target, then walk; moves on to the next waypoint. Returns true on final arrival. */
   function stepWalk(agent: CrowdAgent, dt: number): boolean {
     const target = agent.target;
     if (!target) return true;
@@ -177,7 +235,10 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     if (dist <= ARRIVE_EPSILON) {
       agent.x = target.x;
       agent.z = target.z;
-      return true;
+      const next = agent.path.shift();
+      if (!next) return true;
+      agent.target = next;
+      return false;
     }
     const wantYaw = yawToward(agent, target);
     agent.facing = lerpAngleRad(agent.facing, wantYaw, 1 - Math.exp(-config.turnRate * dt));
@@ -185,7 +246,12 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     const step = Math.min(config.walkSpeed * dt, dist);
     agent.x += (dx / dist) * step;
     agent.z += (dz / dist) * step;
-    return step >= dist;
+    if (step < dist) return false;
+    // Reached this waypoint: carry on to the next one, if any.
+    const next = agent.path.shift();
+    if (!next) return true;
+    agent.target = next;
+    return false;
   }
 
   function tickAgent(agent: CrowdAgent, dt: number): void {
@@ -203,10 +269,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
         if (agent.timer <= 0) nextActivity(agent, false);
         break;
       case 'exiting':
-        if (stepWalk(agent, dt)) {
-          agents.delete(agent.id);
-          events.push({ type: 'despawn', id: agent.id });
-        }
+        if (stepWalk(agent, dt)) despawn(agent);
         break;
     }
   }
@@ -231,7 +294,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
   function reserve(): string | null {
     if (agents.size >= config.maxAgents) return null;
     const id = `crowd-${nextId++}`;
-    const p = pointOnCircle(config.edgeRadius, random() * Math.PI * 2);
+    const p = pickGate() ?? pointOnCircle(config.edgeRadius, random() * Math.PI * 2);
     agents.set(id, {
       id,
       x: p.x,
@@ -239,6 +302,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
       facing: yawToward(p, { x: 0, z: 0 }),
       phase: 'loading',
       target: null,
+      path: [],
       timer: 0,
       stayLeft: between(config.stay),
       emote: null,
@@ -263,6 +327,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
       facing: wrapAngle(facing),
       phase: 'idling',
       target: null,
+      path: [],
       timer: between(config.idle),
       stayLeft: between(config.stay),
       emote: null,
