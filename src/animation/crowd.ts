@@ -28,6 +28,10 @@ export type CrowdAgent = {
   emote: string | null;
   /** Phase to return to after `held` is released. */
   heldFrom: CrowdPhase | null;
+  /** Seconds spent walking without getting closer to the target (blocked by others). */
+  stuck: number;
+  /** Distance to `target` at the previous walk step (progress check for `stuck`). */
+  prevDist: number;
 };
 
 export type CrowdConfig = {
@@ -49,6 +53,11 @@ export type CrowdConfig = {
   walkSpeed: number;
   /** How fast facing steers toward the walk direction (higher = snappier). */
   turnRate: number;
+  /**
+   * Closest two characters' centers may get (world units). Walkers steer around anyone closer;
+   * someone standing still is walked around, not shoved.
+   */
+  personalSpace: number;
   random?: () => number;
   nav?: CrowdNav;
 };
@@ -65,6 +74,8 @@ export type CrowdNav = {
   gates: readonly XZ[];
   /** Waypoints from `from` to `to` (excluding `from`), [] if already there, null if unreachable. */
   findPath: (from: XZ, to: XZ) => XZ[] | null;
+  /** Can a character's body stand here? Steps and sidesteps that fail this are not taken. */
+  isClear?: (p: XZ) => boolean;
 };
 
 export type CrowdEvent =
@@ -97,6 +108,7 @@ export const DEFAULT_CROWD_CONFIG: CrowdConfig = {
   ],
   walkSpeed: 0.9,
   turnRate: 6,
+  personalSpace: 0.75,
 };
 
 /** Within this distance of a target counts as arrived. */
@@ -105,6 +117,10 @@ const ARRIVE_EPSILON = 0.05;
 const WALK_ALIGN_RAD = Math.PI / 3;
 /** Candidate targets per pick; the one farthest from other agents wins. */
 const TARGET_SAMPLES = 5;
+/** Give up on a walk after this long without progress (someone is standing in the way). */
+const STUCK_SEC = 2.5;
+/** How strongly a walker sidesteps (to its right) when someone is ahead, relative to backing off. */
+const SIDESTEP = 0.9;
 
 export type CrowdSim = ReturnType<typeof createCrowdSim>;
 
@@ -115,6 +131,8 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
   /** First spawn comes quickly so the space isn't empty on load. */
   let spawnTimer = 0.5;
   let events: CrowdEvent[] = [];
+  /** Characters outside the sim (e.g. the selected one) from the latest tick. */
+  let bodies: readonly XZ[] = [];
 
   const between = ([min, max]: readonly [number, number]) => min + random() * (max - min);
 
@@ -132,6 +150,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
       others.push({ x: a.x, z: a.z });
       if (a.target) others.push(a.target);
     }
+    others.push(...bodies);
     let best: XZ = { x: 0, z: 0 };
     let bestScore = -Infinity;
     for (let i = 0; i < TARGET_SAMPLES; i++) {
@@ -181,6 +200,8 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     }
     agent.target = path[0]!;
     agent.path = path.slice(1);
+    agent.stuck = 0;
+    agent.prevDist = Infinity;
     setPhase(agent, phase);
   }
 
@@ -238,26 +259,145 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
       const next = agent.path.shift();
       if (!next) return true;
       agent.target = next;
+      agent.prevDist = Infinity;
       return false;
     }
+    // Progress since last step, including any push-back from separation: no progress = stuck.
+    const expected = config.walkSpeed * dt;
+    if (agent.prevDist - dist < expected * 0.25) agent.stuck += dt;
+    else agent.stuck = Math.max(0, agent.stuck - dt);
+    agent.prevDist = dist;
     const wantYaw = yawToward(agent, target);
     agent.facing = lerpAngleRad(agent.facing, wantYaw, 1 - Math.exp(-config.turnRate * dt));
     if (Math.abs(wrapAngle(wantYaw - agent.facing)) > WALK_ALIGN_RAD) return false;
-    const step = Math.min(config.walkSpeed * dt, dist);
-    agent.x += (dx / dist) * step;
-    agent.z += (dz / dist) * step;
-    if (step < dist) return false;
+    const step = Math.min(expected, dist);
+    moveBy(agent, (dx / dist) * step, (dz / dist) * step);
+    if (Math.hypot(target.x - agent.x, target.z - agent.z) > ARRIVE_EPSILON) return false;
+    agent.x = target.x;
+    agent.z = target.z;
     // Reached this waypoint: carry on to the next one, if any.
     const next = agent.path.shift();
     if (!next) return true;
     agent.target = next;
+    agent.prevDist = Infinity;
     return false;
+  }
+
+  /** Move by (dx, dz) if the body fits there; otherwise slide along whichever axis fits. */
+  function moveBy(agent: CrowdAgent, dx: number, dz: number): void {
+    const clear = config.nav?.isClear;
+    // Already somewhere a body doesn't fit (e.g. handed over mid-wall): let it walk out.
+    const fits = (x: number, z: number) => !clear || clear({ x, z }) || !clear({ x: agent.x, z: agent.z });
+    if (fits(agent.x + dx, agent.z + dz)) {
+      agent.x += dx;
+      agent.z += dz;
+    } else if (Math.abs(dx) >= Math.abs(dz) && fits(agent.x + dx, agent.z)) {
+      agent.x += dx;
+    } else if (fits(agent.x, agent.z + dz)) {
+      agent.z += dz;
+    } else if (fits(agent.x + dx, agent.z)) {
+      agent.x += dx;
+    }
+  }
+
+  const isWalkingPhase = (p: CrowdPhase) => p === 'entering' || p === 'walking' || p === 'exiting';
+
+  /** Final leg, close to the goal, but someone else is standing on it: good enough. */
+  function goalTaken(agent: CrowdAgent): boolean {
+    const t = agent.target;
+    if (!t || agent.path.length > 0) return false;
+    if (Math.hypot(t.x - agent.x, t.z - agent.z) > config.personalSpace * 1.5) return false;
+    const near = (o: XZ) => Math.hypot(o.x - t.x, o.z - t.z) < config.personalSpace;
+    for (const o of agents.values()) if (o !== agent && o.phase !== 'loading' && near(o)) return true;
+    return bodies.some(near);
+  }
+
+  /**
+   * Push apart anyone closer than personalSpace. Walkers give way (back off and sidestep to their
+   * right, so two people meeting head-on pass each other); people standing still only move if
+   * nobody walking is involved, or when an outside body (the selected character) bumps them, in
+   * which case they walk off somewhere else.
+   */
+  function separate(): void {
+    const ps = config.personalSpace;
+    const list = [...agents.values()].filter((a) => a.phase !== 'loading');
+    let lastPass = false;
+    const share = (a: CrowdAgent, other: CrowdAgent | null): number => {
+      if (a.phase === 'held') return 0;
+      if (!other) return 1;
+      if (other.phase === 'held') return 1;
+      // Last pass: whatever overlap is left (a walker squeezed against someone standing), split it.
+      if (lastPass) return 0.5;
+      const aw = isWalkingPhase(a.phase);
+      const ow = isWalkingPhase(other.phase);
+      return aw === ow ? 0.5 : aw ? 1 : 0;
+    };
+    const push = (a: CrowdAgent, nx: number, nz: number, amount: number) => {
+      if (amount <= 0) return;
+      let px = nx;
+      let pz = nz;
+      if (isWalkingPhase(a.phase)) {
+        const fx = Math.sin(a.facing);
+        const fz = Math.cos(a.facing);
+        // The other one is ahead (we're pushed backward): step to our right as well.
+        if (fx * nx + fz * nz < 0) {
+          px += -fz * SIDESTEP;
+          pz += fx * SIDESTEP;
+          const len = Math.hypot(px, pz);
+          px /= len;
+          pz /= len;
+        }
+      }
+      moveBy(a, px * amount, pz * amount);
+    };
+    const direction = (a: XZ, b: XZ, d: number, salt: number): [number, number] => {
+      if (d > 1e-6) return [(a.x - b.x) / d, (a.z - b.z) / d];
+      const ang = salt * 2.399963; // exactly on top of each other: any fixed direction will do
+      return [Math.sin(ang), Math.cos(ang)];
+    };
+    const PASSES = 4;
+    for (let iter = 0; iter < PASSES; iter++) {
+      lastPass = iter === PASSES - 1;
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          const a = list[i]!;
+          const b = list[j]!;
+          const d = Math.hypot(a.x - b.x, a.z - b.z);
+          if (d >= ps) continue;
+          const [nx, nz] = direction(a, b, d, i + j);
+          const overlap = ps - d;
+          push(a, nx, nz, overlap * share(a, b));
+          push(b, -nx, -nz, overlap * share(b, a));
+        }
+        const a = list[i]!;
+        if (a.phase === 'held') continue;
+        bodies.forEach((body, k) => {
+          const d = Math.hypot(a.x - body.x, a.z - body.z);
+          if (d >= ps) return;
+          const [nx, nz] = direction(a, body, d, i + k + 7);
+          push(a, nx, nz, ps - d);
+          // Bumped while standing around: wander off rather than be shoved along.
+          if (a.phase === 'idling' || a.phase === 'emoting') startWalking(a, 'walking', pickZoneTarget(a));
+        });
+      }
+    }
   }
 
   function tickAgent(agent: CrowdAgent, dt: number): void {
     if (agent.phase === 'loading' || agent.phase === 'held') return;
     // The stay clock starts once the agent has walked into the zone.
     if (agent.phase !== 'entering') agent.stayLeft -= dt;
+    if (isWalkingPhase(agent.phase) && (agent.stuck > STUCK_SEC || goalTaken(agent))) {
+      agent.stuck = 0;
+      if (agent.phase === 'exiting') {
+        // Find another way out (re-plan from here, maybe to another gate).
+        leave(agent);
+      } else {
+        // Stop here and do something else; the next walk picks a fresh spot.
+        nextActivity(agent, true);
+      }
+      return;
+    }
     switch (agent.phase) {
       case 'entering':
       case 'walking':
@@ -274,9 +414,14 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     }
   }
 
-  /** Advance the simulation; returns everything that happened since the last tick. */
-  function tick(dt: number): CrowdEvent[] {
+  /**
+   * Advance the simulation; returns everything that happened since the last tick.
+   * `others` are characters outside the sim (e.g. the selected one) that the crowd keeps clear of.
+   */
+  function tick(dt: number, others: readonly XZ[] = []): CrowdEvent[] {
+    bodies = others;
     for (const agent of [...agents.values()]) tickAgent(agent, dt);
+    separate();
     if (agents.size < config.maxAgents) {
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
@@ -307,6 +452,8 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
       stayLeft: between(config.stay),
       emote: null,
       heldFrom: null,
+      stuck: 0,
+      prevDist: Infinity,
     });
     return id;
   }
@@ -332,6 +479,8 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
       stayLeft: between(config.stay),
       emote: null,
       heldFrom: null,
+      stuck: 0,
+      prevDist: Infinity,
     };
     agents.set(id, agent);
     return agent;

@@ -9,7 +9,7 @@
  */
 import * as THREE from 'three';
 import { buildBlockWorld, walkableCellsWithin, type BlockWorld } from '../domain/blockWorld';
-import { findPath, isWalkableAt, nearestWalkable } from '../lib/gridPath';
+import { findPath, isClearAt, isWalkableAt, nearestWalkable } from '../lib/gridPath';
 import type { CrowdNav } from '../animation/crowd';
 import { createBlockWorldMesh, setGroundVisible } from '../viewer';
 
@@ -36,6 +36,8 @@ export function createBlockWorldController(scene: THREE.Scene) {
     spots: walkableCellsWithin(world, halfSize - WANDER_MARGIN),
     gates: world.gates,
     findPath: route,
+    // A little under BODY_RADIUS so a sidestep along a wall isn't refused outright.
+    isClear: (p) => isClearAt(world.nav, p, BODY_RADIUS * 0.8),
   };
 
   /** Keep a walk target on the map and on walkable ground (in place). */
