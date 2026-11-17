@@ -1,12 +1,12 @@
 /**
  * XState machine for application mode (route + creator submode).
- * Mirrors hash routing: home, creator (wardrobe|3d|2d), preview.
+ * Mirrors hash routing: home, creator (wardrobe|3d|2d), preview, studio.
  */
 
 import { createMachine, createActor, fromCallback } from 'xstate';
 import type { EditMode } from '../../creator/api';
 
-export type AppRoute = 'viewer' | 'creator' | 'preview';
+export type AppRoute = 'viewer' | 'creator' | 'preview' | 'studio';
 
 export type RouteInfo = { route: AppRoute; creatorMode: EditMode | null };
 
@@ -14,6 +14,7 @@ type AppModeEvent =
   | { type: 'GO_HOME'; routeInfo: RouteInfo }
   | { type: 'GO_CREATOR'; editMode?: EditMode; routeInfo: RouteInfo }
   | { type: 'GO_PREVIEW'; routeInfo: RouteInfo }
+  | { type: 'GO_STUDIO'; routeInfo: RouteInfo }
   | { type: 'SET_EDIT_MODE'; editMode: EditMode; routeInfo: RouteInfo };
 
 let applyRouteCallback: ((routeInfo: RouteInfo) => void) | null = null;
@@ -62,7 +63,8 @@ export const appModeMachine = createMachine({
           { target: 'creator.3d', guard: ({ event }) => event.editMode === '3d' },
           { target: 'creator.2d', guard: ({ event }) => event.editMode === '2d' }
         ],
-        GO_PREVIEW: 'preview'
+        GO_PREVIEW: 'preview',
+        GO_STUDIO: 'studio'
       }
     },
     creator: {
@@ -106,7 +108,8 @@ export const appModeMachine = createMachine({
       },
       on: {
         GO_HOME: 'home',
-        GO_PREVIEW: 'preview'
+        GO_PREVIEW: 'preview',
+        GO_STUDIO: 'studio'
       }
     },
     preview: {
@@ -115,6 +118,25 @@ export const appModeMachine = createMachine({
       },
       on: {
         GO_HOME: 'home',
+        GO_CREATOR: [
+          {
+            target: 'creator.wardrobe',
+            guard: ({ event }) => (event.editMode ?? 'wardrobe') === 'wardrobe'
+          },
+          { target: 'creator.3d', guard: ({ event }) => event.editMode === '3d' },
+          { target: 'creator.2d', guard: ({ event }) => event.editMode === '2d' }
+        ],
+        GO_STUDIO: 'studio'
+      }
+    },
+    // Dance studio: its own stage for mixing animation clips (see controllers/studioController.ts).
+    studio: {
+      entry: ({ event }) => {
+        if (event && 'routeInfo' in event && event.routeInfo) applyRouteFromEvent(event.routeInfo);
+      },
+      on: {
+        GO_HOME: 'home',
+        GO_PREVIEW: 'preview',
         GO_CREATOR: [
           {
             target: 'creator.wardrobe',
@@ -156,6 +178,7 @@ export function getModeFromMachine(): { route: AppRoute; editMode: EditMode } {
   const value = snapshot.value;
   if (value === 'home') return { route: 'viewer', editMode: 'wardrobe' };
   if (value === 'preview') return { route: 'preview', editMode: 'wardrobe' };
+  if (value === 'studio') return { route: 'studio', editMode: 'wardrobe' };
   if (typeof value === 'object' && value && 'creator' in value) {
     return { route: 'creator', editMode: getEditModeFromSnapshot(snapshot) };
   }
@@ -176,6 +199,7 @@ export function parseHashToRouteInfo(): RouteInfo {
   if (typeof location === 'undefined') return { route: 'viewer', creatorMode: null };
   const hash = (location.hash || '#/').toLowerCase().replace(/\/$/, '') || '#/';
   if (hash === '#/preview') return { route: 'preview', creatorMode: null };
+  if (hash === '#/studio') return { route: 'studio', creatorMode: null };
   if (hash === '#/creator' || hash.startsWith('#/creator/')) {
     const modeSegment = hash.slice('#/creator/'.length);
     const creatorMode: EditMode =
@@ -206,6 +230,12 @@ export function syncModeMachineFromHash(routeInfo: RouteInfo): boolean {
   if (routeInfo.route === 'preview') {
     if (current.route === 'preview') return false;
     actor.send({ type: 'GO_PREVIEW', routeInfo });
+    return true;
+  }
+
+  if (routeInfo.route === 'studio') {
+    if (current.route === 'studio') return false;
+    actor.send({ type: 'GO_STUDIO', routeInfo });
     return true;
   }
 

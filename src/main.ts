@@ -101,6 +101,9 @@ import { createArmModelState } from './state/armModelState';
 import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
 import { createMovePanel } from './ui/movePanel';
+import { createStudioPanel } from './ui/studioPanel';
+import { createStudioController, type StudioController } from './controllers/studioController';
+import { createSavedSequencesStore } from './state/savedSequences';
 import {
   initElectronStatus,
 } from './ui';
@@ -161,7 +164,7 @@ const CREATOR_TARGET_OFFSET_FROM_CHARACTER = CREATOR_CAMERA_TARGET
 // Types
 // -----------------------------------------------------------------------------
 
-type AppRoute = 'creator' | 'viewer' | 'preview';
+type AppRoute = 'creator' | 'viewer' | 'preview' | 'studio';
 type RouteInfo = { route: AppRoute; creatorMode: EditMode | null };
 /** Extended scene context with typed characters. Populated in main() after initViewerScene. */
 type AppSceneContext = SceneContext & { characters: Record<string, CharacterState> };
@@ -176,6 +179,7 @@ type AppServices = {
   characterAI: ReturnType<typeof createCharacterAI> | null;
   crowd: CrowdController;
   selection: SelectionController;
+  studio: StudioController;
 };
 const app = createAppContext<AppServices>();
 /** Composite sequences loaded from /sequences/index.json */
@@ -266,6 +270,15 @@ function resumeHomeMode() {
 }
 
 const CREATOR_EXIT_ANIMATION_MS = 450;
+
+/** localStorage, or null where it's blocked (private mode, sandboxed iframes). */
+function getLocalStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 function ensureViewerFullWidthLayout() {
   const appEl = document.getElementById('app');
@@ -402,6 +415,10 @@ const router = createRouter({
   ensureViewerLayout: ensureViewerFullWidthLayout,
   resumeHome: resumeHomeMode,
   onApplied: () => routeButtons.update(),
+  studio: {
+    enter: () => app.tryGet('studio')?.enter(),
+    exit: () => app.tryGet('studio')?.exit(),
+  },
 });
 const focusAutoDisableBoundControls = new WeakSet<object>();
 let lastCreatorCameraInputWasMouse = false;
@@ -580,6 +597,7 @@ async function main(): Promise<void> {
   const sceneContext = app.provide('scene', initViewerScene(container, params) as AppSceneContext);
   initTheme();
   initAboutPanel();
+  const savedSequences = createSavedSequencesStore(getLocalStorage());
   const movePanel = createMovePanel({
     getRoute,
     getCamera: () => sceneContext?.camera ?? null,
@@ -587,6 +605,7 @@ async function main(): Promise<void> {
     getAnimationManager: () => app.tryGet('animation') ?? null,
     onUserControl: () => app.tryGet('characterAI')?.userTookControl(),
     canControl: () => app.tryGet('selection')?.isSelected() ?? false,
+    savedSequences,
   });
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();
@@ -613,6 +632,7 @@ async function main(): Promise<void> {
       viewerUIController.setupSkinPreviews(skins);
       viewerUIController.setupSequenceButtons(sequences as Sequence[]);
       movePanel.setMoves(anims, sequences as Sequence[]);
+      studioPanel.setAnimations(anims);
     },
     getSequencesList: () => sequencesList,
     onPreviewRouteAfterCharacterReady: () => void previewRuntime.sync(),
@@ -654,6 +674,27 @@ async function main(): Promise<void> {
     planWalk: blockWorld?.planWalk,
   });
   app.provide('animation', animationManager);
+
+  // Dance studio (#/studio): mixes clips on the primary character. Its own stage: the crowd and
+  // village are hidden there and the idle AI doesn't run (both are viewer-only).
+  const studio = app.provide('studio', createStudioController({
+    getCharacter: () => getCharacter(getPrimaryCharacterId()),
+    stopSequences: () => {
+      animationManager.stop();
+      app.tryGet('characterAI')?.userTookControl();
+    },
+    getSceneContext: () => sceneContext,
+    getFacing: () => animationManager.getFacing(),
+  }));
+  const studioPanel = createStudioPanel({
+    studio,
+    savedSequences,
+    onExit: () => {
+      location.hash = '#/';
+    },
+  });
+  // The route may have been applied (e.g. a direct #/studio load) before the controller existed.
+  if (getRoute() === 'studio') studio.enter();
 
   const crowd = app.provide('crowd', createCrowdController({
     getSceneContext,
@@ -785,6 +826,7 @@ async function main(): Promise<void> {
   const cutawayFocus = new THREE.Vector3();
   /** Crowd, selection and camera follow. The world stops while the creator is open. */
   function onWorldUpdate(delta: number, route: AppRoute): void {
+    if (route === 'studio') studio.update(delta);
     blockWorld?.update(route);
     if (blockWorld) {
       // Editor (and the camera move into it): keep walls and trees out from between camera and character.

@@ -29,7 +29,7 @@ import { getPreviewPreset } from '../viewer/previewPresets';
 
 export type FocusedCreationControllerDeps = {
   getFocusedCreationEnabled: () => boolean;
-  getRoute: () => 'creator' | 'viewer' | 'preview';
+  getRoute: () => 'creator' | 'viewer' | 'preview' | 'studio';
   getEditMode: () => 'wardrobe' | '2d' | '3d';
   getWardrobeSelectedLayer: () => WardrobeLayerKey;
   getWardrobeHoverPreviewLayer: () => WardrobeLayerKey | null;

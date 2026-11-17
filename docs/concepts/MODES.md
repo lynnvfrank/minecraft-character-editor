@@ -18,6 +18,7 @@ The same idea is often called **view**, **mode**, **scene**, or **world** (espec
 | Creator 3D, paint on model, 3D edit | **Creator.3D** | `editMode: '3d'`, `#/creator/3d` |
 | Creator 2D, pixel editor, 2D canvas | **Creator.2D** | `editMode: '2d'`, `#/creator/2d` |
 | Preview (nav label) | **Preview** | `route: 'preview'`, `#/preview` |
+| Dance studio, studio | **Studio** | `route: 'studio'`, `#/studio` |
 
 **Dot notation:** `Creator.Wardrobe`, `Creator.3D`, and `Creator.2D` mean “Creator route with that **edit mode**.” They are not separate top-level routes in code—only Creator has these submodes.
 
@@ -100,6 +101,20 @@ flowchart LR
 | **Core code** | `src/controllers/router.ts` (preview branch), `src/controllers/previewRouteRuntime.ts` (skin sync, `window.__previewCapture`), `src/controllers/previewCamera.ts` (presets, debug panel), `src/viewer/thumbnailCapture.ts` (3D thumbnails) |
 | **Styles** | `src/styles/` — `body[data-route="preview"]` (shared with viewer for some chrome hiding) |
 | **Resources** | Preview base skins, composed skin paths as configured for capture |
+
+---
+
+### Studio (`studio`)
+
+| Field | Value |
+|-------|--------|
+| **Aliases** | Dance studio |
+| **Hash** | `#/studio` |
+| **`body` attribute** | `data-route="studio"` |
+| **Primary trigger** | **Studio** button under Design on the home view; **Home** in the studio panel goes back to `#/` |
+| **Behavior notes** | Its own stage: the block village and the crowd are hidden (and the crowd doesn't spawn), the idle AI doesn't run, and play commands from the bus/socket are ignored. The primary character's `AnimationMixer` is driven directly from a mix of per-clip weights plus an A↔B crossfade. "Save as sequence" stores a `blend` step that the Move panel replays under **My combos**. |
+| **Core code** | `src/controllers/studioController.ts` (applies the mix; updated from `onWorldUpdate`), `src/animation/studioMix.ts` (pure weight/crossfade math), `src/ui/studioPanel.ts`, `src/state/savedSequences.ts` (localStorage), `blend` steps in `src/animation/manager.ts` |
+| **Styles** | `src/styles/_studio.scss`; `body[data-route="studio"]` shares the viewer layout rules in `_routes.scss` |
 
 ---
 

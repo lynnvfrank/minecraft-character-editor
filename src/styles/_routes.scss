@@ -36,7 +36,9 @@ body[data-route="creator"] #app {
 body[data-route="creator"] #controls-bar,
 body[data-route="creator"] #test-controls,
 body[data-route="preview"] #controls-bar,
-body[data-route="preview"] #test-controls {
+body[data-route="preview"] #test-controls,
+body[data-route="studio"] #controls-bar,
+body[data-route="studio"] #test-controls {
   display: none !important;
 }
 
@@ -86,18 +88,21 @@ body[data-route="creator"][data-edit-mode="wardrobe"] .creator-canvas-area {
 
 /* Viewer route: creator-panel hidden, wrapper and app fill space */
 body[data-route="viewer"],
-body[data-route="preview"] {
+body[data-route="preview"],
+body[data-route="studio"] {
   display: flex;
   flex-direction: column;
 }
 body[data-route="viewer"] #creator-view-wrapper,
-body[data-route="preview"] #creator-view-wrapper {
+body[data-route="preview"] #creator-view-wrapper,
+body[data-route="studio"] #creator-view-wrapper {
   display: flex !important;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
 }
 body[data-route="viewer"] .creator-canvas-area,
-body[data-route="preview"] .creator-canvas-area {
+body[data-route="preview"] .creator-canvas-area,
+body[data-route="studio"] .creator-canvas-area {
   display: none !important;
 }

@@ -14,7 +14,7 @@ import { findPath, isClearAt, isWalkableAt, nearestWalkable } from '../lib/gridP
 import type { CrowdNav } from '../animation/crowd';
 import { createBlockWorldMesh, setGroundVisible } from '../viewer';
 
-type Route = 'creator' | 'viewer' | 'preview';
+type Route = 'creator' | 'viewer' | 'preview' | 'studio';
 
 /** Half a character's width: paths keep the body this far from walls. */
 const BODY_RADIUS = 0.3;

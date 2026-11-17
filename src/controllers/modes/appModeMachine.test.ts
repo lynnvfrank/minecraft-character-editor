@@ -24,6 +24,8 @@ describe('route parsing', () => {
     ['', { route: 'viewer', creatorMode: null }],
     ['#/', { route: 'viewer', creatorMode: null }],
     ['#/preview', { route: 'preview', creatorMode: null }],
+    ['#/studio', { route: 'studio', creatorMode: null }],
+    ['#/Studio/', { route: 'studio', creatorMode: null }],
     ['#/creator', { route: 'creator', creatorMode: 'wardrobe' }],
     ['#/creator/3D/', { route: 'creator', creatorMode: '3d' }],
     ['#/creator/2d', { route: 'creator', creatorMode: '2d' }],
@@ -53,5 +55,21 @@ describe('mode machine', () => {
     assert.deepEqual(getRouteInfoFromMachine(), { route: 'viewer', creatorMode: null });
 
     assert.deepEqual(applied, ['creator:2d', 'creator:3d', 'viewer:null']);
+  });
+
+  test('enters and leaves the studio from home and the creator', () => {
+    const applied: string[] = [];
+    setApplyRouteCallback((info) => applied.push(info.route));
+    startModeActor();
+
+    assert.equal(syncModeMachineFromHash({ route: 'studio', creatorMode: null }), true);
+    assert.deepEqual(getRouteInfoFromMachine(), { route: 'studio', creatorMode: null });
+    assert.equal(syncModeMachineFromHash({ route: 'studio', creatorMode: null }), false);
+
+    syncModeMachineFromHash({ route: 'creator', creatorMode: '3d' });
+    assert.deepEqual(getRouteInfoFromMachine(), { route: 'creator', creatorMode: '3d' });
+    syncModeMachineFromHash({ route: 'studio', creatorMode: null });
+    syncModeMachineFromHash({ route: 'viewer', creatorMode: null });
+    assert.deepEqual(applied, ['studio', 'creator', 'studio', 'viewer']);
   });
 });

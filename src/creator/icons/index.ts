@@ -5,6 +5,7 @@
  */
 
 import modeHomeRaw from './mode.home.svg?raw';
+import modeStudioRaw from './mode.studio.svg?raw';
 import modeCreatorRaw from './mode.creator.svg?raw';
 import modeCreatorKeepRaw from './mode.creator.keep.svg?raw';
 import modeCreatorSaveRaw from './mode.creator.save.svg?raw';
@@ -40,6 +41,7 @@ import modeLightClassicRaw from './mode.light.classic.svg?raw';
 
 const ICONS_RAW = {
   modeHome: modeHomeRaw,
+  modeStudio: modeStudioRaw,
   modeCreator: modeCreatorRaw,
   modeCreatorKeep: modeCreatorKeepRaw,
   modeCreatorSave: modeCreatorSaveRaw,

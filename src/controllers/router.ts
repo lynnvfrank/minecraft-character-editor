@@ -1,5 +1,5 @@
 /**
- * Applies a route (viewer / creator / preview) to the scene and UI. Called by the mode machine
+ * Applies a route (viewer / creator / preview / studio) to the scene and UI. Called by the mode machine
  * whenever the hash route changes. Extracted from main.ts `applyRoute`.
  */
 import * as THREE from 'three';
@@ -69,6 +69,8 @@ export type RouterDeps = {
   resumeHome: () => void;
   /** Refresh anything that depends on the route (nav buttons). */
   onApplied: () => void;
+  /** Dance studio: take over the primary character's mixer / hand it back. */
+  studio?: { enter: () => void; exit: () => void };
 };
 
 export function createRouter(deps: RouterDeps) {
@@ -137,7 +139,12 @@ export function createRouter(deps: RouterDeps) {
 
   function apply(info: RouteInfo): void {
     document.body.dataset.route = info.route;
-    if (info.route === 'creator') {
+    if (lastApplied?.route === 'studio' && info.route !== 'studio') deps.studio?.exit();
+    if (info.route === 'studio') {
+      deps.previewRuntime.exit();
+      deps.ensureViewerLayout();
+      deps.studio?.enter();
+    } else if (info.route === 'creator') {
       deps.previewRuntime.exit();
       enterCreator(info);
     } else if (info.route === 'preview') {
