@@ -11,6 +11,7 @@ Scope: everything bundled into or used to build the app **except player skins** 
 | npm libraries (runtime + build) | All permissive (MIT / BSD / ISC-style / Apache-2.0) | **Low** — just needs notices (done in the in-app About panel) |
 | Electron / Chromium | MIT, plus Chromium's bundled third-party licenses | **Low** — electron-builder ships `LICENSES.chromium.html` |
 | Mixamo animations (42 clips) | Adobe Mixamo terms | **Low–Medium** — packed into one GLB; raw FBX no longer shipped |
+| Quaternius Universal Animation Library (23 clips) | CC0 1.0 | **Low** — public domain; credited anyway |
 | Running Boy character rig (3 FBX) | Downloaded from a free model site (owner recalls a permissive / MIT-style license), auto-rigged on Mixamo | **Low–Medium** — record the source URL and license text |
 | UI icons | Lucide (ISC); wardrobe icons original | **Low** |
 | Schematic props | **Removed** (purchased schematics, not redistributable; also used Minecraft textures) | None — reverted |
@@ -49,6 +50,26 @@ vite (MIT), sass (MIT), typescript (Apache-2.0), tsx (MIT), electron-builder (MI
   2. Pack the clips into one GLB so they aren't drop-in reusable FBX assets (done).
   3. Requires an Adobe account in good standing for whoever downloaded them; keep a note of which account.
 
+## 2b. Animations — Quaternius Universal Animation Library
+
+- **What:** 23 clips (idles, walks, jog/sprint, crouch/sneak, dance, punches, hits, faint, swim, sit, etc.) from
+  Quaternius' *Universal Animation Library* **[Standard]** tier, v3.0 (June 2026), the free tier of the pack.
+  Source file `assets-src/animations/quaternius/UAL1_Standard.glb` (root motion disabled) with the pack's `License.txt`
+  next to it. `clips.json` lists which clips ship and their keys/labels.
+- **Where from:** https://quaternius.itch.io/universal-animation-library ("name your own price", $0 download) —
+  also linked from https://quaternius.com/packs/universalanimationlibrary.html. Downloaded 2026-11-16.
+- **License:** CC0 1.0 Universal (public domain dedication). Confirmed in three places: the website pack page
+  ("Free to use in personal, educational and commercial projects. (CC0 License)"), the itch.io "Asset license" field
+  ("Creative Commons Zero v1.0 Universal"), and `License.txt` inside the zip. No attribution required; redistribution
+  of the source file is allowed, so committing the GLB to the repo is fine.
+- **Left out on purpose:** the Pro and Source tiers (paid), and from the free tier the pistol/sword/torch/driving clips
+  (they need props we don't have), the jump phases (the Mixamo `jump` already covers it), `A_TPose` (used only as the
+  retarget reference), and sit enter/exit/talking.
+- **Pipeline:** `scripts/lib/retarget-ual.mjs`, called by `scripts/pack-animations.mjs`, maps the UE-mannequin bones
+  onto the Running boy bones with world-space rotation deltas from a shared T-pose and bakes the clips into
+  `public/animations/animations.glb` with the Mixamo clips. The slim rig shares the skeleton, so it gets them too.
+- **Actions:** credit "Universal Animation Library by Quaternius (CC0)" in the About panel (done; courtesy, not required).
+
 ## 3. Character model — Running Boy rig
 
 - **What:** `public/models/RunningboyRig.fbx`, `RunningboyRig-Zeroed.fbx`, `RunningboyRigSlim.fbx` (the slim one is a local modification).
@@ -86,5 +107,6 @@ Bundled skins are for testing only and must be removed or replaced with legally 
 - [x] Replace the SVG Repo icons with Lucide (ISC)
 - [x] Remove schematic props
 - [x] Pack the Mixamo clips into a single GLB
+- [x] Add Quaternius Universal Animation Library (CC0) clips and credit them
 - [ ] Move script-only packages to `devDependencies`
 - [ ] Remove test skins

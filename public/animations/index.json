@@ -208,5 +208,120 @@
     "path": "/animations/animations.glb",
     "key": "walking",
     "label": "walking"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "relaxed-idle",
+    "label": "Relaxed Idle"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "chatting",
+    "label": "Chatting"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "stroll",
+    "label": "Stroll"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "formal-walk",
+    "label": "Formal Walk"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "jog",
+    "label": "Jog"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "sprint",
+    "label": "Sprint"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "crouch",
+    "label": "Crouch"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "sneak",
+    "label": "Sneak"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "groove",
+    "label": "Groove"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "roll",
+    "label": "Roll"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "jab",
+    "label": "Jab"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "punch",
+    "label": "Punch"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "oof",
+    "label": "Oof"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "bonk",
+    "label": "Bonk"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "faint",
+    "label": "Faint"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "interact",
+    "label": "Interact"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "pick-up",
+    "label": "Pick Up"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "push",
+    "label": "Push"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "fix-it",
+    "label": "Fix It"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "cast-spell",
+    "label": "Cast Spell"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "sit-still",
+    "label": "Sit Still"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "swim",
+    "label": "Swim"
+  },
+  {
+    "path": "/animations/animations.glb",
+    "key": "tread-water",
+    "label": "Tread Water"
   }
 ]
