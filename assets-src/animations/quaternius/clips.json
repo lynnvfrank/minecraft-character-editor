@@ -1,0 +1,29 @@
+{
+  "source": "UAL1_Standard.glb",
+  "about": "Quaternius Universal Animation Library [Standard], v3.0, CC0 1.0. Clips listed here are retargeted onto the Running boy rig by scripts/lib/retarget-ual.mjs and packed into public/animations/animations.glb. Weapon/prop clips (pistol, sword, torch, driving) and the jump phases are left out on purpose.",
+  "clips": [
+    { "source": "Idle_Loop", "key": "relaxed-idle", "label": "Relaxed Idle" },
+    { "source": "Idle_Talking_Loop", "key": "chatting", "label": "Chatting" },
+    { "source": "Walk_Loop", "key": "stroll", "label": "Stroll" },
+    { "source": "Walk_Formal_Loop", "key": "formal-walk", "label": "Formal Walk" },
+    { "source": "Jog_Fwd_Loop", "key": "jog", "label": "Jog" },
+    { "source": "Sprint_Loop", "key": "sprint", "label": "Sprint" },
+    { "source": "Crouch_Idle_Loop", "key": "crouch", "label": "Crouch" },
+    { "source": "Crouch_Fwd_Loop", "key": "sneak", "label": "Sneak" },
+    { "source": "Dance_Loop", "key": "groove", "label": "Groove" },
+    { "source": "Roll", "key": "roll", "label": "Roll" },
+    { "source": "Punch_Jab", "key": "jab", "label": "Jab" },
+    { "source": "Punch_Cross", "key": "punch", "label": "Punch" },
+    { "source": "Hit_Chest", "key": "oof", "label": "Oof" },
+    { "source": "Hit_Head", "key": "bonk", "label": "Bonk" },
+    { "source": "Death01", "key": "faint", "label": "Faint" },
+    { "source": "Interact", "key": "interact", "label": "Interact" },
+    { "source": "PickUp_Table", "key": "pick-up", "label": "Pick Up" },
+    { "source": "Push_Loop", "key": "push", "label": "Push" },
+    { "source": "Fixing_Kneeling", "key": "fix-it", "label": "Fix It" },
+    { "source": "Spell_Simple_Shoot", "key": "cast-spell", "label": "Cast Spell" },
+    { "source": "Sitting_Idle_Loop", "key": "sit-still", "label": "Sit Still" },
+    { "source": "Swim_Fwd_Loop", "key": "swim", "label": "Swim" },
+    { "source": "Swim_Idle_Loop", "key": "tread-water", "label": "Tread Water" }
+  ]
+}

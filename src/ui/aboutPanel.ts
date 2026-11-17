@@ -22,6 +22,7 @@ const LIBRARIES: Credit[] = [
 
 const ASSETS: Credit[] = [
   { name: 'Animations', detail: 'Character animations by Adobe Mixamo', license: 'Mixamo terms', url: 'https://www.mixamo.com' },
+  { name: 'Universal Animation Library', detail: 'More character animations by Quaternius', license: 'CC0 1.0', url: 'https://quaternius.com/packs/universalanimationlibrary.html' },
   { name: 'Running Boy character rig', detail: 'Minecraft-style character model, rigged with Mixamo (source to be confirmed)', license: 'TBD' },
   { name: 'Lucide', detail: 'Interface icons', license: 'ISC', url: 'https://lucide.dev' },
 ];
