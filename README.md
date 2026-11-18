@@ -54,7 +54,7 @@ The repo ships source assets, and the app needs a few files derived from them. `
 | Step | Script | What it makes | Why | Cost |
 | --- | --- | --- | --- | --- |
 | 1 | `generate-skins-manifest.js` | `public/wardrobe/skins/index.json` | The app finds skins through this list, so dropping a PNG into `public/wardrobe/skins/` is enough to add one | Instant |
-| 2 | `pack-animations.mjs` | `public/animations/animations.glb` + `index.json` | Packs the ~40 Mixamo FBX clips in `assets-src/animations/` into one GLB, so the app loads one file and doesn't ship the raw FBX clips (licensing: see `docs/ATTRIBUTION-ASSESSMENT.md`) | About a minute, **every run** (it doesn't check for changes yet) |
+| 2 | `pack-animations.mjs` | `public/animations/animations.glb` + `index.json` | Packs the ~40 Mixamo FBX clips in `assets-src/animations/` into one GLB, so the app loads one file and doesn't ship the raw FBX clips. It also retargets the Quaternius Universal Animation Library clips listed in `assets-src/animations/quaternius/clips.json` onto the Running boy rig (`scripts/lib/retarget-ual.mjs`; no Blender needed). Licensing: see `docs/ATTRIBUTION-ASSESSMENT.md` | About a minute, **every run** (it doesn't check for changes yet) |
 | 3 | `generate-wardrobe-parts.ts` | `public/wardrobe/parts/<part>/*.png` | Crops each outfit into parts (hat, top, pants, ...) for Wardrobe mixing | A few seconds |
 | 4 | `generate-skin-previews.js` | `previews/` thumbnails for every skin and part | Starts a temporary Vite server and headless Chrome (Puppeteer), then renders each skin and part in 3D for the Wardrobe thumbnails | **Several minutes on the first run** (~1,600 images); later runs only render missing previews |
 
@@ -138,6 +138,7 @@ minecraft-character-editor/
 ├── electron/                     # Electron main process, preload, tray assets
 ├── scripts/                      # Asset generators
 ├── assets-src/animations/        # Source Mixamo FBX clips (not shipped)
+│   └── quaternius/               # Quaternius UAL source GLB (CC0) + clips.json picks
 ├── public/
 │   ├── models/                   # FBX rig
 │   ├── animations/               # Packed animations.glb + index.json (generated)

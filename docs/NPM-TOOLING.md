@@ -83,7 +83,7 @@ All of these set `VITE_SOCKET_ENABLED=true`, run a fresh web build, and then lau
 | --- | --- | --- |
 | `wardrobe:generate` | Generate skin manifest, parts, and previews | Refresh wardrobe metadata/images |
 | `wardrobe:clean` | Clear wardrobe previews | Reset generated previews |
-| `animations:generate` | Pack `assets-src/animations/*.fbx` into `public/animations/animations.glb` + `index.json` | After adding or changing animation clips |
+| `animations:generate` | Pack `assets-src/animations/*.fbx`, plus the Quaternius clips picked in `assets-src/animations/quaternius/clips.json` (retargeted onto the Running boy rig), into `public/animations/animations.glb` + `index.json` | After adding or changing animation clips |
 | `assets:generate` | Run all generation scripts | Full asset refresh |
 | `assets:clean` | Clean wardrobe + animation generated artifacts | Cleanup pass |
 

@@ -2,8 +2,11 @@
 /**
  * Packs the Mixamo FBX clips into one binary GLB so the app doesn't ship them as
  * standalone, drop-in reusable FBX files (see docs/ATTRIBUTION-ASSESSMENT.md §2).
+ * Also retargets the Quaternius Universal Animation Library (CC0) clips picked in
+ * assets-src/animations/quaternius/clips.json onto the Running boy rig (scripts/lib/retarget-ual.mjs).
  *
  * Source:  assets-src/animations/*.fbx   (not shipped; falls back to public/animations/)
+ *          assets-src/animations/quaternius/UAL1_Standard.glb + clips.json
  * Output:  public/animations/animations.glb   (one clip per FBX, clip.name = manifest key)
  *          public/animations/index.json       ({ path, key, label } per clip; path points at the GLB)
  *
@@ -16,6 +19,7 @@ import { fileURLToPath } from 'url';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { retargetUalClips } from './lib/retarget-ual.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_CANDIDATES = [path.join(ROOT, 'assets-src', 'animations'), path.join(ROOT, 'public', 'animations')];
@@ -23,6 +27,8 @@ const OUT_DIR = path.join(ROOT, 'public', 'animations');
 const OUT_GLB = path.join(OUT_DIR, 'animations.glb');
 const OUT_MANIFEST = path.join(OUT_DIR, 'index.json');
 const GLB_URL = '/animations/animations.glb';
+const UAL_DIR = path.join(ROOT, 'assets-src', 'animations', 'quaternius');
+const RIG_FBX = path.join(ROOT, 'public', 'models', 'RunningboyRig.fbx');
 
 // GLTFExporter's binary path reads Blobs with FileReader, which Node lacks.
 if (typeof globalThis.FileReader === 'undefined') {
@@ -72,6 +78,26 @@ for (const file of files) {
   for (const track of clip.tracks) targetNames.add(THREE.PropertyBinding.parseTrackName(track.name).nodeName);
   clips.push(clip);
   manifest.push({ path: GLB_URL, key, label });
+}
+
+// Quaternius UAL clips, retargeted onto the Running boy rig.
+const ualConfigPath = path.join(UAL_DIR, 'clips.json');
+if (fs.existsSync(ualConfigPath)) {
+  const config = JSON.parse(fs.readFileSync(ualConfigPath, 'utf8'));
+  const rigBuf = fs.readFileSync(RIG_FBX);
+  const rig = loader.parse(rigBuf.buffer.slice(rigBuf.byteOffset, rigBuf.byteOffset + rigBuf.byteLength), '');
+  const taken = new Set(manifest.map((m) => m.key));
+  for (const pick of config.clips) {
+    if (taken.has(pick.key)) throw new Error(`[pack-animations] Quaternius clip key "${pick.key}" is already used`);
+    taken.add(pick.key);
+  }
+  const ualClips = retargetUalClips(path.join(UAL_DIR, config.source), config.clips, rig);
+  for (const [i, clip] of ualClips.entries()) {
+    for (const track of clip.tracks) targetNames.add(THREE.PropertyBinding.parseTrackName(track.name).nodeName);
+    clips.push(clip);
+    manifest.push({ path: GLB_URL, key: clip.name, label: config.clips[i].label });
+  }
+  console.log(`[pack-animations] ${ualClips.length} Quaternius clips retargeted from ${config.source}`);
 }
 
 // A flat set of named nodes is enough: tracks bind by node name and hold local transforms.
