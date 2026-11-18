@@ -11,7 +11,7 @@ import type { CharacterState } from './characterTypes';
 export type CharacterEventsDeps = {
   getCharacter: (id: string) => CharacterState | undefined;
   getPrimaryCharacterId: () => string;
-  getRoute: () => 'creator' | 'viewer' | 'preview';
+  getRoute: () => 'creator' | 'viewer' | 'preview' | 'studio';
   getCreatorTransitionInFlight: () => boolean;
   resolveSkinByName: (name: string) => string | undefined;
   switchSkin: (charId: string, skinPath: string) => void;
@@ -57,7 +57,8 @@ export function createCharacterEventsController(deps: CharacterEventsDeps): {
   }
 
   function handleCharacterAnimationPlay(e: CustomEvent<{ characterId?: string; name: string }>) {
-    if (getRoute() === 'creator' || getCreatorTransitionInFlight()) return;
+    // The creator and the dance studio own the character's pose; ignore play commands there.
+    if (getRoute() === 'creator' || getRoute() === 'studio' || getCreatorTransitionInFlight()) return;
     const charId = e.detail?.characterId ?? getPrimaryCharacterId();
     const char = getCharacter(charId);
     if (!char) return;

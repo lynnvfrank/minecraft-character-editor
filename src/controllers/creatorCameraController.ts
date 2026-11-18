@@ -20,7 +20,7 @@ export type CreatorCameraControllerDeps = {
     camera: THREE.PerspectiveCamera;
     controls: { target: THREE.Vector3; update: () => void };
   };
-  getRoute: () => 'creator' | 'viewer' | 'preview';
+  getRoute: () => 'creator' | 'viewer' | 'preview' | 'studio';
   getEditMode: () => EditMode;
   creatorPoseController: CreatorPoseController;
 };

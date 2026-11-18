@@ -16,7 +16,7 @@ import { logger } from '../lib';
 import type { SkinEntry, AnimationEntry } from '../domain';
 import { buildCharacterConfig, type CharacterConfig, type CharacterState } from './characterTypes';
 
-type Route = 'creator' | 'viewer' | 'preview';
+type Route = 'creator' | 'viewer' | 'preview' | 'studio';
 
 export type CrowdControllerDeps = {
   getSceneContext: () => { scene: THREE.Scene; characters: Record<string, CharacterState> };

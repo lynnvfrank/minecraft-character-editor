@@ -3,12 +3,14 @@
  * - Move: D-pad / arrow keys / WASD to walk, plus Recent (last 3 moves played).
  * - All moves: every animation as an emoji tile, alphabetical.
  * Stacked in the top-left corner (Move, then All moves), like the editor's left column.
- * Combos (sequences) are built but hidden for now (SHOW_COMBOS); they'll come back as part of a
- * record/save-your-own-moves feature.
+ * Built-in combos (sequences) are hidden for now (SHOW_COMBOS). "My combos" lists sequences saved
+ * from the dance studio (`#/studio`) and replays them through the animation manager.
  */
 import * as THREE from 'three';
 import type { SequenceStep } from '../animation';
 import { APP_EVENTS, publish } from '../events/appEvents';
+import { MOVEMENT_CLIPS, moveEmoji, moveLabel } from './moveInfo';
+import type { SavedSequence } from '../domain/sequences';
 
 type Sequence = { id: string; label: string; steps: SequenceStep[] };
 type AnimationEntry = { key: string; label: string };
@@ -28,6 +30,11 @@ export type MovePanelDeps = {
   onUserControl: () => void;
   /** False while no character is selected: the panels are hidden and keys pan the camera instead. */
   canControl?: () => boolean;
+  /** Sequences saved from the dance studio, shown as "My combos". */
+  savedSequences?: {
+    list: () => readonly SavedSequence[];
+    subscribe: (listener: () => void) => () => void;
+  };
 };
 
 /** How far one D-pad press walks, in world units. */
@@ -39,68 +46,6 @@ const SHOW_COMBOS = false;
 
 const RECENT_KEY = 'movePanel.recent';
 const RECENT_MAX = 3;
-
-/** Emoji and a short friendly name per animation key. Unknown keys fall back to a clapperboard and the manifest label. */
-const MOVE_INFO: Record<string, { emoji: string; label: string }> = {
-  acknowledging: { emoji: '🙂', label: 'Say Hi' },
-  'arm-stretching': { emoji: '🙆', label: 'Stretch' },
-  backflip: { emoji: '🤸', label: 'Backflip' },
-  bashful: { emoji: '😊', label: 'Bashful' },
-  'blow-akiss': { emoji: '😘', label: 'Blow a Kiss' },
-  bored: { emoji: '😑', label: 'Bored' },
-  clapping: { emoji: '👏', label: 'Clap' },
-  crying: { emoji: '😢', label: 'Cry' },
-  'dancing-twerk': { emoji: '💃', label: 'Dance' },
-  excited: { emoji: '🤩', label: 'Excited' },
-  'female-walk': { emoji: '🚶', label: 'Strut' },
-  'happy-idle': { emoji: '😌', label: 'Happy Idle' },
-  happy: { emoji: '😄', label: 'Happy' },
-  'hard-head-nod': { emoji: '🤘', label: 'Head Nod' },
-  idle: { emoji: '🧍', label: 'Idle' },
-  jump: { emoji: '🦘', label: 'Jump' },
-  laughing: { emoji: '😂', label: 'Laugh' },
-  laying: { emoji: '🛌', label: 'Lie Down' },
-  'look-around': { emoji: '👀', label: 'Look Around' },
-  pointing: { emoji: '👉', label: 'Point' },
-  'quick-informal-bow': { emoji: '🙇', label: 'Bow' },
-  shrugging: { emoji: '🤷', label: 'Shrug' },
-  'sit-to-stand': { emoji: '⬆️', label: 'Stand Up' },
-  'sitting-clap': { emoji: '🙌', label: 'Sitting Clap' },
-  'sitting-talking': { emoji: '💬', label: 'Sitting Talk' },
-  'sitting-yell': { emoji: '📣', label: 'Sitting Yell' },
-  'stand-to-sit': { emoji: '🪑', label: 'Sit Down' },
-  'standing-thumbs-up': { emoji: '👍', label: 'Thumbs Up' },
-  surprised: { emoji: '😮', label: 'Surprised' },
-  texting: { emoji: '📱', label: 'Texting' },
-  thinking: { emoji: '🤔', label: 'Thinking' },
-  'thoughtful-head-shake': { emoji: '🙅', label: 'Head Shake' },
-  waving: { emoji: '👋', label: 'Wave' },
-  yawn: { emoji: '🥱', label: 'Yawn' },
-  // Quaternius Universal Animation Library (CC0), see assets-src/animations/quaternius/clips.json
-  'relaxed-idle': { emoji: '😮‍💨', label: 'Relax' },
-  chatting: { emoji: '🗣️', label: 'Chat' },
-  stroll: { emoji: '🚶', label: 'Stroll' },
-  'formal-walk': { emoji: '🎩', label: 'Formal Walk' },
-  jog: { emoji: '🏃', label: 'Jog' },
-  sprint: { emoji: '💨', label: 'Sprint' },
-  crouch: { emoji: '🧎', label: 'Crouch' },
-  sneak: { emoji: '🥷', label: 'Sneak' },
-  groove: { emoji: '🕺', label: 'Groove' },
-  roll: { emoji: '🌀', label: 'Roll' },
-  jab: { emoji: '🥊', label: 'Jab' },
-  punch: { emoji: '👊', label: 'Punch' },
-  oof: { emoji: '😣', label: 'Oof' },
-  bonk: { emoji: '🤕', label: 'Bonk' },
-  faint: { emoji: '😵', label: 'Faint' },
-  interact: { emoji: '🖐️', label: 'Interact' },
-  'pick-up': { emoji: '📦', label: 'Pick Up' },
-  push: { emoji: '🫸', label: 'Push' },
-  'fix-it': { emoji: '🔧', label: 'Fix It' },
-  'cast-spell': { emoji: '🪄', label: 'Cast Spell' },
-  'sit-still': { emoji: '🪑', label: 'Sit Still' },
-  swim: { emoji: '🏊', label: 'Swim' },
-  'tread-water': { emoji: '🛟', label: 'Tread Water' },
-};
 
 /** Emoji per combo (sequence id). Unknown ids fall back to sparkles. */
 const COMBO_EMOJI: Record<string, string> = {
@@ -120,7 +65,7 @@ const COMBO_EMOJI: Record<string, string> = {
 };
 
 /** Movement building blocks (turns, walk phases) are not fun on their own; leave them out. */
-const HIDDEN_MOVES = /^(walking|start-walking|stop-walking|start-walking-movement|stop-walking-movement|left-turn|right-turn|walking-backwards)$/;
+const HIDDEN_MOVES = MOVEMENT_CLIPS;
 
 type Tile = { id: string; emoji: string; label: string; run: (btn: HTMLElement) => void };
 
@@ -237,7 +182,13 @@ export function createMovePanel(deps: MovePanelDeps) {
   combosTitle.textContent = 'Combos';
   const combosGrid = document.createElement('div');
   combosGrid.className = 'move-grid';
-  movesBody.append(movesGrid, combosTitle, combosGrid);
+  const myCombosTitle = document.createElement('h3');
+  myCombosTitle.className = 'move-section-title';
+  myCombosTitle.textContent = 'My combos';
+  const myCombosGrid = document.createElement('div');
+  myCombosGrid.className = 'move-grid';
+  myCombosGrid.id = 'move-my-combos';
+  movesBody.append(myCombosTitle, myCombosGrid, movesGrid, combosTitle, combosGrid);
 
   // --- Actions ---
   function takeControl() {
@@ -367,8 +318,8 @@ export function createMovePanel(deps: MovePanelDeps) {
       .filter((a) => !HIDDEN_MOVES.test(a.key))
       .map((a) => ({
         id: `move:${a.key}`,
-        emoji: MOVE_INFO[a.key]?.emoji ?? '🎬',
-        label: MOVE_INFO[a.key]?.label ?? a.label.replace(/([a-z])([A-Z])/g, '$1 $2'),
+        emoji: moveEmoji(a.key),
+        label: moveLabel(a.key, a.label),
         run: (btn: HTMLElement) => play(a.key, btn),
       }))
       .sort(byLabel);
@@ -383,12 +334,37 @@ export function createMovePanel(deps: MovePanelDeps) {
       .sort(byLabel);
 
     for (const t of [...moveTiles, ...comboTiles]) tiles.set(t.id, t);
+    for (const t of savedTiles()) tiles.set(t.id, t);
 
     movesGrid.replaceChildren(...moveTiles.map(tileButton));
     combosGrid.replaceChildren(...comboTiles.map(tileButton));
     combosTitle.hidden = combosGrid.hidden = comboTiles.length === 0;
+    renderMyCombos();
     renderRecent();
   }
+
+  // --- My combos: saved from the dance studio, newest first ---
+  function savedTiles(): Tile[] {
+    return (deps.savedSequences?.list() ?? []).map((sq) => ({
+      id: `saved:${sq.id}`,
+      emoji: '💾',
+      label: sq.label,
+      run: (btn: HTMLElement) => playCombo(sq, btn),
+    }));
+  }
+
+  function renderMyCombos() {
+    for (const id of [...tiles.keys()]) if (id.startsWith('saved:')) tiles.delete(id);
+    const mine = savedTiles();
+    for (const t of mine) tiles.set(t.id, t);
+    myCombosGrid.replaceChildren(...mine.map(tileButton));
+    myCombosTitle.hidden = myCombosGrid.hidden = mine.length === 0;
+  }
+  renderMyCombos();
+  deps.savedSequences?.subscribe(() => {
+    renderMyCombos();
+    renderRecent();
+  });
 
   return { setMoves };
 }

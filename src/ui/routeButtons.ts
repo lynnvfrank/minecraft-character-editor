@@ -1,5 +1,5 @@
 /**
- * The "Design" (enter creator) and "Home" (exit creator) buttons. Extracted from main.ts.
+ * The "Design" (enter creator), "Studio" (open the dance studio) and "Home" (exit creator) buttons.
  */
 import { createIcon, type IconName } from '../creator/icons';
 import { getRouteButtonState } from './routeButtonState';
@@ -11,6 +11,8 @@ export type RouteTransitions = {
 
 const DESIGN_BTN_ID = 'enter-creator-btn';
 const HOME_BTN_ID = 'enter-viewer-btn';
+const STUDIO_BTN_ID = 'enter-studio-btn';
+const STUDIO_HASH = '#/studio';
 
 function getButton(id: string): HTMLButtonElement | null {
   return document.getElementById(id) as HTMLButtonElement | null;
@@ -44,6 +46,8 @@ export function createRouteButtons(getTransitionInFlight: () => boolean) {
       home.disabled = state.disabled;
       setLabel(home, state.homeLabel);
     }
+    const studio = getButton(STUDIO_BTN_ID);
+    if (studio) studio.disabled = state.disabled;
   }
 
   function setup(transitions: RouteTransitions): void {
@@ -51,6 +55,12 @@ export function createRouteButtons(getTransitionInFlight: () => boolean) {
     if (design) decorate(design, 'modeCreator', 'Design', () => void transitions.enterCreator());
     const home = getButton(HOME_BTN_ID);
     if (home) decorate(home, 'modeHome', 'Home', () => void transitions.exitCreator());
+    const studio = getButton(STUDIO_BTN_ID);
+    if (studio) {
+      decorate(studio, 'modeStudio', 'Studio', () => {
+        location.hash = STUDIO_HASH;
+      });
+    }
     update();
   }
 

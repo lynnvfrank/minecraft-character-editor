@@ -42,7 +42,7 @@ export type Creator3DPaintDeps = {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   getCharacterModel: () => THREE.Group | null;
-  getRoute: () => 'creator' | 'viewer' | 'preview';
+  getRoute: () => 'creator' | 'viewer' | 'preview' | 'studio';
   onWindowResize: () => void;
   onUpdateViewPlacement: () => void;
 };
@@ -156,7 +156,7 @@ function raycastToVisibleLayer(
 
 export function updateOrbitControlsForEditMode(
   controls: OrbitControls,
-  getRoute: () => 'creator' | 'viewer' | 'preview'
+  getRoute: () => 'creator' | 'viewer' | 'preview' | 'studio'
 ): void {
   if (getRoute() !== 'creator') return;
   if (getEditMode3D()) {
@@ -173,7 +173,7 @@ export function updateOrbitControlsForEditMode(
 
 export function updateCreator3DCanvasCursor(
   renderer: THREE.WebGLRenderer,
-  getRoute: () => 'creator' | 'viewer' | 'preview'
+  getRoute: () => 'creator' | 'viewer' | 'preview' | 'studio'
 ): void {
   const canvas = renderer.domElement;
   if (getRoute() !== 'creator' || !getEditMode3D()) {

@@ -15,7 +15,7 @@ export type AnimationLoopDeps = {
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
   };
-  getRoute: () => 'creator' | 'viewer' | 'preview';
+  getRoute: () => 'creator' | 'viewer' | 'preview' | 'studio';
   getCreatorTransitionInFlight: () => boolean;
   getCharacter: (id: string) => CharacterState | undefined;
   getPrimaryCharacterId: () => string;
@@ -28,11 +28,11 @@ export type AnimationLoopDeps = {
   } | null;
   characterAI: { update: (delta: number) => void } | null;
   /** Called each frame before render; route-specific updates (preview texture, camera panel, etc.) */
-  onFrameUpdate: (route: 'creator' | 'viewer' | 'preview') => void;
+  onFrameUpdate: (route: 'creator' | 'viewer' | 'preview' | 'studio') => void;
   /** Skip a character's mixer this frame (the crowd freezes while the creator is open). */
   shouldUpdateCharacter?: (char: CharacterState) => boolean;
   /** World simulation (crowd, selection, camera follow); runs after the animation manager. */
-  onWorldUpdate?: (delta: number, route: 'creator' | 'viewer' | 'preview') => void;
+  onWorldUpdate?: (delta: number, route: 'creator' | 'viewer' | 'preview' | 'studio') => void;
 };
 
 export type AnimationLoopController = {

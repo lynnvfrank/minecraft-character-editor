@@ -1,0 +1,354 @@
+// Dance studio (#/studio, see src/ui/studioPanel.ts). Same panel chrome as the Move panel and the
+// editor panels: 0.92 fill, 1px border, 8px radius. Docked on the right; the stage stays visible.
+
+// Second button under Design in the home view's lower-left panel.
+.creator-home-panel .creator-home-btn + .creator-home-btn {
+  margin-top: 0.4rem;
+}
+
+.studio-panel {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 20;
+  width: 340px;
+  max-width: calc(100% - 1.5rem);
+  box-sizing: border-box;
+  flex-direction: column;
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+  color: var(--text);
+  font-size: 0.85rem;
+  overflow: hidden;
+}
+
+body[data-route='studio'] .studio-panel {
+  display: flex;
+  animation: creator-slide-in-right 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.studio-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid rgba(var(--fg-rgb), 0.1);
+}
+
+.studio-title {
+  flex: 1;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.studio-section {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid rgba(var(--fg-rgb), 0.1);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.studio-section-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+// The clip list takes the remaining height and scrolls.
+.studio-clips-section {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 0;
+}
+
+.studio-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+
+  & + & {
+    margin-top: 0.4rem;
+  }
+}
+
+.studio-btn {
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  border-radius: 6px;
+  background: rgba(var(--fg-rgb), 0.06);
+  color: rgba(var(--fg-rgb), 0.9);
+  font: inherit;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  @media (hover: hover) {
+    &:hover:not(:disabled) {
+      background: rgba(var(--fg-rgb), 0.12);
+      border-color: rgba(var(--fg-rgb), 0.3);
+    }
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  &.active,
+  &[aria-pressed='true'] {
+    background: rgba(111, 140, 255, 0.28);
+    border-color: rgba(111, 140, 255, 0.7);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(var(--fg-rgb), 0.45);
+    outline-offset: 1px;
+  }
+}
+
+.studio-btn--primary {
+  width: 100%;
+  margin-top: 0.45rem;
+  font-weight: 600;
+  background: rgba(111, 140, 255, 0.22);
+  border-color: rgba(111, 140, 255, 0.55);
+}
+
+.studio-btn--icon {
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.studio-select,
+.studio-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  border-radius: 6px;
+  background: rgba(var(--fg-rgb), 0.06);
+  color: inherit;
+  font: inherit;
+}
+
+.studio-select option {
+  color: initial;
+}
+
+.studio-select--small {
+  flex: 1 1 auto;
+}
+
+.studio-input--num {
+  flex: 0 0 4.2rem;
+}
+
+.studio-unit {
+  opacity: 0.7;
+}
+
+.studio-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.studio-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  opacity: 0.75;
+
+  &:empty {
+    display: none;
+  }
+}
+
+.studio-value {
+  flex: 0 0 2.6rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.studio-range {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: #6f8cff;
+}
+
+// --- Crossfade -------------------------------------------------------------
+.studio-xf-picks {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 0.4rem;
+  align-items: center;
+}
+
+.studio-xf-tag {
+  font-weight: 700;
+  width: 1.1rem;
+  text-align: center;
+}
+
+.studio-xf-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+
+  .studio-value {
+    flex-basis: 2.4rem;
+    text-align: center;
+  }
+}
+
+.studio-range--wide {
+  height: 1.4rem;
+}
+
+.studio-xf-opts {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+// --- Saved sequences -------------------------------------------------------
+.studio-saved {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 7.5rem;
+  overflow-y: auto;
+}
+
+.studio-saved-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+
+  .studio-btn--icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: 0.7rem;
+  }
+}
+
+.studio-saved-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// --- Clip rows -------------------------------------------------------------
+.studio-clips {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.studio-clip {
+  padding: 0.35rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+
+  & + & {
+    margin-top: 0.2rem;
+  }
+
+  &.playing {
+    background: rgba(var(--fg-rgb), 0.05);
+    border-color: rgba(var(--fg-rgb), 0.12);
+  }
+
+  &.in-crossfade {
+    border-color: rgba(111, 140, 255, 0.45);
+  }
+
+  &[hidden] {
+    display: none;
+  }
+
+  // Weight/speed sliders only for clips that are playing (keeps the long list compact).
+  &:not(.playing) .studio-clip-slider {
+    display: none;
+  }
+}
+
+.studio-clip-top {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.studio-clip-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Applied weight: a small bar plus the percentage.
+.studio-meter {
+  --w: 0;
+  flex: 0 0 3.2rem;
+  font-size: 0.72rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(to right, rgba(111, 140, 255, 0.45) calc(var(--w) * 100%), transparent 0);
+  border-radius: 3px;
+  padding: 0 0.2rem;
+}
+
+.studio-clip-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+  padding-left: 2.35rem;
+}
+
+.studio-slider-label {
+  flex: 0 0 3rem;
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+@media (max-width: 640px) {
+  .studio-panel {
+    top: auto;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    width: auto;
+    max-width: none;
+    height: 55%;
+  }
+}

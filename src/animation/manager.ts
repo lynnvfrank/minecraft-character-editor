@@ -13,6 +13,7 @@ import {
   WALK_CYCLE_DISTANCE
 } from '../lib/trapezoidBounds';
 import { DEFAULT_CHARACTER_ID } from '../domain';
+import type { BlendStep } from '../domain/sequences';
 import {
   WANDER_EMOTES,
   WAYPOINT_RELATIVE,
@@ -36,6 +37,8 @@ export type CharacterStateLike = {
 
 export type SequenceStep =
   | { type: 'animation'; name: string; duration?: number }
+  /** Several clips at once with fixed weights (saved from the dance studio). */
+  | BlendStep
   | { type: 'walkTo'; target: THREE.Vector3 | [number, number, number]; speed?: number }
   | {
       type: 'pause';
@@ -118,8 +121,23 @@ const STOP_WALKING_FRAMES = 7;    // stop-walking length; frame 1 matches walkin
 export function createAnimationManager(deps: AnimationManagerDeps) {
   // getTurnStrategy is accepted for compatibility but no longer used: facing is driven by
   // live root-yaw compensation (see 'Facing model' below), which works for any turn angle.
-  const { getCharacter, fadeToAction, getAction, getCamera } = deps;
+  const { getCharacter, getAction, getCamera } = deps;
   const CHAR_ID = DEFAULT_CHARACTER_ID;
+
+  /**
+   * Extra layers of the last blend step (everything except the dominant clip, which is
+   * char.currentAction). They fade out alongside whatever the character does next, so the
+   * blend hands over smoothly instead of lingering under the next clip.
+   */
+  let blendExtras: THREE.AnimationAction[] = [];
+  function releaseBlendExtras(duration: number): void {
+    for (const a of blendExtras) if (a.isRunning()) a.fadeOut(duration);
+    blendExtras = [];
+  }
+  function fadeToAction(char: CharacterStateLike, action: THREE.AnimationAction, duration: number): void {
+    releaseBlendExtras(duration);
+    deps.fadeToAction(char, action, duration);
+  }
 
   let queue: SequenceStep[] = [];
   let isPlaying = false;
@@ -267,6 +285,7 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
     queue = [];
     isPlaying = false;
     isInWalkTo = false;
+    releaseBlendExtras(0.3);
     if (activeWalk) {
       activeWalk.resolve();
       activeWalk = null;
@@ -296,6 +315,47 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
       fadeToAction(char, action, 0.3);
       setTimeout(() => resolve(), (duration || 2) * 1000);
     });
+  }
+
+  /**
+   * Play several clips at once with fixed weights for `duration` seconds. The heaviest clip
+   * becomes char.currentAction (so the next fadeToAction crossfades from it); the rest are
+   * tracked in blendExtras and fade out with the next transition.
+   */
+  function playBlendForDuration(char: CharacterStateLike, step: BlendStep): Promise<void> {
+    const FADE = 0.3;
+    const layers = step.layers
+      .map((l) => ({ l, action: getAction(CHAR_ID, l.name) }))
+      .filter((x): x is { l: (typeof step.layers)[number]; action: THREE.AnimationAction } => !!x.action && x.l.weight > 0);
+    const durationMs = (step.duration ?? 2) * 1000;
+    if (layers.length === 0) return new Promise((r) => setTimeout(r, durationMs));
+
+    // Fade out whatever is running that isn't part of this blend (including a previous blend).
+    const mine = new Set(layers.map((x) => x.action));
+    releaseBlendExtras(FADE);
+    for (const a of Object.values(char.actions)) {
+      if (!mine.has(a) && a.isRunning()) a.fadeOut(FADE);
+    }
+    layers.sort((x, y) => y.l.weight - x.l.weight);
+    for (const { l, action } of layers) {
+      // Already the visible clip: keep its phase and just retarget the weight (no dip to 0).
+      const continuing = action.isRunning() && action === char.currentAction;
+      if (!continuing) action.reset();
+      action.enabled = true;
+      action.setLoop(THREE.LoopRepeat, Infinity);
+      action.clampWhenFinished = false;
+      action.setEffectiveTimeScale(l.timeScale ?? 1);
+      action.setEffectiveWeight(l.weight); // also cancels any fade in progress
+      if (!continuing) action.fadeIn(FADE);
+      action.play();
+    }
+    char.currentAction = layers[0]!.action;
+    blendExtras = layers.slice(1).map((x) => x.action);
+    logger.info('animation', 'Blend start', {
+      layers: layers.map(({ l }) => `${l.name}@${l.weight}`),
+      duration: step.duration ?? 2,
+    });
+    return new Promise((r) => setTimeout(r, durationMs));
   }
 
   /**
@@ -518,6 +578,8 @@ export function createAnimationManager(deps: AnimationManagerDeps) {
         pos: [char.container.position.x, char.container.position.y, char.container.position.z]
       });
       await playAnimationForDuration(char, step.name, step.duration ?? 2);
+    } else if (step.type === 'blend') {
+      await playBlendForDuration(char, step);
     } else if (step.type === 'walkTo') {
       const target =
         step.target instanceof THREE.Vector3

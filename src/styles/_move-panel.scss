@@ -13,8 +13,8 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 0.5rem;
-  // Leave room below for the Design button in the bottom-left corner.
-  max-height: calc(100% - 0.75rem - 90px);
+  // Leave room below for the Design and Studio buttons in the bottom-left corner.
+  max-height: calc(100% - 0.75rem - 140px);
 }
 
 body:not([data-route='viewer']) .move-panels {
