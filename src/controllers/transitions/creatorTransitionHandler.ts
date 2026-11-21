@@ -4,6 +4,7 @@
  *
  * Design click → enterCreator() → hash → mode machine → applyRoute
  * Home button → exitCreator() → hash → mode machine → applyRoute
+ * "Dance in studio" → exitCreator('#/studio'): the same exit, landing on another route.
  */
 
 import { type EditMode, type DrawingTool } from '../../creator/api';
@@ -77,7 +78,7 @@ export function createCreatorTransitionHandler(deps: CreatorTransitionHandlerDep
     }
   }
 
-  async function exitCreator(): Promise<void> {
+  async function exitCreator(targetHash = '#/'): Promise<void> {
     if (transitionInFlight || deps.getRoute() !== 'creator') return;
     setInFlight(true);
     deps.normalizeLayerStateForNonEditMode();
@@ -86,7 +87,7 @@ export function createCreatorTransitionHandler(deps: CreatorTransitionHandlerDep
     try {
       document.body.dataset.creatorExiting = '1';
       await deps.sleep(deps.CREATOR_EXIT_ANIMATION_MS);
-      location.hash = '#/';
+      location.hash = targetHash;
       document.body.removeAttribute('data-creator-exiting');
       await deps.sleep(50);
       if (deps.getRoute() === 'viewer') {

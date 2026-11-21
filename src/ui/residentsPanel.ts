@@ -13,6 +13,10 @@
  * - At most `cap` residents; a full village refuses more with a hint.
  * - "Random visitors" forgets the roster, so the default come-and-go crowd returns; the hint
  *   line says which of the two modes is on.
+ * - "My outfits" (skins kept in the creator) get their own group above the bundled characters,
+ *   with the same tap-to-toggle tiles. A tile shows the skin's face, cut out of the skin image
+ *   with CSS. The small x on a tile deletes the outfit for good (second tap confirms); whoever
+ *   wore it in the village goes with it.
  * - Escape closes the open panel. The listener runs in the capture phase and stops the event, so
  *   the same keypress doesn't also deselect the character (selectionController listens for
  *   Escape on the document too). The About overlay, when open, sits on top and gets Escape first.
@@ -25,7 +29,18 @@ import {
   toggleResident,
 } from '../domain/residents';
 
-type SkinEntry = { path: string; label: string; preview?: string };
+import { isOutfitDataUrl } from '../domain/outfits';
+
+type SkinEntry = {
+  /** What the roster stores: a skin path, or `outfit:<id>` for one of the user's outfits. */
+  path: string;
+  label: string;
+  preview?: string;
+  /** A 64×64 skin image (data URL) whose face is the thumbnail; used when there is no preview. */
+  face?: string;
+  /** 'outfits' puts the tile in the "My outfits" group. */
+  group?: string;
+};
 
 export type ResidentsPanelDeps = {
   getSkins: () => readonly SkinEntry[];
@@ -43,6 +58,10 @@ export type ResidentsPanelDeps = {
   /** Most residents at once. */
   cap: number;
   random?: () => number;
+  /** Delete one of the user's outfits for good (tiles in the 'outfits' group get a small x). */
+  onRemoveOutfit?: (path: string) => void;
+  /** Called when the skin list changes (an outfit was kept or deleted) so open tiles can be rebuilt. */
+  subscribeSkins?: (listener: () => void) => () => void;
 };
 
 /** While open, re-check who is around (visitors come and go, selection changes the main character). */
@@ -93,7 +112,12 @@ export function createResidentsPanel(deps: ResidentsPanelDeps) {
   const grid = el('div', 'residents-grid');
   grid.setAttribute('role', 'group');
   grid.setAttribute('aria-label', 'Characters');
-  panel.append(header, actions, hint, grid);
+  const outfitsTitle = el('div', 'residents-group-title', 'My outfits');
+  const outfitsGrid = el('div', 'residents-grid residents-grid--outfits');
+  outfitsGrid.setAttribute('role', 'group');
+  outfitsGrid.setAttribute('aria-label', 'My outfits');
+  const charactersTitle = el('div', 'residents-group-title', 'Characters');
+  panel.append(header, actions, hint, outfitsTitle, outfitsGrid, charactersTitle, grid);
   // On the body, like the About and theme buttons it is stacked with.
   document.body.append(openBtn, panel);
 
@@ -101,6 +125,8 @@ export function createResidentsPanel(deps: ResidentsPanelDeps) {
   let timer: number | null = null;
   let lastSignature = '';
   let hintOverride: string | null = null;
+  /** Outfit whose x was tapped once; a second tap deletes it. */
+  let removeArmed: string | null = null;
 
   const available = () => deps.getSkins().map((s) => s.path);
 
@@ -167,6 +193,56 @@ export function createResidentsPanel(deps: ResidentsPanelDeps) {
     }
   }
 
+  function buildTile(skin: SkinEntry): HTMLButtonElement {
+    const tile = el('button', 'residents-tile');
+    tile.type = 'button';
+    tile.dataset.label = skin.label;
+    tile.setAttribute('aria-label', skin.label);
+    if (!skin.preview && skin.face) {
+      // The face (and hat layer over it) cut out of the skin image. Only a checked PNG data URL
+      // goes into the style: the image comes from storage.
+      const face = el('span', 'residents-face');
+      if (isOutfitDataUrl(skin.face)) face.style.backgroundImage = `url("${skin.face}"), url("${skin.face}")`;
+      tile.appendChild(face);
+    } else {
+      const img = document.createElement('img');
+      img.src = skin.preview ?? skin.path;
+      img.alt = '';
+      img.loading = 'lazy';
+      tile.appendChild(img);
+    }
+    tile.addEventListener('click', () => toggle(skin.path));
+    tiles.set(skin.path, tile);
+    return tile;
+  }
+
+  /** An outfit tile with its delete button (two taps: the first asks, the second deletes). */
+  function buildOutfitTile(skin: SkinEntry): HTMLElement {
+    const wrap = el('div', 'residents-outfit');
+    wrap.appendChild(buildTile(skin));
+    const onRemove = deps.onRemoveOutfit;
+    if (!onRemove) return wrap;
+    const remove = el('button', 'residents-outfit-remove', '✕');
+    remove.type = 'button';
+    remove.title = 'Delete this outfit';
+    remove.setAttribute('aria-label', `Delete outfit ${skin.label}`);
+    remove.addEventListener('click', () => {
+      if (removeArmed !== skin.path) {
+        removeArmed = skin.path;
+        for (const other of outfitsGrid.querySelectorAll('.residents-outfit-remove.is-armed')) other.classList.remove('is-armed');
+        remove.classList.add('is-armed');
+        say('Delete this outfit for good? Tap the x again.');
+        return;
+      }
+      removeArmed = null;
+      hintOverride = 'Outfit deleted.';
+      onRemove(skin.path);
+      rebuild();
+    });
+    wrap.appendChild(remove);
+    return wrap;
+  }
+
   /** Tiles are built on open: current residents first, then the rest in list order. */
   function buildTiles(): void {
     const { roster } = current();
@@ -174,21 +250,21 @@ export function createResidentsPanel(deps: ResidentsPanelDeps) {
     const skins = deps.getSkins();
     const ordered = [...skins.filter((s) => on.has(s.path)), ...skins.filter((s) => !on.has(s.path))];
     tiles.clear();
+    removeArmed = null;
     grid.textContent = '';
+    outfitsGrid.textContent = '';
     for (const skin of ordered) {
-      const tile = el('button', 'residents-tile');
-      tile.type = 'button';
-      tile.dataset.label = skin.label;
-      tile.setAttribute('aria-label', skin.label);
-      const img = document.createElement('img');
-      img.src = skin.preview ?? skin.path;
-      img.alt = '';
-      img.loading = 'lazy';
-      tile.appendChild(img);
-      tile.addEventListener('click', () => toggle(skin.path));
-      tiles.set(skin.path, tile);
-      grid.appendChild(tile);
+      if (skin.group === 'outfits') outfitsGrid.appendChild(buildOutfitTile(skin));
+      else grid.appendChild(buildTile(skin));
     }
+    const hasOutfits = outfitsGrid.childElementCount > 0;
+    outfitsTitle.hidden = outfitsGrid.hidden = charactersTitle.hidden = !hasOutfits;
+  }
+
+  function rebuild(): void {
+    if (panel.hidden) return;
+    buildTiles();
+    refresh(true);
   }
 
   function setOpen(open: boolean): void {
@@ -244,6 +320,7 @@ export function createResidentsPanel(deps: ResidentsPanelDeps) {
   deps.store.subscribe(() => {
     if (!panel.hidden) refresh(true);
   });
+  deps.subscribeSkins?.(rebuild);
 
   return {
     open: () => setOpen(true),

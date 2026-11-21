@@ -30,6 +30,7 @@ import {
   unregisterWardrobeShortcuts,
 } from './creator/index';
 import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
+import { getOutfitsStore } from './state/outfitsStore';
 import { buildArmModelPanel } from './creator/armModelPanel';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
@@ -387,11 +388,14 @@ function buildCreatorPanels(): void {
     },
     {
       name: 'saveDownload',
-      mount: () =>
-        buildSaveDownloadPanel({
-          onSave: skinGalleryApi.saveCurrentSkinToOutfits,
-          onDownload: skinGalleryApi.downloadCurrentSkin,
-        }),
+      mount: (scope) => {
+        buildSaveDownloadPanel(
+          { onSave: skinGalleryApi.saveCurrentSkinToOutfits, onDownload: skinGalleryApi.downloadCurrentSkin },
+          scope
+        );
+        // Outfits kept or deleted anywhere (Send to village, the Residents panel) show up here.
+        scope.track(getOutfitsStore().subscribe(() => skinGalleryApi.renderOutfitsPanel()));
+      },
     },
     { name: 'armModel', mount: (scope) => buildArmModelPanel(scope) },
     { name: 'texturePosition', mount: (scope) => buildTexturePositionPanel(scope) },

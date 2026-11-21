@@ -9,6 +9,10 @@ import type { CreatorState } from '../state';
 import type { WardrobeApi } from './wardrobe';
 import { extractColorsFromSkin } from './swatches';
 import { creatorCanvasSlice, creatorSkinLoadSlice } from '../state/creatorSlices';
+import { getOutfitsStore } from '../state/outfitsStore';
+import { outfitSaveMessage } from '../domain/outfits';
+import { APP_EVENTS, publish } from '../events/appEvents';
+import { getResolvedArmModel } from './armModelPanel';
 
 export type SkinGalleryDeps = {
   getSkinCanvas: () => HTMLCanvasElement;
@@ -33,7 +37,15 @@ export type SkinGalleryDeps = {
 };
 
 let manifestOutfitSkins: SkinEntry[] = [];
-const savedOutfitSkins: SkinEntry[] = [];
+/** 3D thumbnails made this visit, by outfit id. Not stored: after a reload the skin image is shown. */
+const outfitPreviews = new Map<string, string>();
+
+/** The user's kept outfits (state/outfitsStore.ts, persisted) as gallery entries. */
+function savedOutfitSkins(): SkinEntry[] {
+  return getOutfitsStore()
+    .list()
+    .map((o) => ({ path: o.dataUrl, label: o.label, preview: outfitPreviews.get(o.id) ?? o.dataUrl }));
+}
 
 export type SkinGalleryApi = {
   loadSkinFromPath: (path: string) => Promise<void>;
@@ -89,7 +101,7 @@ export function createSkinGalleryApi(deps: SkinGalleryDeps): SkinGalleryApi {
   function renderOutfitsPanel(): void {
     const container = document.getElementById('creator-skin-selector');
     if (!container) return;
-    const allSkins = [...manifestOutfitSkins, ...savedOutfitSkins];
+    const allSkins = [...manifestOutfitSkins, ...savedOutfitSkins()];
     container.innerHTML = '';
     allSkins.forEach((skin, index) => {
       const btn = document.createElement('button');
@@ -193,14 +205,12 @@ export function createSkinGalleryApi(deps: SkinGalleryDeps): SkinGalleryApi {
   async function saveCurrentSkinToOutfits(): Promise<void> {
     const dataUrl = exportTo64x64DataURL();
     if (!dataUrl) return;
-    const n = savedOutfitSkins.length + 1;
     const capture = getCapture3DThumbnail();
     const preview = capture ? await capture(128) : null;
-    savedOutfitSkins.push({
-      path: dataUrl,
-      label: `Saved ${n}`,
-      preview: preview ?? dataUrl,
-    });
+    const result = getOutfitsStore().add({ dataUrl, armModel: getResolvedArmModel() ?? 'classic' });
+    publish(APP_EVENTS['app:creator:world-status'], { message: outfitSaveMessage(result.outcome, result.persisted) });
+    if (!result.outfit) return;
+    if (preview && result.outcome === 'added') outfitPreviews.set(result.outfit.id, preview);
     requestAnimationFrame(() => renderOutfitsPanel());
   }
 
