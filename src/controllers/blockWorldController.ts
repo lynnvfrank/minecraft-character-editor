@@ -99,6 +99,11 @@ export function createBlockWorldController(scene: THREE.Scene) {
     planWalk,
     update,
     updateCutaway,
+    /** Is the village on screen (home view and editor)? */
+    isShown: () => shown === true,
+    /** Lamp block centers and their glow, for day/night (controllers/dayNightController.ts). */
+    lampPositions: world.blocks.filter((b) => b.kind === 'lamp').map((b) => ({ x: b.x, y: b.y, z: b.z })),
+    setLampGlow: view.setLampGlow,
     /** Distance from the origin the camera may pan to (the map's corner). */
     roamRadius: Math.hypot(halfSize, halfSize),
   };

@@ -72,6 +72,10 @@ function createNoiseTexture(): THREE.Texture {
 }
 
 export const BLOCK_WORLD_NAME = 'block-world';
+/** How strongly emissive blocks (the lamps) glow unless setLampGlow says otherwise. */
+export const DEFAULT_LAMP_EMISSIVE = 1.2;
+/** Name of the point lights the day/night controller hangs on lamp posts (hidden for thumbnails). */
+export const LAMP_LIGHT_NAME = 'lamp-light';
 
 export type BlockWorldMesh = {
   group: THREE.Group;
@@ -80,6 +84,8 @@ export type BlockWorldMesh = {
    * between the camera and the character), or pass null to show everything again.
    */
   setCutaway: (cut: { eye: THREE.Vector3; focus: THREE.Vector3; radius: number } | null) => void;
+  /** Emissive strength of the lamp blocks (DEFAULT_LAMP_EMISSIVE at rest; day/night dims and brightens them). */
+  setLampGlow: (emissiveIntensity: number) => void;
   dispose: () => void;
 };
 
@@ -115,6 +121,8 @@ export function createBlockWorldMesh(world: BlockWorld): BlockWorldMesh {
   /** Per mesh: its blocks and which instances are currently cut away. */
   const meshes: { mesh: THREE.InstancedMesh; blocks: typeof world.blocks; hidden: Uint8Array }[] = [];
 
+  const lampMaterials: THREE.MeshStandardMaterial[] = [];
+
   for (const [kind, blocks] of byKind) {
     const style = STYLES[kind];
     const material = new THREE.MeshStandardMaterial({
@@ -126,9 +134,10 @@ export function createBlockWorldMesh(world: BlockWorld): BlockWorldMesh {
       opacity: style.opacity ?? 1,
       depthWrite: style.opacity === undefined,
       emissive: style.emissive ?? 0x000000,
-      emissiveIntensity: style.emissive ? 1.2 : 0,
+      emissiveIntensity: style.emissive ? DEFAULT_LAMP_EMISSIVE : 0,
     });
     disposables.push(material);
+    if (kind === 'lamp') lampMaterials.push(material);
     const mesh = new THREE.InstancedMesh(geometry, material, blocks.length);
     mesh.name = `block-world-${kind}`;
     blocks.forEach((b, i) => {
@@ -179,5 +188,9 @@ export function createBlockWorldMesh(world: BlockWorld): BlockWorldMesh {
     }
   }
 
-  return { group, setCutaway, dispose: () => disposables.forEach((d) => d.dispose()) };
+  function setLampGlow(emissiveIntensity: number): void {
+    for (const mat of lampMaterials) mat.emissiveIntensity = emissiveIntensity;
+  }
+
+  return { group, setCutaway, setLampGlow, dispose: () => disposables.forEach((d) => d.dispose()) };
 }
