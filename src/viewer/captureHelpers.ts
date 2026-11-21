@@ -28,3 +28,17 @@ export function renderTargetPixelsToImageData(pixels: Uint8Array, size: number):
   }
   return out;
 }
+
+/**
+ * Flip WebGL `readPixels` rows (bottom-up) into canvas ImageData order (top-down) for a
+ * width×height RGBA buffer. Values are copied unchanged (use when the pixels are already sRGB).
+ */
+export function flipPixelRows(pixels: Uint8Array, width: number, height: number): Uint8ClampedArray {
+  const rowBytes = width * 4;
+  const out = new Uint8ClampedArray(rowBytes * height);
+  for (let y = 0; y < height; y++) {
+    const src = (height - 1 - y) * rowBytes;
+    out.set(pixels.subarray(src, src + rowBytes), y * rowBytes);
+  }
+  return out;
+}

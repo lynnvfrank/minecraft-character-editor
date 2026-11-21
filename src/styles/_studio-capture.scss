@@ -1,0 +1,16 @@
+// "Camera" section of the dance studio panel (src/ui/studioCapturePanel.ts). Reuses the studio
+// panel's section, row, button, check and hint classes; only the capture-specific bits live here.
+
+.studio-capture {
+  flex: 0 0 auto;
+}
+
+.studio-capture-btn {
+  flex: 1 1 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.studio-capture.recording .studio-record-btn {
+  background: rgba(230, 70, 70, 0.28);
+  border-color: rgba(230, 70, 70, 0.75);
+}

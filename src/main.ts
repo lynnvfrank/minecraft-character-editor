@@ -102,6 +102,8 @@ import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
 import { createMovePanel } from './ui/movePanel';
 import { createStudioPanel } from './ui/studioPanel';
+import { createStudioCapturePanel } from './ui/studioCapturePanel';
+import { captureStagePhoto } from './viewer/stagePhoto';
 import { createStudioController, type StudioController } from './controllers/studioController';
 import { createSavedSequencesStore } from './state/savedSequences';
 import {
@@ -695,6 +697,13 @@ async function main(): Promise<void> {
   });
   // The route may have been applied (e.g. a direct #/studio load) before the controller existed.
   if (getRoute() === 'studio') studio.enter();
+  // Studio "Camera" section (photo + video); a recording stops by itself when the route changes.
+  createStudioCapturePanel({
+    mount: document.getElementById('studio-panel'),
+    getCanvas: () => sceneContext.renderer.domElement,
+    takePhoto: (options) => captureStagePhoto(sceneContext, options),
+    isOnStage: () => getRoute() === 'studio',
+  });
 
   const crowd = app.provide('crowd', createCrowdController({
     getSceneContext,
