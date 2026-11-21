@@ -35,6 +35,11 @@ export type SkinGalleryDeps = {
 let manifestOutfitSkins: SkinEntry[] = [];
 const savedOutfitSkins: SkinEntry[] = [];
 
+/** Every skin in the Outfits list (wardrobe manifest, then skins saved this visit). */
+export function getOutfitSkins(): readonly SkinEntry[] {
+  return [...manifestOutfitSkins, ...savedOutfitSkins];
+}
+
 export type SkinGalleryApi = {
   loadSkinFromPath: (path: string) => Promise<void>;
   setupCreatorSkinGallery: (skins: SkinEntry[]) => void;

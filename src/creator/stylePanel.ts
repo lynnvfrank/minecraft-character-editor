@@ -746,7 +746,7 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     return {
       // Hand-made feature tags (2D/3D editor) replace hair/skin/outfit detection for this skin.
       tags: tagMap
-        ? { hair: pixelsWithLabel(tagMap, 'hair'), skin: pixelsWithLabel(tagMap, 'skin'), clothing: pixelsWithLabel(tagMap, 'clothing') }
+        ? { hair: pixelsWithLabel(tagMap, 'hair'), skin: pixelsWithLabel(tagMap, 'skin'), outfit: pixelsWithLabel(tagMap, 'outfit') }
         : null,
       targetHairColor: look.hair.on ? hexToRgb(look.hair.color) : null,
       tolerance: look.tolerance,

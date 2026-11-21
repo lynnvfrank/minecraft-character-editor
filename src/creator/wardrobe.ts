@@ -80,6 +80,8 @@ export type WardrobeApi = {
   showWardrobeLibraryPanel: (layer: WardrobeLayerKey | null) => void;
   hideAllWardrobeLibraryPanels: () => void;
   getWardrobeBaseSkinPath: () => string | null;
+  /** True once an outfit has been captured to compose onto. */
+  hasWardrobeBase: () => boolean;
   flushDeferredWardrobeLibraryPanelsAfterCamera: () => void;
 };
 
@@ -691,6 +693,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     showWardrobeLibraryPanel,
     hideAllWardrobeLibraryPanels,
     getWardrobeBaseSkinPath: () => wardrobeBaseSkinPath,
+    hasWardrobeBase: () => wardrobeBaseSkinData != null,
     flushDeferredWardrobeLibraryPanelsAfterCamera,
   };
 }

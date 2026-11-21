@@ -53,7 +53,7 @@ export interface StyleSkinOptions {
    * detection: hair, skin and outfit masks come straight from the tags (no accessory mask).
    * Not part of the Python styler.
    */
-  tags?: { hair: Set<number>; skin: Set<number>; clothing: Set<number> } | null;
+  tags?: { hair: Set<number>; skin: Set<number>; outfit: Set<number> } | null;
 }
 
 export interface StyleSkinResult {
@@ -1750,7 +1750,7 @@ export function styleSkin(image: SkinPixels, options: StyleSkinOptions): StyleSk
     effectiveHeadHairMask = difference(union(effectiveHeadHairMask, [...add].filter(isHead)), remove);
   }
   const outfitMask = tags
-    ? difference(tags.clothing, effectiveHairMask)
+    ? difference(tags.outfit, effectiveHairMask)
     : detectOutfitMask(normalized, effectiveHairMask, skinMask, accessoryMask);
   const base =
     targetSkinColor != null

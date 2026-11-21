@@ -1,12 +1,12 @@
 /**
  * Feature tags panel (2D and 3D editor, right column): mark which pixels of this skin are skin, hair,
- * eyes & face and clothing.
+ * eyes & face and outfit.
  *
  * Skins don't say what their pixels are, and artists draw hair, eyes and clothes in endless
  * ways, so detection alone can't separate them. Each skin gets a feature map
  * (styler/featureMap.ts): it starts as an automatic guess and is corrected here by painting
  * tags on the model or the 2D grid. Make it me uses the tags in place of its detection, and
- * mixing hair / eyes / skin / clothing across skins (composeFeatures) builds on them.
+ * mixing hair / eyes / skin / outfit across skins (composeFeatures) builds on them.
  *
  * While a brush is picked, the skin canvas shows a tinted copy of the skin (one color per
  * tag); the real pixels are put back the moment the brush is put down, the mode changes,
@@ -54,15 +54,15 @@ const TAG_TINT: readonly (readonly [number, number, number])[] = [
   [255, 150, 60], // skin
   [255, 43, 214], // hair (the Make it me hair pink)
   [30, 200, 255], // eyes & face
-  [60, 220, 90], // clothing
+  [60, 220, 90], // outfit
 ];
 const TINT_MIX = 0.55;
 
 const BRUSHES: { key: FeatureTagBrush; label: string; hint: string }[] = [
-  { key: 'hair', label: 'Hair', hint: 'Hair, on the head and any long hair on the body' },
+  { key: 'hair', label: 'Hair', hint: 'Hair wherever it falls: head, back, torso, arms or legs' },
   { key: 'eyes', label: 'Eyes', hint: 'Eyes, brows, lashes, mouth and other face details' },
   { key: 'skin', label: 'Skin', hint: 'Bare skin: shown in the wearer\'s skin tone when looks are mixed' },
-  { key: 'clothing', label: 'Clothing', hint: 'Clothes, shoes, hats and accessories' },
+  { key: 'outfit', label: 'Outfit', hint: 'The costume: clothes, shoes, hats, flowers, bows and anything else worn' },
   { key: 'erase', label: 'Untag', hint: 'Clear the tag from pixels' },
 ];
 

@@ -1,6 +1,6 @@
 /**
  * Feature maps: per-skin metadata saying what each pixel of a 64x64 skin *is* (skin, hair,
- * eyes & face, clothing), so looks can be mixed across skins by feature instead of by body
+ * eyes & face, outfit), so looks can be mixed across skins by feature instead of by body
  * part. Skins don't come with this, so a map starts from automatic detection (the Make it me
  * detectors) and is corrected by hand with the feature tag brush in the 2D/3D editor.
  *
@@ -16,13 +16,18 @@ import {
   type SkinPixels,
 } from './skinStyler';
 
-export const FEATURE_LABELS = ['skin', 'hair', 'eyes', 'clothing'] as const;
+export const FEATURE_LABELS = ['skin', 'hair', 'eyes', 'outfit'] as const;
 export type FeatureLabel = (typeof FEATURE_LABELS)[number];
 
 /** Stored code per pixel: 0 = untagged (transparent or unknown), then FEATURE_LABELS order. */
 export const UNTAGGED = 0;
-export const FEATURE_CODE: Record<FeatureLabel, number> = { skin: 1, hair: 2, eyes: 3, clothing: 4 };
-const CODE_LABEL: readonly (FeatureLabel | null)[] = [null, 'skin', 'hair', 'eyes', 'clothing'];
+/**
+ * Outfit is the whole costume: clothes, shoes, hats, flowers, bows and anything else worn. It
+ * can later be split into sub-tags (top, bottom, shoes, headwear, ...) with new codes; the
+ * stored letter for outfit stays 'c' so existing tags keep decoding.
+ */
+export const FEATURE_CODE: Record<FeatureLabel, number> = { skin: 1, hair: 2, eyes: 3, outfit: 4 };
+const CODE_LABEL: readonly (FeatureLabel | null)[] = [null, 'skin', 'hair', 'eyes', 'outfit'];
 
 export const FEATURE_MAP_SIZE = 64 * 64;
 /** One code per pixel of a 64x64 skin. */
@@ -45,7 +50,7 @@ export function pixelsWithLabel(map: FeatureMap, label: FeatureLabel): Set<numbe
 }
 
 export function countLabels(map: FeatureMap): Record<FeatureLabel, number> {
-  const counts: Record<FeatureLabel, number> = { skin: 0, hair: 0, eyes: 0, clothing: 0 };
+  const counts: Record<FeatureLabel, number> = { skin: 0, hair: 0, eyes: 0, outfit: 0 };
   for (let k = 0; k < map.length; k++) {
     const label = CODE_LABEL[map[k]!];
     if (label) counts[label]++;
@@ -112,7 +117,7 @@ function alphaOf(skin: SkinPixels, k: number): number {
 /**
  * Guess a feature map from the Make it me detectors: hair (head + long hair on the body),
  * eyes & face (the face features Make it me would copy), skin, and everything else that is
- * painted becomes clothing. Transparent and unused texels stay untagged.
+ * painted becomes outfit. Transparent and unused texels stay untagged.
  */
 export function autoTagFeatures(input: SkinPixels, tolerance = 42): FeatureMap {
   const { image: skin } = normalizeSkin(input);
@@ -123,7 +128,7 @@ export function autoTagFeatures(input: SkinPixels, tolerance = 42): FeatureMap {
   const skinColor = medianSkinColor(skin, hair);
   for (let k = 0; k < FEATURE_MAP_SIZE; k++) {
     if (!isUsedTexel(k) || alphaOf(skin, k) < 48) continue;
-    let code: number = FEATURE_CODE.clothing;
+    let code: number = FEATURE_CODE.outfit;
     // Eyes & face: anything on the face (front of head or hat) that is neither hair nor skin
     // colored — eyes, brows, lashes, mouth, blush.
     if (isFaceTexel(k) && !headHair.has(k) && !skinMask.has(k) && differsFrom(skin, k, skinColor)) code = FEATURE_CODE.eyes;
@@ -189,12 +194,12 @@ export type TaggedSkin = { pixels: SkinPixels; map: FeatureMap };
 
 export type FeatureSources = {
   /** The outfit, and the skin whose body every other feature is laid onto. */
-  clothing: TaggedSkin;
-  /** Skin tone (and its shading) — defaults to the clothing skin's own. */
+  outfit: TaggedSkin;
+  /** Skin tone (and its shading) — defaults to the outfit skin's own. */
   skin?: TaggedSkin | null;
-  /** Hair shape and color. Null keeps the clothing skin's own hair. */
+  /** Hair shape and color. Null keeps the outfit skin's own hair. */
   hair?: TaggedSkin | null;
-  /** Eyes & face details. Null keeps the clothing skin's own face. */
+  /** Eyes & face details. Null keeps the outfit skin's own face. */
   eyes?: TaggedSkin | null;
 };
 
@@ -220,25 +225,25 @@ function medianTagged(t: TaggedSkin, label: FeatureLabel): RGB | null {
 }
 
 /**
- * Build one skin from features of several: the clothing skin's outfit, with hair, eyes & face
+ * Build one skin from features of several: one skin's outfit, with hair, eyes & face
  * and skin tone taken from the other skins by their tags.
  *
- * Per pixel, in order: eyes & face (front of the head only), hair, clothing; whatever is left on
+ * Per pixel, in order: eyes & face (front of the head only), hair, outfit; whatever is left on
  * the inner layer is skin — the skin source's own pixel where it is tagged skin there (keeps its
  * shading), else its median tone shaded like the pixel it replaces. Left-over overlay texels are
- * cleared, so hair or clothing that isn't chosen doesn't linger on the outer layer.
+ * cleared, so hair or outfit that isn't chosen doesn't linger on the outer layer.
  */
 export function composeFeatures(sources: FeatureSources): SkinPixels {
-  const clothing = sources.clothing;
-  const skinSrc = sources.skin ?? clothing;
-  const hairSrc = sources.hair ?? clothing;
-  const eyesSrc = sources.eyes ?? clothing;
+  const outfit = sources.outfit;
+  const skinSrc = sources.skin ?? outfit;
+  const hairSrc = sources.hair ?? outfit;
+  const eyesSrc = sources.eyes ?? outfit;
   const out = { width: 64, height: 64, data: new Uint8ClampedArray(FEATURE_MAP_SIZE * 4) };
   const o = out.data;
 
-  const tone = medianTagged(skinSrc, 'skin') ?? medianTagged(clothing, 'skin') ?? [224, 172, 138];
-  const clothingTone = medianTagged(clothing, 'skin');
-  const clothingToneLum = clothingTone ? 0.299 * clothingTone[0] + 0.587 * clothingTone[1] + 0.114 * clothingTone[2] : 0;
+  const tone = medianTagged(skinSrc, 'skin') ?? medianTagged(outfit, 'skin') ?? [224, 172, 138];
+  const outfitTone = medianTagged(outfit, 'skin');
+  const outfitToneLum = outfitTone ? 0.299 * outfitTone[0] + 0.587 * outfitTone[1] + 0.114 * outfitTone[2] : 0;
 
   const copy = (from: SkinPixels, k: number) => {
     o.set(from.data.subarray(k * 4, k * 4 + 4), k * 4);
@@ -250,16 +255,16 @@ export function composeFeatures(sources: FeatureSources): SkinPixels {
       copy(eyesSrc.pixels, k);
     } else if (hairSrc.map[k] === FEATURE_CODE.hair) {
       copy(hairSrc.pixels, k);
-    } else if (clothing.map[k] === FEATURE_CODE.clothing) {
-      copy(clothing.pixels, k);
+    } else if (outfit.map[k] === FEATURE_CODE.outfit) {
+      copy(outfit.pixels, k);
     } else if (!isOverlayTexel(k)) {
       if (skinSrc.map[k] === FEATURE_CODE.skin) {
         copy(skinSrc.pixels, k);
       } else {
-        // Shade the tone like the clothing skin's own pixel here (if it was skin), else flat.
+        // Shade the tone like the outfit skin's own pixel here (if it was skin), else flat.
         let shade = 1;
-        if (clothing.map[k] === FEATURE_CODE.skin && clothingToneLum > 0) {
-          shade = Math.min(1.4, Math.max(0.6, luminance(clothing.pixels.data, k * 4) / clothingToneLum));
+        if (outfit.map[k] === FEATURE_CODE.skin && outfitToneLum > 0) {
+          shade = Math.min(1.4, Math.max(0.6, luminance(outfit.pixels.data, k * 4) / outfitToneLum));
         }
         o[k * 4] = tone[0] * shade;
         o[k * 4 + 1] = tone[1] * shade;

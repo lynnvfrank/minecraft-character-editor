@@ -1,8 +1,8 @@
-# Skin features: hair, eyes, skin and clothing as separate pieces
+# Skin features: hair, eyes, skin and outfit as separate pieces
 
 ## The goal
 
-Let someone pick **hair**, **eyes**, **skin tone** and **clothing** separately, each from any skin, instead of the
+Let someone pick **hair**, **eyes**, **skin tone** and **outfit** separately, each from any skin, instead of the
 Wardrobe's body-part layers (head, hat, torso, jacket, arms, sleeves, legs, pants).
 
 The layers model swaps whole regions of the texture. That works for "this head on that body", but not for "her hair,
@@ -17,10 +17,15 @@ Each skin gets a **feature map**: one tag per pixel of the 64×64 texture, sayin
 | Tag | Covers |
 | --- | --- |
 | Skin | Bare skin. Shown in the wearer's tone when looks are mixed. |
-| Hair | Hair on the head (inner layer and hat layer), and long hair on the body. |
+| Hair | Hair wherever it falls: the head and hat layer, and long hair down the back, torso, arms or legs. |
 | Eyes | Eyes, brows, lashes, mouth and other face details on the front of the head. |
-| Clothing | Clothes, shoes, hats and accessories. |
+| Outfit | The whole costume: clothes, shoes, hats, flowers, bows and anything else worn. |
 | (untagged) | Transparent or unused texels. |
+
+Tags can go on any texel. Hair in particular isn't confined to the head: in many skins it runs down the torso and even
+the legs, and it's drawn in every style imaginable. Detection only finds the common cases (head, shoulders, upper
+back), so the tool is built for people to paint what they see. A person's eye is the reliable source of what each
+pixel is; the guess is only a head start.
 
 Maps are **metadata beside the skin**, never baked into it. A map starts as an automatic guess from the Make it me
 detectors, and a person corrects it by painting tags in the 2D and 3D editors. Once a skin is tagged, everything that
@@ -31,14 +36,14 @@ needs to know "what is hair here" reads the tags instead of guessing.
 - **`src/styler/featureMap.ts`** is pure and tested (`featureMap.test.ts`).
   - The tag model, plus the skin layout tables: used texels, overlay texels and the face.
   - `autoTagFeatures` makes the first guess from the existing detectors: hair, body hair, skin, and face pixels that
-    are neither hair nor skin. Every other painted texel becomes clothing.
+    are neither hair nor skin. Every other painted texel becomes outfit.
   - Run-length encoding keeps a map to about 1 KB, for storage and export.
   - `composeFeatures` builds one skin from up to four sources. Its rules are listed under "Mixing rules" below.
 - **`src/creator/featureTagsStore.ts`** keeps tags in localStorage.
   - Tags are keyed by a hash of the skin's pixels, so they follow the picture rather than its file name.
   - The store also exports and imports all tags as one JSON file.
 - **Feature tags panel** (`src/creator/featureTagsPanel.ts`, top of the right column in 2D and 3D):
-  - Brushes for Hair, Eyes, Skin, Clothing and Untag, in Pixel or Fill-similar mode.
+  - Brushes for Hair, Eyes, Skin, Outfit and Untag, in Pixel or Fill-similar mode.
   - Picking a brush tints the skin by tag; painting on the model or the grid changes tags. Each stroke saves.
   - The real skin is put back when you press Done or Esc, switch mode, pick a color tool, press Ctrl+Z / Ctrl+Y /
     Ctrl+S, or click elsewhere.
@@ -49,25 +54,27 @@ needs to know "what is hair here" reads the tags instead of guessing.
 
 ### Mixing rules (`composeFeatures`)
 
-The clothing skin is the base. The other features are laid onto it in this order:
+The outfit skin is the base. The other features are laid onto it in this order:
 
 1. **Eyes** win on the front of the head.
 2. **Hair** comes next.
-3. **Clothing** follows.
+3. **Outfit** follows.
 4. The rest of the inner layer becomes **skin**:
    - It uses the skin source's own pixel where that pixel is tagged skin, which keeps its shading.
    - Elsewhere it uses the source's median tone, shaded like the pixel it replaces.
-5. Leftover overlay texels are cleared, so unchosen hair or clothing doesn't linger.
+5. Leftover overlay texels are cleared, so unchosen hair or outfit doesn't linger.
 
-## Phase 2: mix and match in the Wardrobe
+## Phase 2: mix and match in the Wardrobe (built)
 
-- A **Pieces** view with four pickers (Hair, Eyes, Skin, Clothing). Each picker lists skins and shows that one feature
-  cut out on a thumbnail.
-- Picking one recomposes the character with `composeFeatures`, which is a single 64×64 pass and fast enough to run on
-  every hover.
-- Each picker only lists skins that are tagged, or that have good enough guesses (see Phase 3). An "untagged" badge
-  sends the person to the tag tool.
-- Lock my look then becomes "keep these pieces": hair, eyes and skin stay put while you browse outfits.
+- **Pieces panel** (`src/creator/wardrobePieces.ts`, Wardrobe mode, left column under Arms) has rows for Hair, Eyes
+  and Skin. The outfit is still picked with the Wardrobe's own Outfits list and part libraries.
+- Clicking a row opens a picker: a grid of every skin's face, plus "Outfit" to use the outfit's own piece. Hovering a
+  tile previews it on the character, clicking picks it, and × goes back to the outfit's own.
+- The mix runs as the Wardrobe's final pass (`finalizeComposite`), before Lock my look. Pieces therefore stay on
+  through every outfit and part you pick, and the outfit's own hair and face are replaced rather than layered under.
+- Picked skins are read the same way the editor loads them, so tags painted in 2D/3D are found by pixel hash.
+  Untagged skins use the automatic guess (cached). Picks are remembered in localStorage.
+- Still to do: show which skins are hand-tagged in the picker, with a way to jump to the tag tool for an untagged one.
 
 ## Phase 3: ship tags for the built-in wardrobe
 
@@ -83,5 +90,16 @@ The clothing skin is the base. The other features are laid onto it in this order
 - **Arm width:** slim and classic arms use different texel columns. Map tags between the two shapes when sources
   differ.
 - **Stacking choices:** hair over a hat or a hat over hair, and long hair over or under a jacket.
-- Maybe split clothing into **clothes** and **accessories** (hats, glasses, bows) so they can be mixed separately.
 - Tag-aware hover previews, and an "untagged pixels" highlight to find gaps quickly.
+
+## Phase 5: split the outfit
+
+An outfit is more than clothing. It also carries flowers, bows and other costume pieces, and its clothes come apart
+too: a two-piece swimsuit has a top and a bottom. Outfit could gain sub-tags, so pieces of different outfits can be
+mixed the way hair and eyes are now:
+
+- **Top**, **bottom**, **shoes**, **headwear** (hats, flowers, bows) and **accessories** (glasses, jewellery, belts).
+- Untagged outfit pixels stay plain "outfit", so existing tags keep working. The stored letter for outfit stays `c`,
+  and each sub-tag gets a new letter.
+- The Pieces panel then gains Top / Bottom / Shoes / Headwear rows. Each takes only that sub-tag from its source and
+  leaves the rest of the outfit alone.
