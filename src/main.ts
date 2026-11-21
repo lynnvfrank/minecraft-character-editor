@@ -101,6 +101,8 @@ import { createArmModelState } from './state/armModelState';
 import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
 import { createMovePanel } from './ui/movePanel';
+import { createResidentsPanel } from './ui/residentsPanel';
+import { createResidentsStore } from './state/residentsStore';
 import { createStudioPanel } from './ui/studioPanel';
 import { createStudioController, type StudioController } from './controllers/studioController';
 import { createSavedSequencesStore } from './state/savedSequences';
@@ -598,6 +600,7 @@ async function main(): Promise<void> {
   initTheme();
   initAboutPanel();
   const savedSequences = createSavedSequencesStore(getLocalStorage());
+  const residents = createResidentsStore(getLocalStorage());
   const movePanel = createMovePanel({
     getRoute,
     getCamera: () => sceneContext?.camera ?? null,
@@ -706,8 +709,18 @@ async function main(): Promise<void> {
     getAnimations: () => animationsList,
     resolveModelPath: async (skinPath) =>
       ARM_MODEL_PATHS[(await detectArmModelFromPath(skinPath)) ?? 'classic'],
+    getRoster: () => residents.get(),
     config: blockWorld ? { nav: blockWorld.crowdNav } : undefined,
   }));
+  // Residents panel: who lives in the village. The store holds the choice; the crowd applies it.
+  residents.subscribe(() => crowd.syncRoster());
+  createResidentsPanel({
+    getSkins: () => skinsList,
+    store: residents,
+    getPresentSkins: crowd.presentSkins,
+    getPrimarySkin: crowd.primarySkin,
+    cap: crowd.residentsCap,
+  });
 
   const creatorPoseController = createCreatorPoseController({
     getCharacter,
@@ -765,6 +778,7 @@ async function main(): Promise<void> {
     skins = FALLBACK_SKINS;
   }
   skinsList = skins;
+  residents.prune(skins.map((s) => s.path), crowd.residentsCap);
 
   let animations: AnimationEntry[];
   try {

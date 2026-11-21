@@ -1,0 +1,203 @@
+// Residents popover: home view only (see src/ui/residentsPanel.ts).
+// The round button sits in the bottom-right stack above About and the theme toggle; the panel
+// opens to its left with the same chrome as the Move panels (0.92 panel fill, 1px border, 8px radius).
+
+.residents-btn {
+  position: fixed;
+  right: 12px;
+  bottom: 100px;
+  z-index: 50;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  background: rgba(var(--panel-rgb), 0.92);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover,
+  &.is-open {
+    border-color: rgba(var(--fg-rgb), 0.45);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(var(--fg-rgb), 0.45);
+    outline-offset: 1px;
+  }
+}
+
+.residents-panel {
+  position: fixed;
+  right: 60px;
+  bottom: 12px;
+  z-index: 50;
+  width: 280px;
+  max-width: calc(100vw - 72px);
+  max-height: min(70vh, 460px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+  color: var(--text);
+  font-size: 0.85rem;
+  overflow: hidden;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+body:not([data-route='viewer']) {
+  .residents-btn,
+  .residents-panel {
+    display: none;
+  }
+}
+
+.residents-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.5rem 0.4rem 0.75rem;
+}
+
+.residents-title {
+  flex: 1;
+  color: rgba(var(--fg-rgb), 0.9);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.residents-count {
+  color: rgba(var(--fg-rgb), 0.6);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.residents-close {
+  border: none;
+  background: rgba(var(--fg-rgb), 0.1);
+  color: inherit;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+
+  &:hover {
+    background: rgba(var(--fg-rgb), 0.2);
+  }
+}
+
+.residents-actions {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0 0.75rem;
+}
+
+.residents-action {
+  flex: 1;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  border-radius: 6px;
+  background: rgba(var(--fg-rgb), 0.06);
+  color: rgba(var(--fg-rgb), 0.9);
+  font: inherit;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  @media (hover: hover) {
+    &:hover {
+      background: rgba(var(--fg-rgb), 0.12);
+      border-color: rgba(var(--fg-rgb), 0.3);
+    }
+  }
+
+  &:active {
+    background: rgba(var(--fg-rgb), 0.18);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(var(--fg-rgb), 0.45);
+    outline-offset: 1px;
+  }
+}
+
+.residents-hint {
+  min-height: 1.1em;
+  padding: 0.45rem 0.75rem 0.4rem;
+  color: rgba(var(--fg-rgb), 0.6);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.residents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+  padding: 2px 0.75rem 0.75rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.residents-tile {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 2px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 6px;
+  background: var(--surface-solid);
+  cursor: pointer;
+  overflow: hidden;
+  opacity: 0.55;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    image-rendering: pixelated;
+  }
+
+  @media (hover: hover) {
+    &:hover {
+      opacity: 0.85;
+      border-color: rgba(192, 132, 252, 0.5);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(var(--fg-rgb), 0.45);
+    outline-offset: 1px;
+  }
+
+  // Lives in the village.
+  &.is-on {
+    opacity: 1;
+    border-color: #c084fc;
+    box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.4);
+  }
+
+  // The main character: always here.
+  &.is-main::after {
+    content: '★';
+    position: absolute;
+    top: 1px;
+    right: 3px;
+    color: #fff;
+    font-size: 0.7rem;
+    line-height: 1;
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  }
+}
