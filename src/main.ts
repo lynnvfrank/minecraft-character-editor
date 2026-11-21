@@ -132,6 +132,7 @@ import {
   initElectronStatus,
 } from './ui';
 import { createThumbnailCapture } from './viewer/thumbnailCapture';
+import { setupHeldItems } from './controllers/heldItemsSetup';
 import { createSkinCompositor, loadCachedImage } from './viewer/skinCompositor';
 import { registerCapture3DThumbnail, registerCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
 import {
@@ -838,6 +839,15 @@ async function main(): Promise<void> {
     write: (mode) => weatherStore.setMode(mode),
     describe: (mode) => WEATHER_LABELS[mode],
   });
+  const heldItems = setupHeldItems({
+    storage: getLocalStorage(),
+    getSceneContext,
+    getPrimary: () => getCharacter(getPrimaryCharacterId()),
+    getDancers: () => studioDancers.characters(),
+    keyOf: outfitResidents.keyOf,
+    getTimeOfDay: () => timeOfDay.get().time,
+    saveRegistry,
+  });
   const studioDancers = createStudioDancersController({
     getSceneContext,
     getLead: () => getCharacter(getPrimaryCharacterId()),
@@ -1011,6 +1021,7 @@ async function main(): Promise<void> {
     crowd.update(delta, route, !getCreatorTransitionInFlight());
     app.tryGet('selection')?.update(delta, route);
     studioDancers.update(delta, route); // after studio.update: mirrors what it applied this frame
+    heldItems.update(route);
     const target = sceneContext.controls.target;
     setSunFocus(target.x, target.z);
   }

@@ -324,6 +324,8 @@ export function createStudioDancersController(deps: StudioDancersDeps) {
     update,
     /** Dancers on stage right now (loaded ones only). */
     count: (): number => slots.filter((s) => s.char).length,
+    /** The loaded dancers (they aren't in the scene's `characters` record). */
+    characters: (): CharacterState[] => slots.flatMap((s) => (s.char ? [s.char] : [])),
     /**
      * The lead and its backup dancers as one group, for the framing buttons and the turntable.
      * Null when the lead dances alone (or the studio is closed).

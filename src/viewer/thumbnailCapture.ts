@@ -21,6 +21,7 @@ import { renderTargetPixelsToImageData } from './captureHelpers';
 import { placeAroundCharacter, type CharacterAnchor } from '../domain/preview';
 import { BLOCK_WORLD_NAME, LAMP_LIGHT_NAME } from './blockWorldMesh';
 import { WEATHER_NAME } from './weatherParticles';
+import { hideHeldItems } from './heldItem';
 
 export type ThumbnailCaptureDeps = {
   getSceneContext: () => SceneContext | null;
@@ -57,9 +58,12 @@ function withPlainStage<T>(scene: THREE.Scene, render: () => T): T {
   const weather = scene.getObjectByName(WEATHER_NAME);
   const weatherWas = weather?.visible;
   if (weather) weather.visible = false;
+  // Held items are emptied off the home view anyway (controllers/heldItemsController.ts); never in a thumbnail.
+  const restoreHeldItems = hideHeldItems(scene);
   try {
     return render();
   } finally {
+    restoreHeldItems();
     if (weather && weatherWas !== undefined) weather.visible = weatherWas;
     lampLights.forEach((o) => (o.visible = true));
     restoreDayNight();
