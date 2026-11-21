@@ -26,6 +26,8 @@ export type StagePhotoOptions = {
 };
 
 const GROUND_NAME = 'ground';
+/** Group holding the dance studio backdrop's meshes (same name in viewer/studioBackdrop.ts). */
+export const STUDIO_BACKDROP_NAME = 'studio-backdrop';
 
 /** Shader define for each renderer tone mapping (mirrors OutputPass). */
 const TONE_MAPPING_DEFINES: Partial<Record<THREE.ToneMapping, string>> = {
@@ -134,6 +136,9 @@ function captureTransparent({ scene, camera, renderer }: StagePhotoContext): HTM
   // Everything we change, saved so it can be put back exactly.
   const ground = scene.getObjectByName(GROUND_NAME);
   const groundWas = ground?.visible;
+  // The studio backdrop's floor pieces (viewer/studioBackdrop.ts) are part of the background too.
+  const backdrop = scene.getObjectByName(STUDIO_BACKDROP_NAME);
+  const backdropWas = backdrop?.visible;
   const backgroundWas = scene.background;
   const clearColorWas = renderer.getClearColor(new THREE.Color());
   const clearAlphaWas = renderer.getClearAlpha();
@@ -142,6 +147,7 @@ function captureTransparent({ scene, camera, renderer }: StagePhotoContext): HTM
 
   try {
     if (ground) ground.visible = false;
+    if (backdrop) backdrop.visible = false;
     scene.background = null;
     renderer.setClearColor(0x000000, 0);
     renderer.setRenderTarget(sceneTarget);
@@ -157,6 +163,7 @@ function captureTransparent({ scene, camera, renderer }: StagePhotoContext): HTM
     renderer.setClearColor(clearColorWas, clearAlphaWas);
     scene.background = backgroundWas;
     if (ground && groundWas !== undefined) ground.visible = groundWas;
+    if (backdrop && backdropWas !== undefined) backdrop.visible = backdropWas;
     quad.dispose();
     material.dispose();
     sceneTarget.dispose();

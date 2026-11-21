@@ -154,7 +154,7 @@ function applyBackground(): void {
   const { scene } = rig;
   const p = LIGHTING_PRESETS[currentPreset];
   const background = skyTheme && THEMED_PRESETS.has(currentPreset) ? skyTheme.background : p.background;
-  const sky = (scene.background as THREE.Color).setHex(background);
+  const sky = (skyColor ??= scene.background as THREE.Color).setHex(background);
   if (dayNight) {
     // Scale in sRGB (the space the hex colors are written in) so dusk reads orange, not grey.
     sky.getRGB(scratchRgb, THREE.SRGBColorSpace);
@@ -165,7 +165,30 @@ function applyBackground(): void {
       THREE.SRGBColorSpace
     );
   }
-  if (scene.fog) scene.fog.color.copy(sky);
+  // A stage backdrop (the dance studio) shows instead of the sky, which keeps tracking the theme underneath.
+  scene.background = stageBackdrop?.background ?? sky;
+  if (scene.fog) scene.fog.color.copy(stageBackdrop?.fog ?? sky);
+}
+
+/**
+ * A backdrop shown in place of the sky (the dance studio; see viewer/studioBackdrop.ts). While set,
+ * theme and preset changes keep updating the sky underneath but don't show; null puts the sky back
+ * exactly. The scales multiply the active preset's ambient and sun strengths (1 = unchanged).
+ */
+export type StageBackdrop = {
+  background: THREE.Color | THREE.Texture;
+  fog: THREE.Color;
+  ambientScale: number;
+  sunScale: number;
+};
+let stageBackdrop: StageBackdrop | null = null;
+/** The scene's own sky color object (scene.background unless a stage backdrop is showing). */
+let skyColor: THREE.Color | null = null;
+
+export function setStageBackdrop(backdrop: StageBackdrop | null): void {
+  if (!backdrop && !stageBackdrop) return;
+  stageBackdrop = backdrop;
+  applyLightValues();
 }
 
 function applySky(): void {
@@ -224,14 +247,14 @@ function applyLightValues(): void {
   const p = rig.base;
   const { scene, hemi, sun, rim, fill } = rig;
   const dn = dayNight;
-  const ambient = dn ? dn.ambientScale : 1;
+  const ambient = (dn ? dn.ambientScale : 1) * (stageBackdrop?.ambientScale ?? 1);
   scene.environmentIntensity = p.envIntensity * ambient;
   applyBackground();
   tint(hemi.color, p.hemi[0], dn?.ambientTint ?? null);
   tint(hemi.groundColor, p.hemi[1], dn?.ambientTint ?? null);
   hemi.intensity = p.hemi[2] * ambient;
   tint(sun.color, p.sun[0], dn?.sunTint ?? null);
-  sun.intensity = p.sun[1] * (dn ? dn.sunScale : 1);
+  sun.intensity = p.sun[1] * (dn ? dn.sunScale : 1) * (stageBackdrop?.sunScale ?? 1);
   if (dn) {
     // Same distance as the preset's sun, along the day/night direction (shifted by however far
     // this preset's sun is from the reference one, so midday is the preset's own direction).

@@ -109,6 +109,9 @@ import { createStudioCapturePanel } from './ui/studioCapturePanel';
 import { createStudioDancersPanel } from './ui/studioDancersPanel';
 import { createStudioDancersController } from './controllers/studioDancersController';
 import { createGroupDanceStore } from './state/groupDanceStore';
+import { createStudioStagePanel } from './ui/studioStagePanel';
+import { createStudioStageController } from './controllers/studioStageController';
+import { createStudioBackdropStore } from './state/studioBackdrop';
 import { captureStagePhoto } from './viewer/stagePhoto';
 import { createStudioController, type StudioController } from './controllers/studioController';
 import { createSavedSequencesStore } from './state/savedSequences';
@@ -722,6 +725,20 @@ async function main(): Promise<void> {
     takePhoto: (options) => captureStagePhoto(sceneContext, options),
     isOnStage: () => getRoute() === 'studio',
   });
+  // Studio "Backdrop" and "Camera moves" sections; both apply on the studio route only.
+  const studioBackdrop = createStudioBackdropStore(getLocalStorage());
+  const studioStage = createStudioStageController({
+    scene: sceneContext.scene,
+    camera: sceneContext.camera,
+    controls: {
+      target: sceneContext.controls.target,
+      addEventListener: (type, listener) => sceneContext.controls.addEventListener(type, listener),
+    },
+    backdrop: studioBackdrop,
+    getCharacterPosition: () => getCharacter(getPrimaryCharacterId())?.container.position ?? null,
+    getFacing: () => animationManager.getFacing(),
+  });
+  createStudioStagePanel({ mount: document.getElementById('studio-panel'), backdrop: studioBackdrop, camera: studioStage });
 
   const crowd = app.provide('crowd', createCrowdController({
     getSceneContext,
@@ -882,6 +899,7 @@ async function main(): Promise<void> {
   /** Crowd, selection and camera follow. The world stops while the creator is open. */
   function onWorldUpdate(delta: number, route: AppRoute): void {
     if (route === 'studio') studio.update(delta);
+    studioStage.update(delta, route);
     blockWorld?.update(route);
     dayNight.update(delta, route);
     if (blockWorld) {
