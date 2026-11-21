@@ -80,7 +80,9 @@ export function createCreatorToWorld(deps: CreatorToWorldDeps) {
       say(outfitSaveMessage('invalid'));
       return false;
     }
-    if (result.outcome === 'added') deps.residents.set(result.roster);
+    // With no stored roster (random visitors) the outfit already counts as present because the main
+    // character wears it; store the roster anyway, or it would be gone after a reload.
+    if (result.outcome === 'added' || deps.residents.get() === null) deps.residents.set(result.roster);
     say(kept.persisted ? 'Off to the village!' : `Off to the village! ${outfitSaveMessage('added', false)}`);
     await deps.exitCreator();
     return true;
