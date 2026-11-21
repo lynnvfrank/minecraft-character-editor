@@ -16,7 +16,8 @@
 export const SAVE_FILE_APP = 'blockygotchi';
 export const SAVE_FILE_VERSION = 1;
 /** Largest file we read, in characters. Real backups are a few kilobytes. */
-export const MAX_SAVE_FILE_LENGTH = 1_000_000;
+// Room for 24 outfits (up to 600,000 characters of skin images) plus everything else.
+export const MAX_SAVE_FILE_LENGTH = 2_000_000;
 
 export type SaveSection<T> = {
   /** Property name under `data` in the file. Never reuse a key for a different shape. */

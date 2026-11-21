@@ -811,13 +811,22 @@ async function main(): Promise<void> {
   createStudioDancersPanel({ mount: document.getElementById('studio-panel'), store: groupDance });
   // Backup file (About panel) and shared-combo links (?combo=). New stores join the backup with
   // saveRegistry.register(...) (exported by controllers/saveAndShare).
+  // Registered before the core sections so a restore brings outfits back before the roster that names them.
+  saveRegistry.register({
+    key: 'outfits',
+    label: 'My outfits',
+    read: () => (outfits.list().length > 0 ? outfits.exportOutfits() : undefined),
+    parse: (raw: unknown) => (raw && typeof raw === 'object' ? raw : null),
+    write: (data) => void outfits.importOutfits(data),
+    describe: () => 'My outfits (added to yours)',
+  });
   initSaveAndShare({
     savedSequences,
     residents,
     timeOfDay,
     groupDance,
     backdrop: studioBackdrop,
-    getAvailableSkins: () => skinsList.map((s) => s.path),
+    getAvailableSkins: rosterSkins,
     residentsCap: crowd.residentsCap,
     getClipKeys: () => animationsList.map((a) => a.key),
   });

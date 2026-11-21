@@ -38,7 +38,12 @@ export function parseResidentsSection(raw: unknown): string[] | null {
   if (!Array.isArray(raw)) return null;
   const roster = parseResidents(JSON.stringify(raw.slice(0, MAX_RESIDENTS_IN_FILE)));
   if (!roster) return null;
-  return roster.filter((p) => p.length <= MAX_SKIN_PATH_LENGTH && /^\/(?![/\\])[^\\\u0000-\u001f]*$/.test(p));
+  return roster.filter(
+    (p) =>
+      p.length <= MAX_SKIN_PATH_LENGTH &&
+      // A bundled skin path, or one of the user's own outfits (restored by the 'outfits' section).
+      (/^\/(?![/\\])[^\\\u0000-\u001f]*$/.test(p) || /^outfit:[a-z0-9][a-z0-9-]{0,39}$/.test(p))
+  );
 }
 
 export type CoreSaveStores = {
