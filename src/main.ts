@@ -47,6 +47,7 @@ import {
 import { createCharacterEventsController } from './controllers/characterEvents';
 import { createCrowdController, type CrowdController } from './controllers/crowdController';
 import { createBlockWorldController } from './controllers/blockWorldController';
+import { createDayNightController } from './controllers/dayNightController';
 import { createSelectionController, type SelectionController } from './controllers/selectionController';
 import { DEFAULT_CROWD_CONFIG } from './animation/crowd';
 import { createAnimationLoopController } from './controllers/animationLoop';
@@ -104,6 +105,8 @@ import { createMovePanel } from './ui/movePanel';
 import { createStudioPanel } from './ui/studioPanel';
 import { createStudioController, type StudioController } from './controllers/studioController';
 import { createSavedSequencesStore } from './state/savedSequences';
+import { createTimeOfDayStore } from './state/timeOfDay';
+import { createTimeOfDayPanel } from './ui/timeOfDayPanel';
 import {
   initElectronStatus,
 } from './ui';
@@ -655,6 +658,15 @@ async function main(): Promise<void> {
   // Home view block village (?world=0 for the old open stage). Walks route around its buildings.
   const blockWorld = params.get('world') === '0' ? null : createBlockWorldController(sceneContext.scene);
 
+  // Home view day and night: a time-of-day control, and lighting laid over the active preset.
+  const timeOfDay = createTimeOfDayStore(getLocalStorage());
+  createTimeOfDayPanel({ store: timeOfDay });
+  const dayNight = createDayNightController({
+    scene: sceneContext.scene,
+    store: timeOfDay,
+    lamps: blockWorld && { positions: blockWorld.lampPositions, setGlow: blockWorld.setLampGlow, isShown: blockWorld.isShown },
+  });
+
   const animationManager = createAnimationManager({
     getCharacter,
     fadeToAction,
@@ -828,6 +840,7 @@ async function main(): Promise<void> {
   function onWorldUpdate(delta: number, route: AppRoute): void {
     if (route === 'studio') studio.update(delta);
     blockWorld?.update(route);
+    dayNight.update(delta, route);
     if (blockWorld) {
       // Editor (and the camera move into it): keep walls and trees out from between camera and character.
       const editing = route === 'creator' || (route === 'viewer' && getCreatorTransitionInFlight());

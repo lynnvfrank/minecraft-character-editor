@@ -1,0 +1,111 @@
+// Time of day control: home view only (see src/ui/timeOfDayPanel.ts).
+// A pill at the bottom center with the same chrome as the selection pill and the Move panels
+// (0.92 panel fill, 1px border, soft shadow). Stays clear of the Move panels (top left), the
+// Design/Studio buttons (bottom left, 250px wide) and the round About/theme buttons (bottom right).
+
+.time-of-day {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  max-width: calc(100% - 2rem);
+  padding: 0.35rem 0.5rem 0.35rem 0.75rem;
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+  color: var(--text);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  pointer-events: auto;
+  transition: opacity 0.3s ease;
+}
+
+body:not([data-route='viewer']) .time-of-day {
+  display: none;
+}
+
+// Design clicked: fade out with the Move panels while the camera moves into the creator.
+body[data-home-exiting='1'] .time-of-day {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.time-of-day-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #e8a21a;
+
+  .time-of-day.is-night & {
+    color: #8fa6e8;
+  }
+}
+
+.time-of-day-slider {
+  flex: 1 1 auto;
+  width: 160px;
+  min-width: 60px;
+  margin: 0;
+  accent-color: #3f8cff;
+  cursor: pointer;
+}
+
+.time-of-day-label {
+  flex: 0 0 auto;
+  // Wide enough for "12:55 pm" so the pill doesn't jiggle as the time changes.
+  min-width: 4.6em;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(var(--fg-rgb), 0.9);
+}
+
+.time-of-day-auto {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  border-radius: 999px;
+  background: rgba(var(--fg-rgb), 0.06);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: rgba(var(--fg-rgb), 0.12);
+  }
+
+  &.active {
+    background: #3f8cff;
+    border-color: #3f8cff;
+    color: #fff;
+  }
+}
+
+// Narrow windows: there's no free middle between the bottom-left buttons and the bottom-right
+// round buttons, so sit just left of the round buttons and let the slider shrink.
+@media (max-width: 900px) {
+  .time-of-day {
+    left: auto;
+    right: 60px;
+    transform: none;
+    max-width: calc(100% - 250px - 0.75rem - 72px);
+  }
+}
+
+// Phones: the bottom-left buttons take most of the row; go above the round buttons instead.
+@media (max-width: 620px) {
+  .time-of-day {
+    right: 12px;
+    bottom: 150px;
+    max-width: calc(100% - 24px);
+  }
+}
