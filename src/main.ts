@@ -118,6 +118,12 @@ import { createGroupDanceStore } from './state/groupDanceStore';
 import { createStudioStagePanel } from './ui/studioStagePanel';
 import { createStudioStageController } from './controllers/studioStageController';
 import { createStudioBackdropStore } from './state/studioBackdrop';
+import { createCameraBookmarksStore, cameraBookmarksSaveSection } from './state/cameraBookmarks';
+import { createCameraGlide } from './controllers/cameraGlide';
+import { createPhotoModeController } from './controllers/photoModeController';
+import { createBookmarkChips } from './ui/cameraBookmarkChips';
+import { createPhotoModeBar } from './ui/photoModeBar';
+import { partOfDay } from './lib/dayNight';
 import { captureStagePhoto } from './viewer/stagePhoto';
 import { createStudioController, type StudioController } from './controllers/studioController';
 import { createSavedSequencesStore } from './state/savedSequences';
@@ -770,7 +776,28 @@ async function main(): Promise<void> {
     getFacing: () => animationManager.getFacing(),
     getGroupShot: () => studioDancers.groupShot(), // framings and the turntable take in the backup dancers
   });
-  createStudioStagePanel({ mount: document.getElementById('studio-panel'), backdrop: studioBackdrop, camera: studioStage });
+  // Camera spots (bookmarks) for the studio and the home view's photo mode; glides run on real time.
+  const cameraBookmarks = createCameraBookmarksStore(getLocalStorage());
+  saveRegistry.register(cameraBookmarksSaveSection(cameraBookmarks));
+  const photoMode = createPhotoModeController({ camera: sceneContext.camera, controls: sceneContext.controls, scene: sceneContext.scene, getRoute });
+  const cameraGlide = createCameraGlide({ camera: sceneContext.camera, controls: sceneContext.controls, onArrive: photoMode.refresh });
+  const studioSpots = createBookmarkChips({ store: cameraBookmarks, place: 'studio', getPose: cameraGlide.currentPose,
+    goTo: (b) => { studioStage.setTurntable(false); cameraGlide.to(b); } });
+  createStudioStagePanel({ mount: document.getElementById('studio-panel'), backdrop: studioBackdrop, camera: studioStage, cameraSpots: studioSpots.root });
+  createPhotoModeBar({
+    mode: photoMode,
+    getCanvas: () => sceneContext.renderer.domElement,
+    takePhoto: () => captureStagePhoto(sceneContext),
+    getPartOfDay: () => partOfDay(timeOfDay.get().time),
+    chips: createBookmarkChips({ store: cameraBookmarks, place: 'home', getPose: cameraGlide.currentPose,
+      goTo: (b) => { app.tryGet('selection')?.deselect(); cameraGlide.to(b); } }).root, // following would fight the glide
+  });
+  /** Photo mode's Freeze scales the world's delta to 0; camera moves and rendering keep real time. */
+  const cameraHooks = {
+    getTimeScale: photoMode.timeScale,
+    onCameraUpdate: (realDelta: number, route: AppRoute) => { photoMode.update(route); cameraGlide.update(realDelta, route); },
+    beforeRender: () => photoMode.beforeRender(),
+  };
 
   const crowd = app.provide('crowd', createCrowdController({
     getSceneContext,
@@ -1040,6 +1067,7 @@ async function main(): Promise<void> {
       onFrameUpdate: creatorPreview.onFrame,
       shouldUpdateCharacter: (char) => crowd.shouldUpdateCharacter(char, getRoute()),
       onWorldUpdate,
+      ...cameraHooks,
     });
     setupTestControls({
       animationManager,
@@ -1073,6 +1101,7 @@ async function main(): Promise<void> {
       onFrameUpdate: creatorPreview.onFrame,
       shouldUpdateCharacter: (char) => crowd.shouldUpdateCharacter(char, getRoute()),
       onWorldUpdate,
+      ...cameraHooks,
     });
     setFacingLogContextProvider(() => ({
       state: characterAI?.getState(),

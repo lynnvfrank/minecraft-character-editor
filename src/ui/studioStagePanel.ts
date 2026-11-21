@@ -41,6 +41,8 @@ export type StudioStagePanelDeps = {
     setTurntableSpeed: (speed: TurntableSpeedId) => void;
     frame: (id: CameraFramingId) => boolean;
   };
+  /** Saved camera spots (ui/cameraBookmarkChips.ts), shown under the framings. */
+  cameraSpots?: HTMLElement;
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
@@ -129,7 +131,7 @@ function buildBackdropSection(store: StudioStagePanelDeps['backdrop']): HTMLElem
   return root;
 }
 
-function buildCameraSection(camera: StudioStagePanelDeps['camera']): HTMLElement {
+function buildCameraSection(camera: StudioStagePanelDeps['camera'], spots?: HTMLElement): HTMLElement {
   const section = createCollapsibleSection({
     id: 'cameraMoves',
     title: 'Camera moves',
@@ -171,6 +173,11 @@ function buildCameraSection(camera: StudioStagePanelDeps['camera']): HTMLElement
   }
 
   section.body.append(spinRow, frameRow);
+  if (spots) {
+    const spotsRow = el('div', 'studio-row studio-spots-row');
+    spotsRow.append(spots);
+    section.body.append(spotsRow);
+  }
 
   function render(): void {
     const s = camera.getSnapshot();
@@ -186,5 +193,5 @@ function buildCameraSection(camera: StudioStagePanelDeps['camera']): HTMLElement
 export function createStudioStagePanel(deps: StudioStagePanelDeps): void {
   if (!deps.mount) return;
   mountStudioSection(deps.mount, buildBackdropSection(deps.backdrop));
-  mountStudioSection(deps.mount, buildCameraSection(deps.camera));
+  mountStudioSection(deps.mount, buildCameraSection(deps.camera, deps.cameraSpots));
 }

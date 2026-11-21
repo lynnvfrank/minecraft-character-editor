@@ -33,6 +33,16 @@ export type AnimationLoopDeps = {
   shouldUpdateCharacter?: (char: CharacterState) => boolean;
   /** World simulation (crowd, selection, camera follow); runs after the animation manager. */
   onWorldUpdate?: (delta: number, route: 'creator' | 'viewer' | 'preview' | 'studio') => void;
+  /**
+   * World time scale (1 = normal, 0 = frozen). Mixers, the animation manager, the character AI and
+   * onWorldUpdate get `delta * scale`; the camera hooks below always get the real delta, and the
+   * frame is still rendered, so the camera moves while the world stands still (photo mode Freeze).
+   */
+  getTimeScale?: () => number;
+  /** Camera moves on real time, after the world update and before the orbit controls update. */
+  onCameraUpdate?: (realDelta: number, route: 'creator' | 'viewer' | 'preview' | 'studio') => void;
+  /** After the orbit controls update, just before render (e.g. a camera roll the controls would undo). */
+  beforeRender?: (route: 'creator' | 'viewer' | 'preview' | 'studio') => void;
 };
 
 export type AnimationLoopController = {
@@ -52,6 +62,9 @@ export function createAnimationLoopController(deps: AnimationLoopDeps): Animatio
     onFrameUpdate,
     shouldUpdateCharacter = () => true,
     onWorldUpdate,
+    getTimeScale,
+    onCameraUpdate,
+    beforeRender,
   } = deps;
 
   function updateMixers(delta: number) {
@@ -152,12 +165,16 @@ export function createAnimationLoopController(deps: AnimationLoopDeps): Animatio
 
     if (paused) return;
 
-    const delta = ctx.clock.getDelta();
+    const realDelta = ctx.clock.getDelta();
+    const scale = getTimeScale?.() ?? 1;
+    const delta = Number.isFinite(scale) && scale >= 0 ? realDelta * scale : realDelta;
     updateMixers(delta);
     if (animationManager) animationManager.tick(delta);
     if (getRoute() === 'viewer' && !getCreatorTransitionInFlight()) characterAI?.update(delta);
     onWorldUpdate?.(delta, route);
+    onCameraUpdate?.(realDelta, route);
     ctx.controls.update();
+    beforeRender?.(route);
     ctx.renderer.render(ctx.scene, ctx.camera);
   }
 

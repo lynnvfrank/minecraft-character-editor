@@ -50,11 +50,15 @@ export function extensionForMimeType(mime: string): string {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-/** `blockygotchi-dance-YYYYMMDD-HHMMSS.<ext>` in the user's local time. */
-export function captureFileName(date: Date, extension: string): string {
+/**
+ * `blockygotchi-<prefix>-YYYYMMDD-HHMMSS.<ext>` in the user's local time. The studio's files are
+ * "dance" (the default); the home view's photo mode passes "village".
+ */
+export function captureFileName(date: Date, extension: string, prefix = 'dance'): string {
   const day = `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}`;
   const time = `${pad2(date.getHours())}${pad2(date.getMinutes())}${pad2(date.getSeconds())}`;
-  return `blockygotchi-dance-${day}-${time}.${extension.replace(/^\./, '')}`;
+  const kind = prefix.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'dance';
+  return `blockygotchi-${kind}-${day}-${time}.${extension.replace(/^\./, '')}`;
 }
 
 /** Elapsed recording time as `m:ss` (whole seconds, rounded down). */

@@ -34,9 +34,10 @@ Built features are merged into `feat/studio-world-essentials`; in-progress ones 
 |---------|--------|-------|
 | Group dance in the Studio | Built | Up to two backup dancers copy the lead in a line, triangle or stagger, together or a beat behind. Residents are picked first |
 | Studio backdrops | Built | Solid colors, gradients, a spotlight or your own color; the floor can be hidden. The village behind the stage is not done |
-| Turntable and framing buttons | Built | A turntable at three speeds and Full body / Close-up / Wide framings; both take in the backup dancers. Named camera bookmarks are not done |
+| Turntable and framing buttons | Built | A turntable at three speeds and Full body / Close-up / Wide framings; both take in the backup dancers. Named camera spots (bookmarks) are in `feat/world-photo` |
 | Resident behavior | Built | Greetings, plaza gatherings (with saved combos) and a night routine. Unit-tested, not yet watched in a browser. Benches are not done |
 | Studio panel polish | In progress | Collapsible sections with summaries, clips first, group framing fixes, a REC badge |
+| Village photo mode | Built (`feat/world-photo`) | Camera button hides all chrome; Snap (optional Polaroid card), Record, Lens, Tilt, Freeze, saved camera spots. Not yet watched in a browser |
 | Weather | In progress | Rain and snow particles that share the day and night lighting |
 | Held items | Not started | A torch, tool or flower in hand, previewed from the Wardrobe |
 
