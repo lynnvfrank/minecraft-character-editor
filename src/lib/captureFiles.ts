@@ -11,6 +11,18 @@ export const VIDEO_MIME_PREFERENCE: readonly string[] = [
   'video/mp4',
 ];
 
+/** Preference when the recording has a sound track: the same list, with Opus audio tried first. */
+export const VIDEO_AUDIO_MIME_PREFERENCE: readonly string[] = [
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  ...VIDEO_MIME_PREFERENCE,
+];
+
+/** The mime preference list for a recording with or without sound. */
+export function videoMimePreference(hasAudio: boolean): readonly string[] {
+  return hasAudio ? VIDEO_AUDIO_MIME_PREFERENCE : VIDEO_MIME_PREFERENCE;
+}
+
 /** Recordings stop by themselves after this long. */
 export const MAX_RECORDING_MS = 60_000;
 

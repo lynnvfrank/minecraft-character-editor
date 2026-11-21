@@ -9,6 +9,7 @@
 export const STUDIO_SECTION_ORDER = [
   'clips',
   'crossfade',
+  'beat',
   'routine',
   'saved',
   'dancers',
@@ -24,6 +25,7 @@ export type StudioSectionsOpen = Readonly<Record<StudioSectionId, boolean>>;
 export const DEFAULT_STUDIO_SECTIONS_OPEN: StudioSectionsOpen = {
   clips: true,
   crossfade: true,
+  beat: false,
   routine: true,
   saved: false,
   dancers: false,

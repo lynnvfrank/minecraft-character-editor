@@ -22,6 +22,8 @@ export type StudioCapturePanelDeps = {
   takePhoto: (options: { transparent: boolean }) => HTMLCanvasElement | null;
   /** False once the user has left the studio; a running recording then stops. */
   isOnStage: () => boolean;
+  /** Sound to record with the video (the studio beat while it plays), or null for a silent video. */
+  getAudioTrack?: () => MediaStreamTrack | null;
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
@@ -119,6 +121,7 @@ export function createStudioCapturePanel(deps: StudioCapturePanelDeps) {
   const recorder = createCanvasRecorder({
     getCanvas: deps.getCanvas,
     shouldContinue: deps.isOnStage,
+    getAudioTrack: deps.getAudioTrack,
     onTick: (elapsedMs, recording) => {
       recordingMs = recording ? elapsedMs : null;
       root.classList.toggle('recording', recording);
