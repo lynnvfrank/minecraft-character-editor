@@ -106,6 +106,9 @@ import { createResidentsPanel } from './ui/residentsPanel';
 import { createResidentsStore } from './state/residentsStore';
 import { createStudioPanel } from './ui/studioPanel';
 import { createStudioCapturePanel } from './ui/studioCapturePanel';
+import { createStudioDancersPanel } from './ui/studioDancersPanel';
+import { createStudioDancersController } from './controllers/studioDancersController';
+import { createGroupDanceStore } from './state/groupDanceStore';
 import { captureStagePhoto } from './viewer/stagePhoto';
 import { createStudioController, type StudioController } from './controllers/studioController';
 import { createSavedSequencesStore } from './state/savedSequences';
@@ -743,6 +746,23 @@ async function main(): Promise<void> {
     cap: crowd.residentsCap,
   });
 
+  // Studio "Dancers" section: backup dancers that copy the lead. They live only on the studio stage.
+  const groupDance = createGroupDanceStore(getLocalStorage());
+  createStudioDancersPanel({ mount: document.getElementById('studio-panel'), store: groupDance });
+  const studioDancers = createStudioDancersController({
+    getSceneContext,
+    getLead: () => getCharacter(getPrimaryCharacterId()),
+    getLeadWeights: () => studio.getSnapshot().applied,
+    getFacing: () => animationManager.getFacing(),
+    getSettings: groupDance.get,
+    loadCharacter: characterController.loadCharacter,
+    getSkins: () => skinsList,
+    getAnimations: () => animationsList,
+    resolveModelPath: async (skinPath) =>
+      ARM_MODEL_PATHS[(await detectArmModelFromPath(skinPath)) ?? 'classic'],
+    getRoster: () => residents.get(),
+  });
+
   const creatorPoseController = createCreatorPoseController({
     getCharacter,
     getPrimaryCharacterId,
@@ -878,6 +898,7 @@ async function main(): Promise<void> {
     }
     crowd.update(delta, route, !getCreatorTransitionInFlight());
     app.tryGet('selection')?.update(delta, route);
+    studioDancers.update(delta, route); // after studio.update: mirrors what it applied this frame
     const target = sceneContext.controls.target;
     setSunFocus(target.x, target.z);
   }
