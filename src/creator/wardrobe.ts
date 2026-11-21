@@ -61,6 +61,8 @@ export type WardrobeDeps = {
   getFocusedCreationEnabled: () => boolean;
   /** Optional last pass over the composed outfit (e.g. the locked "Make it me" look). */
   finalizeComposite?: (data: ImageData) => ImageData | null;
+  /** While a Pieces button (hair / eyes / skin) is selected: its right-side library replaces the layer's. */
+  getPieceLibraryPanelId?: () => string | null;
 };
 
 export type WardrobeApi = {
@@ -85,6 +87,14 @@ export type WardrobeApi = {
   flushDeferredWardrobeLibraryPanelsAfterCamera: () => void;
 };
 
+function sameImageData(a: ImageData, b: ImageData): boolean {
+  if (a.width !== b.width || a.height !== b.height) return false;
+  const x = a.data;
+  const y = b.data;
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+  return true;
+}
+
 export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
   const {
     getSkinCanvas,
@@ -105,6 +115,12 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
   let wardrobeCompositeToken = 0;
   let wardrobeBaseSkinPath: string | null = null;
   let wardrobeBaseSkinData: ImageData | null = null;
+  /**
+   * The last committed result put on the canvas after the final pass (pieces / locked look), and
+   * the outfit it was made from. Re-capturing that exact canvas (e.g. coming back from 2D) takes
+   * the outfit, so the final pass is never baked into the base and can still be undone.
+   */
+  let lastFinalized: { shown: ImageData; outfit: ImageData } | null = null;
   let wardrobeLibrariesLoaded = false;
   let wardrobeLibrariesPromise: Promise<void> | null = null;
   const wardrobeImageCache = new Map<string, Promise<HTMLImageElement>>();
@@ -207,7 +223,8 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
   function showWardrobeLibraryPanel(layer: WardrobeLayerKey | null): void {
     const root = document.getElementById('creator-upper-right-panels-root');
-    const targetIds = getWardrobeLibraryPanelIdsForLayer(layer);
+    const pieceId = layer != null && layer === wardrobeSelectedLayer ? deps.getPieceLibraryPanelId?.() ?? null : null;
+    const targetIds = pieceId ? [pieceId] : getWardrobeLibraryPanelIdsForLayer(layer);
     const currentIds = getVisibleWardrobeLibraryPanelIds();
 
     if (targetIds.length === 0) {
@@ -217,7 +234,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
     // Invalidate any in-flight hide-all or cross-fade (e.g. fast hover away then back to selection).
     const token = ++wardrobePanelTransitionToken;
-    const isDualLibraries = layer != null && isWardrobeDualLibrarySplitLayer(layer);
+    const isDualLibraries = !pieceId && layer != null && isWardrobeDualLibrarySplitLayer(layer);
     root?.classList.toggle('creator-upper-right-panels-root--wardrobe-dual-libraries', isDualLibraries);
     root?.classList.toggle(
       'creator-upper-right-panels-root--wardrobe-single-library',
@@ -294,7 +311,8 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     if (!getCreatorCanvasPopulated()) return;
     const snapshot = captureCanvasImageData(getSkinCanvas());
     if (!snapshot) return;
-    wardrobeBaseSkinData = snapshot;
+    wardrobeBaseSkinData =
+      lastFinalized && sameImageData(snapshot, lastFinalized.shown) ? cloneImageData(lastFinalized.outfit) : snapshot;
     wardrobeBaseSkinPath = path;
   }
 
@@ -442,10 +460,16 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     // Otherwise ORIGINAL/skipped layers keep pixels from the last hover after mouseleave.
     const isHoverPreviewPass =
       wardrobePreviewSelections != null && selections === wardrobePreviewSelections;
+    const shown = deps.finalizeComposite?.(composed) ?? composed;
     if (!isHoverPreviewPass) {
       wardrobeBaseSkinData = cloneImageData(composed);
     }
-    applyProgrammaticCanvasImage(deps.finalizeComposite?.(composed) ?? composed);
+    applyProgrammaticCanvasImage(shown);
+    if (!isHoverPreviewPass) {
+      // Read back what the canvas holds (it may round semi-transparent pixels) for the later compare.
+      const readBack = shown === composed ? null : captureCanvasImageData(getSkinCanvas());
+      lastFinalized = readBack ? { shown: readBack, outfit: cloneImageData(composed) } : null;
+    }
     renderToDisplay();
     updateAllUndoRedoButtons();
   }

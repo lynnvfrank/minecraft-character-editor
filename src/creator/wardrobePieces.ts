@@ -12,14 +12,14 @@ import type { SkinEntry } from '../domain';
 import { autoTagFeatures, composeFeatures, type FeatureMap, type TaggedSkin } from '../styler/featureMap';
 import { createEl } from './dom';
 import { creatorScope } from './lifecycle';
-import { MODE_PANEL_CONFIGS } from './modePanels';
+import { clearModeAnimClasses, setModePanelHidden } from './modePanels';
 import { loadFeatureTags, onFeatureTagsSaved, skinPixelKey } from './featureTagsStore';
 
 export type PieceSlot = 'hair' | 'eyes' | 'skin';
-const SLOTS: { key: PieceSlot; label: string; pickTitle: string; hint: string }[] = [
-  { key: 'hair', label: 'Hair', pickTitle: 'Pick hair', hint: 'Hair shape and color' },
-  { key: 'eyes', label: 'Eyes', pickTitle: 'Pick eyes', hint: 'Eyes, brows and face details' },
-  { key: 'skin', label: 'Skin', pickTitle: 'Pick a skin tone', hint: 'Skin tone, with its shading' },
+const SLOTS: { key: PieceSlot; label: string; libraryTitle: string; hint: string }[] = [
+  { key: 'hair', label: 'Hair', libraryTitle: 'Hair', hint: 'Hair from any skin, wherever it falls' },
+  { key: 'eyes', label: 'Eyes', libraryTitle: 'Eyes', hint: 'Eyes, brows and face details from any skin' },
+  { key: 'skin', label: 'Skin', libraryTitle: 'Skin tones', hint: 'Skin tone from any skin, with its shading' },
 ];
 
 type Picks = Record<PieceSlot, string | null>;
@@ -193,10 +193,28 @@ export function applyPieces(work: ImageData): ImageData | null {
 }
 
 // ---------------------------------------------------------------------------
-// Panel (Wardrobe mode, left column) and the picker it opens.
+// Wardrobe UI: Hair / Eyes / Skin buttons above the layer tree, and a right-side library panel
+// (like a layer's parts library) listing every skin's face for the selected piece.
+
+export const PIECES_LIBRARY_PANEL_ID = 'creator-wardrobe-pieces-library';
+
+let selectedSlot: PieceSlot | null = null;
+
+/** The right-side panel to show in place of the selected layer's library, while a piece is selected. */
+export function getPiecesLibraryPanelId(): string | null {
+  return selectedSlot && document.body.dataset.editMode === 'wardrobe' ? PIECES_LIBRARY_PANEL_ID : null;
+}
+
+let clearSelection: (() => void) | null = null;
+/** A wardrobe layer was picked: the piece buttons let go of the selection. */
+export function clearPieceSelection(): void {
+  clearSelection?.();
+}
 
 export type PiecesPanelContext = {
   getSkins: () => readonly SkinEntry[];
+  /** Re-show the right-side library for the current selection (wardrobe.showWardrobeLibraryPanel). */
+  showLibrary: () => void;
 };
 
 /** Head front of a skin, scaled up: with the hat layer for hair, bare for eyes and skin. */
@@ -216,98 +234,96 @@ function drawThumb(canvas: HTMLCanvasElement, path: string | null, slot: PieceSl
 }
 
 export function buildPiecesPanel(ctx: PiecesPanelContext): void {
-  const host = document.getElementById('creator-upper-left-panels');
-  if (!host) return;
-  document.getElementById('creator-wardrobe-pieces-panel')?.remove();
-  document.getElementById('creator-pieces-picker')?.remove();
-
-  let openSlot: PieceSlot | null = null;
-  const rows = new Map<PieceSlot, { row: HTMLElement; thumb: HTMLCanvasElement; value: HTMLElement; clear: HTMLButtonElement }>();
+  const partsPanel = document.getElementById('creator-wardrobe-parts-panel');
+  const tree = partsPanel?.querySelector('.creator-wardrobe-parts-tree');
+  const rightRoot = document.getElementById('creator-upper-right-panels-root');
+  if (!partsPanel || !tree || !rightRoot) return;
+  document.getElementById('creator-wardrobe-pieces')?.remove();
+  document.getElementById(PIECES_LIBRARY_PANEL_ID)?.remove();
 
   const labelFor = (path: string | null): string => {
-    if (!path) return 'From outfit';
+    if (!path) return 'from the outfit';
     const skin = ctx.getSkins().find((s) => s.path === path);
     if (skin) return skin.label;
     // The Outfits list may not be loaded yet (picks restored at startup): name it from the file.
-    if (path.startsWith('data:')) return 'Saved skin';
+    if (path.startsWith('data:')) return 'a saved skin';
     const file = path.split('/').pop()?.replace(/\.png$/i, '') ?? '';
-    return file.replace(/[_-]+/g, ' ').trim() || 'Another skin';
+    return file.replace(/[_-]+/g, ' ').trim() || 'another skin';
   };
 
-  const list = createEl('div', { className: 'creator-pieces-rows' });
+  // Left: three buttons styled like the layer rows, above the tree.
+  const buttons = new Map<PieceSlot, { btn: HTMLButtonElement; thumb: HTMLCanvasElement }>();
+  const row = createEl('div', { id: 'creator-wardrobe-pieces', className: 'creator-wardrobe-pieces', role: 'group', 'aria-label': 'Pieces' });
   for (const s of SLOTS) {
-    const thumb = createEl('canvas', { className: 'creator-pieces-thumb', width: '24', height: '24', 'aria-hidden': 'true' });
-    const value = createEl('span', { className: 'creator-pieces-value' });
-    const clear = createEl('button', { type: 'button', className: 'creator-pieces-clear', title: `${s.label} from the outfit`, 'aria-label': `${s.label} from the outfit` }, '×');
-    const row = createEl('div', { className: 'creator-pieces-row', 'data-slot': s.key },
-      createEl('button', { type: 'button', className: 'creator-pieces-open', title: s.hint, 'aria-haspopup': 'dialog' },
-        thumb,
-        createEl('span', { className: 'creator-pieces-label' }, s.label),
-        value,
-      ),
-      clear,
+    const thumb = createEl('canvas', { className: 'creator-wardrobe-pieces-thumb', width: '20', height: '20', 'aria-hidden': 'true' });
+    const btn = createEl('button', { type: 'button', className: 'creator-wardrobe-parts-btn creator-wardrobe-pieces-btn', 'data-slot': s.key },
+      thumb,
+      createEl('span', { className: 'creator-wardrobe-layer-label' }, s.label),
     );
-    row.querySelector('.creator-pieces-open')!.addEventListener('click', () => openPicker(openSlot === s.key ? null : s.key));
-    clear.addEventListener('click', () => setPick(s.key, null));
-    rows.set(s.key, { row, thumb, value, clear });
-    list.appendChild(row);
+    btn.addEventListener('click', () => selectSlot(s.key));
+    buttons.set(s.key, { btn, thumb });
+    row.appendChild(btn);
   }
+  partsPanel.insertBefore(row, tree);
 
-  const panel = createEl('div', { id: 'creator-wardrobe-pieces-panel', className: 'creator-pieces-panel', role: 'region', 'aria-label': 'Pieces' },
-    createEl('div', { className: 'creator-layers-panel-title creator-panel-title', title: 'Keep hair, eyes or skin tone from any skin while you change outfits' }, 'Pieces'),
-    list,
-    createEl('p', { className: 'creator-pieces-hint' }, 'Everything else comes from the outfit you pick. Tag skins in 2D or 3D to cut pieces out cleanly.'),
+  // Right: one library panel, filled for the selected piece.
+  const header = createEl('div', { className: 'creator-wardrobe-library-header' });
+  const selector = createEl('div', { className: 'creator-wardrobe-library-selector creator-wardrobe-pieces-selector', role: 'listbox' });
+  const hint = createEl('p', { className: 'creator-wardrobe-pieces-hint' }, 'Tag skins in 2D or 3D to cut pieces out cleanly.');
+  const library = createEl('div', { id: PIECES_LIBRARY_PANEL_ID, className: 'creator-wardrobe-library-panel creator-mode-panel-hidden', 'aria-label': 'Pieces' },
+    header, selector, hint,
   );
+  rightRoot.appendChild(library);
+  selector.addEventListener('mouseleave', () => setPreview(null));
 
-  const anchor = document.getElementById('creator-arm-model-panel');
-  if (anchor?.parentElement === host) host.insertBefore(panel, anchor.nextSibling);
-  else host.appendChild(panel);
-  const mode = document.body.dataset.editMode;
-  if (mode && !MODE_PANEL_CONFIGS.find((c) => c.id === panel.id)?.modes.includes(mode as never)) {
-    panel.classList.add('creator-mode-panel-hidden');
-  }
-
-  // Picker: floats right of the left column, a grid of skins for one slot.
-  const pickerTitle = createEl('span', { className: 'creator-panel-title' });
-  const pickerClose = createEl('button', { type: 'button', className: 'creator-pieces-clear', 'aria-label': 'Close' }, '×');
-  const grid = createEl('div', { className: 'creator-pieces-grid', role: 'listbox' });
-  const picker = createEl('div', { id: 'creator-pieces-picker', className: 'creator-pieces-picker', role: 'dialog', hidden: '' },
-    createEl('div', { className: 'creator-pieces-picker-header' }, pickerTitle, pickerClose),
-    grid,
-  );
-  document.body.appendChild(picker);
-  pickerClose.addEventListener('click', () => openPicker(null));
-  grid.addEventListener('mouseleave', () => setPreview(null));
-
-  function tile(slot: PieceSlot, path: string | null, label: string): HTMLElement {
-    const c = createEl('canvas', { width: '40', height: '40', 'aria-hidden': 'true' });
-    const btn = createEl('button', { type: 'button', className: 'creator-pieces-tile', role: 'option', title: label, 'aria-label': label, 'data-path': path ?? '' },
-      path ? c : createEl('span', { className: 'creator-pieces-tile-none' }, 'Outfit'),
-    );
-    if (path) drawThumb(c, path, slot);
+  function tile(slot: PieceSlot, path: string | null): HTMLElement {
+    const label = path ? labelFor(path) : `${SLOTS.find((s) => s.key === slot)!.label} from the outfit`;
+    const btn = createEl('button', {
+      type: 'button',
+      className: 'skin-preview creator-wardrobe-library-item creator-wardrobe-pieces-item' + (path ? '' : ' creator-wardrobe-library-item-none'),
+      role: 'option',
+      title: label,
+      'aria-label': label,
+      'data-path': path ?? '',
+    });
+    if (path) {
+      const c = createEl('canvas', { width: '40', height: '40', 'aria-hidden': 'true' });
+      drawThumb(c, path, slot);
+      btn.appendChild(c);
+    } else {
+      btn.appendChild(createEl('span', { className: 'creator-wardrobe-library-item-none-label' }, "Outfit's own"));
+    }
     btn.addEventListener('mouseenter', () => setPreview({ slot, path }));
-    btn.addEventListener('focus', () => setPreview({ slot, path }));
     btn.addEventListener('click', () => setPick(slot, path));
     return btn;
   }
 
-  function openPicker(slot: PieceSlot | null): void {
-    openSlot = slot;
-    setPreview(null);
-    if (!slot) {
-      picker.hidden = true;
-      syncUi();
-      return;
-    }
+  function fillLibrary(slot: PieceSlot): void {
     const meta = SLOTS.find((s) => s.key === slot)!;
-    pickerTitle.textContent = meta.pickTitle;
-    grid.replaceChildren(tile(slot, null, `${meta.label} from the outfit`), ...ctx.getSkins().map((s) => tile(slot, s.path, s.label)));
-    const r = panel.getBoundingClientRect();
-    picker.style.left = `${Math.round(r.right + 8)}px`;
-    picker.style.top = `${Math.round(Math.max(8, Math.min(r.top, window.innerHeight - 420)))}px`;
-    picker.hidden = false;
-    syncUi();
+    header.textContent = meta.libraryTitle;
+    header.title = meta.hint;
+    selector.setAttribute('aria-label', meta.libraryTitle);
+    selector.replaceChildren(tile(slot, null), ...ctx.getSkins().map((s) => tile(slot, s.path)));
+    syncActive();
   }
+
+  function selectSlot(slot: PieceSlot): void {
+    if (slot === selectedSlot) return;
+    selectedSlot = slot;
+    setPreview(null);
+    fillLibrary(slot);
+    syncUi();
+    ctx.showLibrary();
+  }
+  clearSelection = () => {
+    if (!selectedSlot) return;
+    selectedSlot = null;
+    setPreview(null);
+    syncUi();
+    // The wardrobe shows the layer's own library right after; just drop this one.
+    clearModeAnimClasses(library);
+    setModePanelHidden(library, true);
+  };
 
   function setPreview(next: { slot: PieceSlot; path: string | null } | null): void {
     if (next?.slot === preview?.slot && next?.path === preview?.path) return;
@@ -331,48 +347,35 @@ export function buildPiecesPanel(ctx: PiecesPanelContext): void {
     else emit();
   }
 
-  function syncUi(): void {
-    for (const s of SLOTS) {
-      const r = rows.get(s.key)!;
-      const path = picks[s.key];
-      r.value.textContent = labelFor(path);
-      r.value.title = labelFor(path);
-      r.clear.hidden = !path;
-      r.row.classList.toggle('is-open', openSlot === s.key);
-      r.row.classList.toggle('is-picked', path != null);
-      drawThumb(r.thumb, path, s.key);
-    }
-    if (openSlot) {
-      grid.querySelectorAll<HTMLElement>('.creator-pieces-tile').forEach((el) => {
-        const on = (el.dataset.path || null) === picks[openSlot!];
-        el.classList.toggle('active', on);
-        el.setAttribute('aria-selected', String(on));
-      });
-    }
+  function syncActive(): void {
+    if (!selectedSlot) return;
+    const current = picks[selectedSlot];
+    selector.querySelectorAll<HTMLElement>('.creator-wardrobe-pieces-item').forEach((el) => {
+      const on = (el.dataset.path || null) === current;
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-selected', String(on));
+    });
   }
 
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && openSlot) openPicker(null);
-  };
-  const onPointer = (e: PointerEvent) => {
-    if (!openSlot) return;
-    const t = e.target as Node | null;
-    if (t && (picker.contains(t) || panel.contains(t))) return;
-    openPicker(null);
-  };
-  window.addEventListener('keydown', onKey);
-  window.addEventListener('pointerdown', onPointer, true);
-  const modeObserver = new MutationObserver(() => {
-    if (document.body.dataset.editMode !== 'wardrobe' && openSlot) openPicker(null);
-  });
-  modeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-edit-mode', 'data-route'] });
+  function syncUi(): void {
+    partsPanel!.classList.toggle('is-piece-selected', selectedSlot != null);
+    for (const s of SLOTS) {
+      const b = buttons.get(s.key)!;
+      const path = picks[s.key];
+      b.btn.classList.toggle('active', selectedSlot === s.key);
+      b.btn.classList.toggle('is-picked', path != null);
+      b.btn.title = `${s.hint}. Now: ${labelFor(path)}`;
+      drawThumb(b.thumb, path, s.key);
+    }
+    syncActive();
+  }
+
   creatorScope.track(() => {
-    window.removeEventListener('keydown', onKey);
-    window.removeEventListener('pointerdown', onPointer, true);
-    modeObserver.disconnect();
+    clearSelection = null;
+    selectedSlot = null;
     preview = null;
-    panel.remove();
-    picker.remove();
+    row.remove();
+    library.remove();
   });
 
   syncUi();

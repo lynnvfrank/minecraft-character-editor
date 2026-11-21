@@ -1,160 +1,41 @@
-// Wardrobe Pieces panel and picker (src/creator/wardrobePieces.ts).
-.creator-pieces-panel {
-  display: flex;
-  flex-direction: column;
+// Wardrobe Pieces (src/creator/wardrobePieces.ts): Hair / Eyes / Skin buttons above the layer tree,
+// and their right-side library panel (laid out by the wardrobe single-library rules in _panels.scss).
+
+.creator-wardrobe-pieces {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.3rem;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  background: rgba(var(--panel-rgb), 0.92);
-  border: 1px solid rgba(var(--fg-rgb), 0.15);
-  border-radius: 8px;
-  padding: 0.35rem 0.5rem 0.45rem;
-  font-size: 0.85rem;
-  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid rgba(var(--fg-rgb), 0.12);
 }
 
-.creator-pieces-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+.creator-wardrobe-pieces-btn {
+  justify-content: flex-start;
+  gap: 0.35rem;
+  padding: 0.3rem 0.4rem;
 }
 
-.creator-pieces-row {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  border: 1px solid rgba(var(--fg-rgb), 0.15);
-  border-radius: 6px;
-  background: rgba(var(--fg-rgb), 0.04);
-
-  &.is-open {
-    border-color: rgba(var(--fg-rgb), 0.55);
-    background: rgba(var(--fg-rgb), 0.1);
-  }
-}
-
-.creator-pieces-open {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-width: 0;
-  padding: 0.25rem 0.35rem;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.creator-pieces-thumb {
+.creator-wardrobe-pieces-thumb {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  background: rgba(var(--fg-rgb), 0.1);
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  background: rgba(var(--fg-rgb), 0.12);
   image-rendering: pixelated;
 }
 
-.creator-pieces-label {
-  font-weight: 600;
-  width: 2.6rem;
-  flex-shrink: 0;
+// A piece is selected: the tree's selected layer stops looking selected (its library is not showing).
+.creator-wardrobe-parts-panel.is-piece-selected .creator-wardrobe-parts-tree .creator-wardrobe-parts-btn.active {
+  background: rgba(var(--fg-rgb), 0.06);
+  border-color: rgba(var(--fg-rgb), 0.2);
 }
 
-.creator-pieces-value {
-  flex: 1;
-  min-width: 0;
-  color: rgba(var(--fg-rgb), 0.7);
-  font-size: 0.75rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-
-  .is-picked & {
-    color: var(--text);
-  }
-}
-
-.creator-pieces-clear {
-  flex-shrink: 0;
-  width: 1.5rem;
-  height: 1.5rem;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: none;
-  color: rgba(var(--fg-rgb), 0.6);
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-
-  &:hover {
-    color: var(--text);
-    background: rgba(var(--fg-rgb), 0.1);
-  }
-
-  &[hidden] {
-    display: none;
-  }
-}
-
-.creator-pieces-hint {
-  margin: 0;
-  color: rgba(var(--fg-rgb), 0.65);
-  font-size: 0.7rem;
-  line-height: 1.35;
-}
-
-.creator-pieces-picker {
-  position: fixed;
-  z-index: 60;
-  width: 296px;
-  max-height: min(70vh, 420px);
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  box-sizing: border-box;
-  padding: 0.4rem 0.5rem 0.5rem;
-  background: rgba(var(--panel-rgb), 0.96);
-  border: 1px solid rgba(var(--fg-rgb), 0.18);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.45);
-  color: var(--text);
-  font-size: 0.85rem;
-
-  &[hidden] {
-    display: none;
-  }
-}
-
-.creator-pieces-picker-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.creator-pieces-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.3rem;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-.creator-pieces-tile {
+.creator-wardrobe-pieces-item {
   display: flex;
   align-items: center;
   justify-content: center;
-  aspect-ratio: 1;
-  padding: 3px;
-  border: 1px solid rgba(var(--fg-rgb), 0.15);
-  border-radius: 6px;
-  background: rgba(var(--fg-rgb), 0.05);
-  color: inherit;
-  cursor: pointer;
+  padding: 2px;
 
   canvas {
     width: 100%;
@@ -162,24 +43,11 @@
     image-rendering: pixelated;
     border-radius: 3px;
   }
-
-  &:hover,
-  &:focus-visible {
-    border-color: rgba(var(--fg-rgb), 0.5);
-  }
-
-  &.active {
-    border-color: rgba(var(--fg-rgb), 0.9);
-    background: rgba(var(--fg-rgb), 0.16);
-  }
 }
 
-.creator-pieces-tile-none {
-  font-size: 0.68rem;
-  color: rgba(var(--fg-rgb), 0.75);
-}
-
-// Hidden outside the Wardrobe (the panel itself follows the mode panel config).
-body:not([data-edit-mode='wardrobe']) .creator-pieces-picker {
-  display: none;
+.creator-wardrobe-pieces-hint {
+  margin: 0.4rem 0 0;
+  color: rgba(var(--fg-rgb), 0.6);
+  font-size: 0.7rem;
+  line-height: 1.35;
 }

@@ -966,11 +966,12 @@ function updateCreator3DViewPlacement() {
   }
 }
 
-function updateCreatorPreviewTexture() {
-  if (getRoute() !== 'creator') return;
+/** Put the creator canvas on the model; false when there is no model yet (try again next frame). */
+function updateCreatorPreviewTexture(): boolean {
+  if (getRoute() !== 'creator') return false;
   const canvas = getCreatorSkinCanvas();
   const char = getCharacter(getPrimaryCharacterId());
-  if (!canvas || !char) return;
+  if (!canvas || !char) return false;
   if (!creatorPreviewTexture) {
     creatorPreviewTexture = new THREE.CanvasTexture(canvas);
     creatorPreviewTexture.colorSpace = THREE.SRGBColorSpace;
@@ -988,6 +989,7 @@ function updateCreatorPreviewTexture() {
 
   applySkinToModel(char.model, textureToUse, 'clamped-flip' as TexturePreset, 'transparent' as AlphaMode);
   applyCreatorLayerVisibility(char.model, layerVisible);
+  return true;
 }
 
 /** Me tab: opening My hair / My face frames the head; My skin tone (or nothing open) the full body. */
@@ -1053,8 +1055,8 @@ function createOnFrameUpdate() {
     if (route === 'creator') {
       if (lastRouteForPreview !== 'creator') creatorPreviewDirty = true;
       lastRouteForPreview = 'creator';
-      if (creatorPreviewDirty) {
-        updateCreatorPreviewTexture();
+      // Stay dirty until the model exists, so a skin written before it loads still reaches it.
+      if (creatorPreviewDirty && updateCreatorPreviewTexture()) {
         creatorPreviewDirty = false;
       }
     } else if (route === 'preview') {
@@ -1599,6 +1601,8 @@ async function main(): Promise<void> {
     undefined,
     ARM_MODEL_PATHS[getResolvedArmModel()]
   );
+  // Listen before the first creator skin loads, so its writes (e.g. the Wardrobe's final pass) reach the model.
+  setupCreatorPreviewDirtySubscription();
   characterController.loadCharacter(config, skins);
   if (getRoute() === 'creator') {
     await loadSkinFromPath(initialSkin.path);
@@ -1620,7 +1624,6 @@ async function main(): Promise<void> {
 
   window.addEventListener('resize', onWindowResize);
   initElectronStatus();
-  setupCreatorPreviewDirtySubscription();
   setupStyleFocusCamera();
   installPreviewCaptureRuntimeApi();
   animationLoopController.animate();

@@ -87,6 +87,8 @@ export function createSkinGalleryApi(deps: SkinGalleryDeps): SkinGalleryApi {
 
     if (state.editMode === 'wardrobe' && !wardrobeApi.hasWardrobeLibrarySelection()) {
       wardrobeApi.captureWardrobeBaseFromCurrentCanvas(path);
+      // Run the Wardrobe's final pass so picked pieces and a locked look show on this skin too.
+      void wardrobeApi.resolveWardrobeComposite();
     }
     wardrobeApi.syncWardrobeLibraryActiveStates();
   }

@@ -29,7 +29,6 @@ export const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
   { id: 'creator-top-center-panels', modes: ['wardrobe', '3d'], enterFrom: 'top', exitTo: 'top' },
   { id: 'creator-style-panel', modes: ['style'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-feature-tags-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
-  { id: 'creator-wardrobe-pieces-panel', modes: ['wardrobe'], enterFrom: 'left', exitTo: 'left' },
 ];
 
 /** Must match mode panel exit duration in `_animations.scss` (`$creator-mode-panel-enter-duration`). */

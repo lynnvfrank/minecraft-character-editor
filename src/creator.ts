@@ -62,7 +62,13 @@ import {
 import type { WardrobeLayerKey } from './creator/wardrobeLayers';
 import { createColorActions, extractColorsFromSkin } from './creator/swatches';
 import { createSkinGalleryApi, getOutfitSkins } from './creator/skinGallery';
-import { applyPieces, buildPiecesPanel, hasPieces, onPiecesChanged } from './creator/wardrobePieces';
+import {
+  applyPieces,
+  buildPiecesPanel,
+  clearPieceSelection,
+  getPiecesLibraryPanelId,
+  onPiecesChanged,
+} from './creator/wardrobePieces';
 import { creatorScope } from './creator/lifecycle';
 
 // --- Imports: events, state, lib, viewer ---
@@ -75,7 +81,6 @@ import {
   creatorTexturePositionSlice,
   creatorToolsSlice,
   creatorColorSlice,
-  creatorSkinLoadSlice,
 } from './state/creatorSlices';
 import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_STYLE, type DrawingTool, type EditMode, type PartSide } from './creator/api';
 import {
@@ -178,6 +183,7 @@ const wardrobeApi = createWardrobeApi({
     const mixed = applyPieces(data);
     return styleWithLockedLook(mixed ?? data) ?? mixed;
   },
+  getPieceLibraryPanelId: getPiecesLibraryPanelId,
 });
 
 const skinGalleryApi = createSkinGalleryApi({
@@ -415,14 +421,20 @@ function buildCreatorPanels(): void {
   buildWardrobePartsPanel({
     getEditMode: () => state.editMode,
     getSelectedLayer: () => wardrobeApi.getWardrobeSelectedLayer(),
-    setSelectedLayer: (layer) => wardrobeApi.setWardrobeSelectedLayer(layer),
+    setSelectedLayer: (layer) => {
+      clearPieceSelection();
+      wardrobeApi.setWardrobeSelectedLayer(layer);
+    },
   });
   buildSaveDownloadPanel({
     onSave: skinGalleryApi.saveCurrentSkinToOutfits,
     onDownload: skinGalleryApi.downloadCurrentSkin,
   });
   buildArmModelPanel();
-  buildPiecesPanel({ getSkins: getOutfitSkins });
+  buildPiecesPanel({
+    getSkins: getOutfitSkins,
+    showLibrary: () => wardrobeApi.showWardrobeLibraryPanel(wardrobeApi.getWardrobeSelectedLayer()),
+  });
   const resolvePieces = () => {
     if (state.editMode !== 'wardrobe') return;
     // No outfit captured yet (first skin of the visit): take the canvas as the outfit.
@@ -430,10 +442,6 @@ function buildCreatorPanels(): void {
     void wardrobeApi.resolveWardrobeComposite();
   };
   creatorScope.track(onPiecesChanged(resolvePieces));
-  // A skin loaded outside the Outfits list (startup, file, gallery) wears the picked pieces too.
-  creatorScope.track(creatorSkinLoadSlice.subscribe(() => {
-    if (hasPieces()) window.setTimeout(resolvePieces, 0);
-  }));
   onStyleTargetChanged((hex) => creatorColorSlice.notify({ color: hex }));
   // Locked look toggled or its face finished loading: refresh the outfit shown in the Wardrobe.
   creatorScope.track(onLockedLookChanged(() => {

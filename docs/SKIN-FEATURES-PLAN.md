@@ -66,10 +66,11 @@ The outfit skin is the base. The other features are laid onto it in this order:
 
 ## Phase 2: mix and match in the Wardrobe (built)
 
-- **Pieces panel** (`src/creator/wardrobePieces.ts`, Wardrobe mode, left column under Arms) has rows for Hair, Eyes
-  and Skin. The outfit is still picked with the Wardrobe's own Outfits list and part libraries.
-- Clicking a row opens a picker: a grid of every skin's face, plus "Outfit" to use the outfit's own piece. Hovering a
-  tile previews it on the character, clicking picks it, and × goes back to the outfit's own.
+- **Pieces buttons** (`src/creator/wardrobePieces.ts`): Hair, Eyes and Skin sit above the layer tree in the
+  Wardrobe panel and work like the layers. The outfit is still picked with the Outfits list and the part libraries.
+- Selecting a piece shows its **library on the right**, in the same place and style as a layer's parts library. It is
+  every skin's face, plus "Outfit's own". Hovering a face previews it on the character, and clicking picks it.
+  Selecting any layer row hands the right side back to that layer's library.
 - The mix runs as the Wardrobe's final pass (`finalizeComposite`), before Lock my look. Pieces therefore stay on
   through every outfit and part you pick, and the outfit's own hair and face are replaced rather than layered under.
 - Picked skins are read the same way the editor loads them, so tags painted in 2D/3D are found by pixel hash.
