@@ -26,7 +26,7 @@ export const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
   { id: 'creator-undo-redo-panel', modes: ['2d', '3d'], enterFrom: 'bottom', exitTo: 'bottom' },
   { id: 'creator-right-panels-group', modes: ['style', '2d', '3d'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-3d-preview-slot', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
-  { id: 'creator-top-center-panels', modes: ['wardrobe', '3d'], enterFrom: 'top', exitTo: 'top' },
+  { id: 'creator-top-center-panels', modes: ['wardrobe', 'style', '3d'], enterFrom: 'top', exitTo: 'top' },
   { id: 'creator-me-panel', modes: ['style'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-me-catalog', modes: ['style'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-feature-tags-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
