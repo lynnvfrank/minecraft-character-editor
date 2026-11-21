@@ -3,10 +3,10 @@
  * Add new shortcuts by extending KEY_BINDINGS or CTRL_KEY_BINDINGS.
  */
 import type { DrawingTool, EditMode } from './api';
-import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE } from './api';
+import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_STYLE, EDIT_MODE_WARDROBE } from './api';
 
 /** Fallback order when mode panel DOM is unavailable. */
-const FALLBACK_EDIT_MODES: readonly EditMode[] = [EDIT_MODE_WARDROBE, EDIT_MODE_3D, EDIT_MODE_2D];
+const FALLBACK_EDIT_MODES: readonly EditMode[] = [EDIT_MODE_WARDROBE, EDIT_MODE_STYLE, EDIT_MODE_3D, EDIT_MODE_2D];
 
 function getOrderedEditModes(): EditMode[] {
   const buttons = document.querySelectorAll<HTMLButtonElement>('.creator-tools-panel-mode-btn');

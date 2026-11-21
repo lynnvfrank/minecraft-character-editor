@@ -1,7 +1,7 @@
 import { creatorModeSlice, creatorToolsSlice } from '../state/creatorSlices';
 import { createEl } from './dom';
-import type { EditorToolsContext } from './api';
-import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_WARDROBE, isDrawingTool, isToggleType } from './api';
+import type { EditMode, EditorToolsContext } from './api';
+import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_STYLE, EDIT_MODE_WARDROBE, isDrawingTool, isToggleType } from './api';
 import { createIcon } from './icons';
 import { creatorScope } from './lifecycle';
 
@@ -23,7 +23,8 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
 
   const modeIconOpts = { width: 18, height: 18 };
   const modePanel = createEl('div', { id: 'creator-mode-panel', className: 'creator-mode-panel', role: 'group', 'aria-label': 'Creator mode' },
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_WARDROBE, title: 'Wardrobe', 'aria-label': 'Wardrobe' }, createIcon('modeCreatorWardrobe', modeIconOpts)),
+    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_STYLE, title: 'Me: your hair, eyes, skin and arms', 'aria-label': 'Me' }, createIcon('modeCreatorStyle', modeIconOpts), ' Me'),
+    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_WARDROBE, title: 'Wardrobe', 'aria-label': 'Wardrobe' }, createIcon('modeCreatorWardrobe', modeIconOpts), ' Wardrobe'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_3D, title: 'Edit on 3D model' }, createIcon('modeCreator3D', modeIconOpts), ' 3D'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_2D, title: 'Edit on 2D canvas' }, createIcon('modeCreator2D', modeIconOpts), ' 2D')
   );
@@ -32,7 +33,8 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   const oldOverlaysPanel = document.getElementById('creator-canvas-overlays-panel');
   if (oldOverlaysPanel) oldOverlaysPanel.remove();
 
-  const overlaysPanel = createEl('div', { id: 'creator-canvas-overlays-panel', className: 'creator-canvas-overlays-panel', role: 'group', 'aria-label': 'Canvas overlays' },
+  const overlaysPanel = createEl('div', { id: 'creator-canvas-overlays-panel', className: 'creator-canvas-overlays-panel', role: 'group', 'aria-label': 'Guides' },
+    createEl('div', { className: 'creator-layers-panel-title creator-panel-title' }, 'Guides'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'rulers', title: 'Toggle rulers' }, 'Rulers'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-canvas-overlays-btn', 'data-toggle': 'template', title: 'Show template overlay' }, 'Template')
   );
@@ -85,7 +87,7 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
 
   modePanel.querySelectorAll<HTMLButtonElement>('.creator-tools-panel-mode-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const mode = btn.dataset.mode as 'wardrobe' | '2d' | '3d';
+      const mode = btn.dataset.mode as EditMode;
       if (mode) ctx.setEditMode(mode, { fromUserModeNavigation: true });
       updateEditModeButtons();
     });
@@ -93,7 +95,7 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
   unregisterEditorToolShortcuts();
   toolShortcutKeyHandler = (e: KeyboardEvent) => {
     if (document.body.dataset.route !== 'creator') return;
-    if (ctx.getEditMode() === 'wardrobe') return;
+    if (ctx.getEditMode() === 'wardrobe' || ctx.getEditMode() === 'style') return;
     const target = e.target as HTMLElement | null;
     const inInput = !!target && (
       target.tagName === 'INPUT' ||

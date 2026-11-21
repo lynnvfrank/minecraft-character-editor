@@ -35,6 +35,11 @@ export type SkinGalleryDeps = {
 let manifestOutfitSkins: SkinEntry[] = [];
 const savedOutfitSkins: SkinEntry[] = [];
 
+/** Every skin in the Outfits list (wardrobe manifest, then skins saved this visit). */
+export function getOutfitSkins(): readonly SkinEntry[] {
+  return [...manifestOutfitSkins, ...savedOutfitSkins];
+}
+
 export type SkinGalleryApi = {
   loadSkinFromPath: (path: string) => Promise<void>;
   setupCreatorSkinGallery: (skins: SkinEntry[]) => void;
@@ -80,8 +85,10 @@ export function createSkinGalleryApi(deps: SkinGalleryDeps): SkinGalleryApi {
     renderToDisplay();
     updateAllUndoRedoButtons();
 
-    if (state.editMode === 'wardrobe' && !wardrobeApi.hasWardrobeLibrarySelection()) {
+    if ((state.editMode === 'wardrobe' || state.editMode === 'style') && !wardrobeApi.hasWardrobeLibrarySelection()) {
       wardrobeApi.captureWardrobeBaseFromCurrentCanvas(path);
+      // Run the Wardrobe's final pass so this skin is worn by Me.
+      void wardrobeApi.resolveWardrobeComposite();
     }
     wardrobeApi.syncWardrobeLibraryActiveStates();
   }

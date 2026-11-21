@@ -17,7 +17,7 @@ export const WARDROBE_LAYER_TREE: WardrobeLayerTreeNode = {
   children: [
     {
       key: 'top',
-      label: 'Head (hat + head)',
+      label: 'Head',
       children: [
         { key: 'hat', label: 'Hat' },
         { key: 'head', label: 'Head' },

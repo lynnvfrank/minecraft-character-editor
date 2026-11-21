@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { logger } from '../lib';
 import type { CharacterStateLike } from '../animation';
 import type { CharacterState } from './characterTypes';
-import { EDIT_MODE_WARDROBE, type EditMode } from '../creator/api';
+import { EDIT_MODE_STYLE, EDIT_MODE_WARDROBE, type EditMode } from '../creator/api';
 import {
   CREATOR_WARDROBE_CAMERA_DURATION_MAX_MS,
   CREATOR_WARDROBE_CAMERA_DURATION_MIN_MS,
@@ -144,7 +144,7 @@ export function createCreatorPoseController(deps: CreatorPoseDeps): CreatorPoseC
   function applyCreatorCharacterPose(_detail?: { mode?: string; previousMode?: string }) {
     const mode = deps.getEditMode();
 
-    if (mode === EDIT_MODE_WARDROBE) {
+    if (mode === EDIT_MODE_WARDROBE || mode === EDIT_MODE_STYLE) {
       lockCharacterToCreatorIdle();
     } else {
       lockCharacterFrozenForPainting();

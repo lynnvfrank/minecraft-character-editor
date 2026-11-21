@@ -18,6 +18,7 @@ import { rgbToHex } from '../lib/color';
 import * as brush from './brush';
 import { paintBrushStampAt } from './paintBrushStamp';
 import { buildAfterPixelsForStroke } from './undo';
+import { featureTagEnd, featureTagPaint, getFeatureTagBrush } from './featureTagBrush';
 import type { CreatorState } from '../state/creatorState';
 import {
   creator2dPaintSlice,
@@ -1108,6 +1109,15 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
       if (ctx.state.showTemplate) renderRulersAndGrid(ctx);
     }
     try {
+      if (getFeatureTagBrush()) {
+        // Feature tags: paint tags on cells instead of colors (featureTagsPanel.ts).
+        if (cell && ((e.type === 'mousedown' && e.button === 0) || (e.type === 'mousemove' && (e.buttons & 1)))) {
+          featureTagPaint(cell.cx, cell.cy);
+        } else if ((e.type === 'mouseup' && e.button === 0) || e.type === 'mouseleave') {
+          featureTagEnd();
+        }
+        return;
+      }
       if (!cell && !paintBrushPos) return;
       const wx = paintBrushPos ? paintBrushPos.wx : cell!.cx * RESOLUTION_MULTIPLIER;
       const wy = paintBrushPos ? paintBrushPos.wy : cell!.cy * RESOLUTION_MULTIPLIER;
@@ -1272,7 +1282,9 @@ export function setupBlockyGridEvents(ctx: BlockyEditorContext): void {
         }
       }
     } finally {
-      applyBlockySkinHoverPreview(
+      if (getFeatureTagBrush()) {
+        if (blockySkinHoverCell) clearBlockySkinHover();
+      } else applyBlockySkinHoverPreview(
         e,
         cell,
         paintBrushPos ? { wx: paintBrushPos.wx, wy: paintBrushPos.wy } : null

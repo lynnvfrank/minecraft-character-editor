@@ -252,8 +252,9 @@ body[data-creator-exiting="1"] .creator-lower-left-panels .creator-save-download
 }
 
 .creator-mode-panel {
-  display: flex;
-  flex-direction: row;
+  /* 2×2: Wardrobe + Me on top, 3D + 2D below */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 0.35rem;
   align-items: stretch;
   width: 100%;
@@ -267,12 +268,12 @@ body[data-creator-exiting="1"] .creator-lower-left-panels .creator-save-download
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
 }
 .creator-mode-panel .creator-tools-panel-btn {
-  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  padding: 0.5rem 1.25rem;
+  padding: 0.45rem 0.5rem;
 }
 .creator-mode-panel .creator-tools-panel-btn svg {
   flex-shrink: 0;
@@ -293,6 +294,10 @@ body[data-creator-exiting="1"] .creator-lower-left-panels .creator-save-download
   padding: 0.35rem 0.5rem;
   font-size: 0.85rem;
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+}
+/* Panel title on its own row in wrapping/flex panels */
+.creator-canvas-overlays-panel .creator-panel-title {
+  flex-basis: 100%;
 }
 .creator-canvas-overlays-panel .creator-tools-panel-btn {
   flex: 1;

@@ -53,12 +53,14 @@ export type WardrobeDeps = {
   getCapture3DThumbnail: () => ((size: number) => Promise<string | null>) | null;
   getCreatorCanvasPopulated: () => boolean;
   getCreatorCurrentSkinPath: () => string | null;
-  getEditMode: () => 'wardrobe' | '2d' | '3d';
+  getEditMode: () => 'wardrobe' | 'style' | '2d' | '3d';
   updateAllUndoRedoButtons: () => void;
   renderToDisplay: () => void;
   animateModePanelIn: (el: HTMLElement, dir: 'left' | 'right' | 'top' | 'bottom') => void;
   animateModePanelOut: (el: HTMLElement, dir: 'left' | 'right' | 'top' | 'bottom') => void;
   getFocusedCreationEnabled: () => boolean;
+  /** Optional last pass over the composed outfit (e.g. the locked "Make it me" look). */
+  finalizeComposite?: (data: ImageData) => ImageData | null;
 };
 
 export type WardrobeApi = {
@@ -78,8 +80,18 @@ export type WardrobeApi = {
   showWardrobeLibraryPanel: (layer: WardrobeLayerKey | null) => void;
   hideAllWardrobeLibraryPanels: () => void;
   getWardrobeBaseSkinPath: () => string | null;
+  /** True once an outfit has been captured to compose onto. */
+  hasWardrobeBase: () => boolean;
   flushDeferredWardrobeLibraryPanelsAfterCamera: () => void;
 };
+
+function sameImageData(a: ImageData, b: ImageData): boolean {
+  if (a.width !== b.width || a.height !== b.height) return false;
+  const x = a.data;
+  const y = b.data;
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+  return true;
+}
 
 export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
   const {
@@ -101,6 +113,12 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
   let wardrobeCompositeToken = 0;
   let wardrobeBaseSkinPath: string | null = null;
   let wardrobeBaseSkinData: ImageData | null = null;
+  /**
+   * The last committed result put on the canvas after the final pass (pieces / locked look), and
+   * the outfit it was made from. Re-capturing that exact canvas (e.g. coming back from 2D) takes
+   * the outfit, so the final pass is never baked into the base and can still be undone.
+   */
+  let lastFinalized: { shown: ImageData; outfit: ImageData } | null = null;
   let wardrobeLibrariesLoaded = false;
   let wardrobeLibrariesPromise: Promise<void> | null = null;
   const wardrobeImageCache = new Map<string, Promise<HTMLImageElement>>();
@@ -290,7 +308,8 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     if (!getCreatorCanvasPopulated()) return;
     const snapshot = captureCanvasImageData(getSkinCanvas());
     if (!snapshot) return;
-    wardrobeBaseSkinData = snapshot;
+    wardrobeBaseSkinData =
+      lastFinalized && sameImageData(snapshot, lastFinalized.shown) ? cloneImageData(lastFinalized.outfit) : snapshot;
     wardrobeBaseSkinPath = path;
   }
 
@@ -438,10 +457,16 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     // Otherwise ORIGINAL/skipped layers keep pixels from the last hover after mouseleave.
     const isHoverPreviewPass =
       wardrobePreviewSelections != null && selections === wardrobePreviewSelections;
+    const shown = deps.finalizeComposite?.(composed) ?? composed;
     if (!isHoverPreviewPass) {
       wardrobeBaseSkinData = cloneImageData(composed);
     }
-    applyProgrammaticCanvasImage(composed);
+    applyProgrammaticCanvasImage(shown);
+    if (!isHoverPreviewPass) {
+      // Read back what the canvas holds (it may round semi-transparent pixels) for the later compare.
+      const readBack = shown === composed ? null : captureCanvasImageData(getSkinCanvas());
+      lastFinalized = readBack ? { shown: readBack, outfit: cloneImageData(composed) } : null;
+    }
     renderToDisplay();
     updateAllUndoRedoButtons();
   }
@@ -689,6 +714,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
     showWardrobeLibraryPanel,
     hideAllWardrobeLibraryPanels,
     getWardrobeBaseSkinPath: () => wardrobeBaseSkinPath,
+    hasWardrobeBase: () => wardrobeBaseSkinData != null,
     flushDeferredWardrobeLibraryPanelsAfterCamera,
   };
 }

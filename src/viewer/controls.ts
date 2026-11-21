@@ -4,7 +4,8 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { snapWorkingToSkinCellCenter, uvToWorkingCoords } from '../skin';
+import { snapWorkingToSkinCellCenter, uvToWorkingCoords, RESOLUTION_MULTIPLIER } from '../skin';
+import { featureTagEnd, featureTagPaint, getFeatureTagBrush, onFeatureTagBrushChanged } from '../creator/featureTagBrush';
 import {
   getEditMode3D,
   getActiveTool,
@@ -86,6 +87,34 @@ function sampleColorFromRaycast(
     if (layerLocked[info.layer] === true) continue;
     const sample = sampleColorAtWithAlpha(x, y);
     if (sample && sample.alpha >= EYEDROPPER_ALPHA_THRESHOLD) return sample.hex;
+  }
+  return null;
+}
+
+/** First visible, non-transparent skin texel under the pointer (skips see-through overlay pixels). */
+function raycastToVisibleSkinPixel(
+  deps: Creator3DPaintDeps,
+  clientX: number,
+  clientY: number
+): { x: number; y: number } | null {
+  const { camera, renderer, getCharacterModel } = deps;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(getCharacterMeshes(getCharacterModel), false);
+  const layerVisible = getLayer3DVisible();
+  for (const hit of intersects) {
+    const uv = (hit as THREE.Intersection<THREE.Object3D> & { uv?: THREE.Vector2 }).uv;
+    if (!uv) continue;
+    const { x, y } = uvToWorkingCoords(uv.x, uv.y);
+    const info = getLayerAndPartAtCoords(x, y);
+    if (!info) continue;
+    const visible =
+      info.side !== undefined ? getPartVisible(info.layer, info.side) : layerVisible[info.layer] !== false;
+    if (!visible) continue;
+    const sample = sampleColorAtWithAlpha(x, y);
+    if (sample && sample.alpha >= EYEDROPPER_ALPHA_THRESHOLD) return { x, y };
   }
   return null;
 }
@@ -223,7 +252,25 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
   const { getControls, renderer } = deps;
   const canvas = renderer.domElement;
   let is3DPainting = false;
+  let isTagBrushing = false;
   let controlsTemporarilyDisabled = false;
+
+  /** Feature tag brush: tag the skin pixel under the pointer. */
+  const tagBrushAt = (clientX: number, clientY: number): boolean => {
+    const hit = raycastToVisibleSkinPixel(deps, clientX, clientY);
+    if (!hit) return false;
+    const sx = Math.floor(hit.x / RESOLUTION_MULTIPLIER);
+    const sy = Math.floor(hit.y / RESOLUTION_MULTIPLIER);
+    featureTagPaint(sx, sy);
+    return true;
+  };
+  /** The 2D/3D feature tag brush paints tags on the model's pixels instead of colors. */
+  const pixelBrushOn = () => deps.getRoute() === 'creator' && getFeatureTagBrush() != null;
+  const updateTagBrushCursor = () => {
+    if (pixelBrushOn()) canvas.style.cursor = 'crosshair';
+    else updateCreator3DCanvasCursor(renderer, deps.getRoute);
+  };
+  onFeatureTagBrushChanged(updateTagBrushCursor);
 
   const refreshControls = () => {
     if (controlsTemporarilyDisabled) return;
@@ -242,6 +289,14 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
   };
 
   function handlePointerDown(e: MouseEvent) {
+    if (pixelBrushOn() && e.button === 0) {
+      controlsTemporarilyDisabled = true;
+      getControls().enabled = false;
+      isTagBrushing = true;
+      tagBrushAt(e.clientX, e.clientY);
+      e.preventDefault();
+      return;
+    }
     if (deps.getRoute() !== 'creator' || !getEditMode3D()) return;
     if (e.button !== 0) return;
     const activeTool = getActiveTool();
@@ -272,7 +327,13 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
   }
 
   function handlePointerMove(e: MouseEvent) {
+    if (isTagBrushing) {
+      tagBrushAt(e.clientX, e.clientY);
+      e.preventDefault();
+      return;
+    }
     if (deps.getRoute() !== 'creator' || !getEditMode3D()) return;
+    if (getFeatureTagBrush()) return; // no color hover preview while tagging
     const activeTool = getActiveTool();
     const eyedropperHoverColor = activeTool === 'eyedropper'
       ? sampleColorFromRaycast(deps, e.clientX, e.clientY)
@@ -323,6 +384,14 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
 
   function handlePointerUp(e: MouseEvent) {
     if (e.button !== 0) return;
+    if (isTagBrushing) {
+      isTagBrushing = false;
+      featureTagEnd();
+      controlsTemporarilyDisabled = false;
+      getControls().enabled = true;
+      updateTagBrushCursor();
+      return;
+    }
     if (is3DPainting) {
       paintEndFrom3D();
       is3DPainting = false;
@@ -340,11 +409,12 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     handlePointerUp(e);
   });
   canvas.addEventListener('mouseenter', () => {
-    updateCreator3DCanvasCursor(renderer, deps.getRoute);
+    updateTagBrushCursor();
   });
 
   creatorModeSlice.subscribe(() => {
     refreshControls();
+    updateTagBrushCursor();
   });
   creatorToolsSlice.subscribe(() => {
     refreshControls();

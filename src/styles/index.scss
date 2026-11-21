@@ -11,6 +11,8 @@
 @use 'creator/camera-controls';
 @use 'creator/wardrobe';
 @use 'creator/panels-right';
+@use 'creator/feature-tags';
+@use 'creator/me';
 @use 'creator/layers';
 @use 'creator/color-picker';
 @use 'creator/hover-info';
@@ -19,3 +21,4 @@
 @use 'app-shell';
 @use 'viewer-controls';
 @use 'fake-chat';
+@use 'about';

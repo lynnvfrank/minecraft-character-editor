@@ -1,0 +1,189 @@
+// Me tab (src/creator/mePanel.ts): feature rows on the left, the selected feature's style catalog
+// on the right above the color picker.
+
+.creator-me-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem 0.5rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+}
+
+
+.creator-me-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.creator-me-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.creator-me-row-btn {
+  gap: 0.45rem;
+  padding: 0.3rem 0.4rem;
+}
+
+.creator-me-thumb {
+  flex-shrink: 0;
+  width: 24px;
+  height: auto;
+  max-height: 39px;
+  image-rendering: pixelated;
+  border-radius: 3px;
+  background: rgba(var(--fg-rgb), 0.08);
+}
+
+.creator-me-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.creator-me-style-name {
+  color: rgba(var(--fg-rgb), 0.6);
+  font-size: 0.68rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.creator-me-chip {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--fg-rgb), 0.35);
+  cursor: pointer;
+
+  // No color chosen: the style keeps its own colors.
+  &.is-original {
+    background: conic-gradient(#d33, #e9c13b, #3bb54a, #3b8fe9, #a23be9, #d33) !important;
+    opacity: 0.55;
+  }
+}
+
+.creator-me-reset {
+  flex-shrink: 0;
+  width: 1.2rem;
+  height: 1.4rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(var(--fg-rgb), 0.6);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &[hidden] {
+    visibility: hidden;
+    display: block;
+  }
+}
+
+.creator-me-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.creator-me-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(var(--fg-rgb), 0.75);
+  font: inherit;
+  font-size: 0.72rem;
+  text-decoration: underline;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+    text-decoration: none;
+  }
+}
+
+.creator-me-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 0;
+  box-sizing: border-box;
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 8px;
+  padding: 0.4rem 0.3rem 0.45rem 0.5rem;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+  font-size: 0.85rem;
+}
+
+.creator-me-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.35rem;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-gutter: stable;
+  padding: 2px;
+}
+
+.creator-me-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 8 / 13;
+  padding: 2px;
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 6px;
+  background: rgba(var(--fg-rgb), 0.05);
+  color: rgba(var(--fg-rgb), 0.85);
+  font-size: 0.62rem;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+
+  .creator-me-grid[data-feature='eyes'] & {
+    aspect-ratio: 1;
+  }
+
+  canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+  }
+
+  &:hover,
+  &:focus-visible {
+    border-color: rgba(var(--fg-rgb), 0.5);
+  }
+
+  &.active {
+    border-color: rgba(96, 165, 250, 0.95);
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.9);
+    background: rgba(96, 165, 250, 0.15);
+  }
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.creator-me-tile-own {
+  border-style: dashed;
+}

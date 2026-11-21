@@ -39,7 +39,8 @@ import {
   setLayersPanelFocusedListExpanded,
   flushDeferredWardrobeLibraryPanelsAfterCamera,
 } from './creator';
-import { EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
+import { EDIT_MODE_STYLE, EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
+import { getMeFocus, onMeFocusChanged } from './creator/mePanel';
 import { createIcon } from './creator/icons';
 import { createCharacterController } from './controllers/character';
 import {
@@ -97,6 +98,7 @@ import {
 import { registerArmModelPanelContext } from './creator/armModelPanel';
 import { createSubscribable } from './lib/subscribable';
 import { initTheme } from './ui/theme';
+import { initAboutPanel } from './ui/aboutPanel';
 import {
   SKIN_LAYER_BOUNDS,
   LAYER_KEYS,
@@ -142,9 +144,12 @@ const FALLBACK_SKINS: SkinEntry[] = [
   { path: '/wardrobe/skins/RunningboyRig.png', label: 'Default' }
 ];
 
+/** Skin shown on page load (temporary: a good base for testing Make it me). */
+const DEFAULT_SKIN_PATH = '/wardrobe/skins/2024_03_25_sasha-base--updated--22427415.png';
+
 const FALLBACK_ANIMATIONS: AnimationEntry[] = [
-  { path: '/animations/Bored-RunningboyRig.fbx', key: 'bored', label: 'Bored' },
-  { path: '/animations/Crying-RunningboyRig.fbx', key: 'crying', label: 'Crying' }
+  { path: '/animations/animations.glb', key: 'bored', label: 'Bored' },
+  { path: '/animations/animations.glb', key: 'crying', label: 'Crying' }
 ];
 
 const USE_DEBUG_TEXTURE = false;
@@ -203,7 +208,7 @@ const previewRouteController = createPreviewRouteController(
 // Route and layout helpers
 // -----------------------------------------------------------------------------
 
-function getCreatorHash(mode: EditMode = EDIT_MODE_WARDROBE): string {
+function getCreatorHash(mode: EditMode = EDIT_MODE_STYLE): string {
   return `#/creator/${mode}`;
 }
 
@@ -941,7 +946,7 @@ function updateCreator3DViewPlacement() {
   const slot = document.getElementById('creator-3d-preview-slot');
   if (!app || !wrapper || !slot) return;
   const mode = getEditMode();
-  const show3DInMainArea = mode === '3d' || mode === 'wardrobe';
+  const show3DInMainArea = mode === '3d' || mode === 'wardrobe' || mode === 'style';
   if (show3DInMainArea) {
     const ctx = sceneContext;
     if (app.parentElement !== wrapper) {
@@ -961,11 +966,12 @@ function updateCreator3DViewPlacement() {
   }
 }
 
-function updateCreatorPreviewTexture() {
-  if (getRoute() !== 'creator') return;
+/** Put the creator canvas on the model; false when there is no model yet (try again next frame). */
+function updateCreatorPreviewTexture(): boolean {
+  if (getRoute() !== 'creator') return false;
   const canvas = getCreatorSkinCanvas();
   const char = getCharacter(getPrimaryCharacterId());
-  if (!canvas || !char) return;
+  if (!canvas || !char) return false;
   if (!creatorPreviewTexture) {
     creatorPreviewTexture = new THREE.CanvasTexture(canvas);
     creatorPreviewTexture.colorSpace = THREE.SRGBColorSpace;
@@ -983,6 +989,41 @@ function updateCreatorPreviewTexture() {
 
   applySkinToModel(char.model, textureToUse, 'clamped-flip' as TexturePreset, 'transparent' as AlphaMode);
   applyCreatorLayerVisibility(char.model, layerVisible);
+  return true;
+}
+
+/** Me tab: opening My hair / My face frames the head; My skin tone (or nothing open) the full body. */
+function setupStyleFocusCamera(): void {
+  const moveCamera = (presetKey: 'head' | 'top' | 'fullOutfit') => {
+    const char = getCharacter(getPrimaryCharacterId());
+    if (!char) return;
+    const preset = getPreviewPreset(presetKey);
+    const origin = char.container.position;
+    const position = new THREE.Vector3(
+      preset.cameraPosition.x + origin.x,
+      preset.cameraPosition.y + origin.y,
+      preset.cameraPosition.z + origin.z
+    );
+    const target = new THREE.Vector3(
+      preset.cameraTarget.x + origin.x,
+      preset.cameraTarget.y + origin.y,
+      preset.cameraTarget.z + origin.z
+    );
+    void creatorPoseController.animateCameraToCreatorView({ position, target, fov: preset.fov ?? 35 });
+  };
+  const focusCamera = (feature: ReturnType<typeof getMeFocus>) => {
+    if (getRoute() !== 'creator' || getEditMode() !== EDIT_MODE_STYLE) return;
+    // Hair needs shoulders/back in view; eyes want a close-up; skin the whole body.
+    moveCamera(feature === 'eyes' ? 'head' : feature === 'hair' ? 'top' : 'fullOutfit');
+  };
+  onMeFocusChanged(focusCamera);
+  // Leaving the Me tab: don't strand the other modes on a hair/face close-up.
+  creatorModeSlice.subscribe((detail) => {
+    if (getRoute() !== 'creator') return;
+    if (detail.previousMode === EDIT_MODE_STYLE && detail.mode !== EDIT_MODE_STYLE) moveCamera('fullOutfit');
+  });
+  // Loaded straight into the Me tab: the panel announced its section before this hook existed.
+  window.setTimeout(() => focusCamera(getMeFocus()), 300);
 }
 
 function setupCreatorPreviewDirtySubscription(): void {
@@ -998,7 +1039,7 @@ function setupCreatorPreviewDirtySubscription(): void {
     markDirty();
     setDetectedArmModel(detectArmModelFromCanvas(getCreatorSkinCanvas()));
     const path = detail.path;
-    if (typeof path === 'string') {
+    if (typeof path === 'string' && !detail.raw) {
       const char = getCharacter(getPrimaryCharacterId());
       if (char) {
         char.currentSkin = path;
@@ -1014,8 +1055,8 @@ function createOnFrameUpdate() {
     if (route === 'creator') {
       if (lastRouteForPreview !== 'creator') creatorPreviewDirty = true;
       lastRouteForPreview = 'creator';
-      if (creatorPreviewDirty) {
-        updateCreatorPreviewTexture();
+      // Stay dirty until the model exists, so a skin written before it loads still reaches it.
+      if (creatorPreviewDirty && updateCreatorPreviewTexture()) {
         creatorPreviewDirty = false;
       }
     } else if (route === 'preview') {
@@ -1310,6 +1351,7 @@ async function main(): Promise<void> {
 
   sceneContext = initViewerScene(container, params) as AppSceneContext;
   initTheme();
+  initAboutPanel();
   setupCreatorCameraLight(sceneContext.camera);
   bindFocusedModeAutoDisableOnMouseCameraMove();
 
@@ -1547,7 +1589,10 @@ async function main(): Promise<void> {
     });
   }
 
-  const initialSkin = skins.find((skin) => skin.path === FALLBACK_SKINS[0]?.path) ?? skins[0]!;
+  const initialSkin =
+    skins.find((skin) => skin.path === DEFAULT_SKIN_PATH) ??
+    skins.find((skin) => skin.path === FALLBACK_SKINS[0]?.path) ??
+    skins[0]!;
   detectedArmModel = (await detectArmModelFromPath(initialSkin.path)) ?? detectedArmModel;
   armModelSlice.notify(); // the creator panel may already be showing the pre-detection default
   const config = buildCharacterConfig(
@@ -1556,6 +1601,8 @@ async function main(): Promise<void> {
     undefined,
     ARM_MODEL_PATHS[getResolvedArmModel()]
   );
+  // Listen before the first creator skin loads, so its writes (e.g. the Wardrobe's final pass) reach the model.
+  setupCreatorPreviewDirtySubscription();
   characterController.loadCharacter(config, skins);
   if (getRoute() === 'creator') {
     await loadSkinFromPath(initialSkin.path);
@@ -1577,7 +1624,7 @@ async function main(): Promise<void> {
 
   window.addEventListener('resize', onWindowResize);
   initElectronStatus();
-  setupCreatorPreviewDirtySubscription();
+  setupStyleFocusCamera();
   installPreviewCaptureRuntimeApi();
   animationLoopController.animate();
 }

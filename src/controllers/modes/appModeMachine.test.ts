@@ -24,10 +24,10 @@ describe('route parsing', () => {
     ['', { route: 'viewer', creatorMode: null }],
     ['#/', { route: 'viewer', creatorMode: null }],
     ['#/preview', { route: 'preview', creatorMode: null }],
-    ['#/creator', { route: 'creator', creatorMode: 'wardrobe' }],
+    ['#/creator', { route: 'creator', creatorMode: 'style' }],
     ['#/creator/3D/', { route: 'creator', creatorMode: '3d' }],
     ['#/creator/2d', { route: 'creator', creatorMode: '2d' }],
-    ['#/creator/bogus', { route: 'creator', creatorMode: 'wardrobe' }],
+    ['#/creator/bogus', { route: 'creator', creatorMode: 'style' }],
   ];
   for (const [hash, expected] of cases) {
     test(`'${hash}'`, () => withHash(hash, () => assert.deepEqual(parseHashToRouteInfo(), expected)));
