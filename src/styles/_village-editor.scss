@@ -1,0 +1,184 @@
+// Build mode: home view only (see src/ui/villagePalette.ts, src/controllers/villageEditorController.ts).
+// The round 🔨 button sits in the bottom-right stack above Residents; the palette opens to its left
+// with the same chrome as the Residents panel.
+
+.village-build-btn {
+  position: fixed;
+  right: 12px;
+  bottom: 144px;
+  z-index: 50;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  background: rgba(var(--panel-rgb), 0.92);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover,
+  &.is-open {
+    border-color: rgba(var(--fg-rgb), 0.45);
+  }
+
+  &.is-open {
+    background: rgba(var(--fg-rgb), 0.2);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(var(--fg-rgb), 0.45);
+    outline-offset: 1px;
+  }
+}
+
+// Phones: the time-of-day pill takes the spot above the round buttons; sit left of Residents.
+@media (max-width: 620px) {
+  .village-build-btn {
+    right: 56px;
+    bottom: 100px;
+  }
+}
+
+.village-palette {
+  position: fixed;
+  right: 60px;
+  bottom: 12px;
+  z-index: 51;
+  width: 280px;
+  max-width: calc(100vw - 72px);
+  max-height: min(70vh, 460px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem 0.6rem;
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+  color: var(--text);
+  font-size: 0.85rem;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+body:not([data-route='viewer']) {
+  .village-build-btn,
+  .village-palette {
+    display: none;
+  }
+}
+
+// While building, the Residents panel and character-only chrome make way.
+body[data-building='on'] {
+  .residents-panel,
+  .selection-pill {
+    display: none;
+  }
+}
+
+.village-palette-header {
+  margin-bottom: 0.4rem;
+}
+
+.village-palette-title {
+  color: rgba(var(--fg-rgb), 0.9);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.village-palette-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.3rem;
+}
+
+.village-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.3rem 0.1rem;
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 6px;
+  background: rgba(var(--fg-rgb), 0.04);
+  color: rgba(var(--fg-rgb), 0.85);
+  font: inherit;
+  font-size: 0.65rem;
+  cursor: pointer;
+
+  &:hover {
+    border-color: rgba(var(--fg-rgb), 0.35);
+  }
+
+  &.active {
+    border-color: rgba(var(--fg-rgb), 0.8);
+    background: rgba(var(--fg-rgb), 0.14);
+  }
+}
+
+.village-tile-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font-size: 0.75rem;
+}
+
+.village-tile-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.village-palette-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.village-action {
+  flex: 1;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  border-radius: 6px;
+  background: rgba(var(--fg-rgb), 0.06);
+  color: rgba(var(--fg-rgb), 0.9);
+  font: inherit;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: rgba(var(--fg-rgb), 0.14);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  &.is-primary {
+    border-color: rgba(var(--fg-rgb), 0.45);
+    font-weight: 600;
+  }
+}
+
+.village-palette-hint {
+  margin: 0.5rem 0 0;
+  color: rgba(var(--fg-rgb), 0.65);
+  font-size: 0.72rem;
+  line-height: 1.35;
+
+  &.is-refusal {
+    color: #ffb4a8;
+  }
+}

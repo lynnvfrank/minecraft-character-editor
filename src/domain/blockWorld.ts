@@ -9,6 +9,7 @@
  * middle is where the first character stands.
  *
  * To change the village, edit VILLAGE_MAP (ground and small things) and VILLAGE_HOUSES.
+ * Players repaint the map in the home view's Build mode; the rules for that are domain/villageEdit.ts.
  * blockWorld.test.ts checks the map is well-formed and every walkable spot is reachable.
  */
 import { createNavGrid, isCellWalkable, setBlocked, cellCenter, type GridXZ, type NavGrid } from '../lib/gridPath';
@@ -336,4 +337,9 @@ export function walkableCellsWithin(world: BlockWorld, radius: number): GridXZ[]
 
 export function isKnownTile(t: string): boolean {
   return KNOWN_TILES.has(t);
+}
+
+/** Tiles nobody can walk on (water, fence, tree, lamp post, boulder). */
+export function isBlockedTile(t: string): boolean {
+  return BLOCKED_TILES.has(t);
 }

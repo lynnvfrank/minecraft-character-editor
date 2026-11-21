@@ -51,6 +51,8 @@ import { createBlockWorldController } from './controllers/blockWorldController';
 import { createDayNightController } from './controllers/dayNightController';
 import { createWeatherController } from './controllers/weatherController';
 import { createSelectionController, type SelectionController } from './controllers/selectionController';
+import { createVillageEditorController } from './controllers/villageEditorController';
+import { createVillageSaveSection, createVillageStore } from './state/villageStore';
 import { DEFAULT_CROWD_CONFIG } from './animation/crowd';
 import { createAnimationLoopController } from './controllers/animationLoop';
 import { createCreatorPoseController, type CreatorPoseController } from './controllers/creatorPose';
@@ -688,7 +690,9 @@ async function main(): Promise<void> {
   const getAction = characterController.getAction;
 
   // Home view block village (?world=0 for the old open stage). Walks route around its buildings.
-  const blockWorld = params.get('world') === '0' ? null : createBlockWorldController(sceneContext.scene);
+  // The layout itself is the player's (Build mode, state/villageStore.ts); the built-in one by default.
+  const villageStore = createVillageStore(getLocalStorage());
+  const blockWorld = params.get('world') === '0' ? null : createBlockWorldController(sceneContext.scene, villageStore.get());
 
   // Home view day and night: a time-of-day control, and lighting laid over the active preset.
   const timeOfDay = createTimeOfDayStore(getLocalStorage());
@@ -712,7 +716,7 @@ async function main(): Promise<void> {
     scene: sceneContext.scene,
     store: timeOfDay,
     weather,
-    lamps: blockWorld && { positions: blockWorld.lampPositions, setGlow: blockWorld.setLampGlow, isShown: blockWorld.isShown },
+    lamps: blockWorld && { get positions() { return blockWorld.lampPositions; }, setGlow: blockWorld.setLampGlow, isShown: blockWorld.isShown },
   });
 
   const animationManager = createAnimationManager({
@@ -875,6 +879,7 @@ async function main(): Promise<void> {
     getTimeOfDay: () => timeOfDay.get().time,
     saveRegistry,
   });
+  saveRegistry.register(createVillageSaveSection(villageStore));
   const studioDancers = createStudioDancersController({
     getSceneContext,
     getLead: () => getCharacter(getPrimaryCharacterId()),
@@ -1138,7 +1143,19 @@ async function main(): Promise<void> {
     getSkinLabel: (path) =>
       outfitResidents.labelOf(path) ?? skinsList.find((s) => s.path === path)?.label ?? path.split('/').pop()?.replace(/[.]png$/i, '') ?? 'Character',
     roamRadius: blockWorld?.roamRadius ?? DEFAULT_CROWD_CONFIG.edgeRadius + 6,
+    isClickSuppressed: () => villageEditor?.isBuilding() ?? false,
   }));
+  // Home view Build mode: paint the village; rebuilds and refreshes crowd, lamps and weather spots.
+  const villageEditor = blockWorld && createVillageEditorController({
+    getSceneContext,
+    getRoute,
+    blockWorld,
+    store: villageStore,
+    dayNight,
+    crowd,
+    animationManager,
+    deselect: () => app.get('selection').deselect(),
+  });
 
   if (import.meta.env.DEV) {
     // Dev-only handle for poking at the home world from the console.

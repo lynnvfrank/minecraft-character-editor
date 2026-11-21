@@ -468,8 +468,15 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     return picked;
   }
 
+  /** The village was repainted: step crowd characters off blocked ground and re-plan their walks. */
+  function onNavChanged(nudge: (p: XZ) => XZ | null): void {
+    sim.navChanged(nudge);
+    applyTransforms();
+  }
+
   return {
     update,
+    onNavChanged,
     shouldUpdateCharacter,
     isCrowdCharacter,
     swapIntoPrimary,

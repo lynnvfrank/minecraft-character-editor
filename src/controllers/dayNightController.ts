@@ -32,6 +32,7 @@ export type DayNightControllerDeps = {
   };
   /** The village's lamps (omit with `?world=0`: the sky and lights still change). */
   lamps?: {
+    /** Read again after refreshLamps (a getter is fine). */
     positions: readonly { x: number; y: number; z: number }[];
     setGlow: (emissiveIntensity: number) => void;
     isShown: () => boolean;
@@ -167,5 +168,20 @@ export function createDayNightController(deps: DayNightControllerDeps) {
     applyLamps(s.lampGlow, lampsShown);
   }
 
-  return { update, release };
+  /**
+   * The village was repainted (Build mode): lamps moved, and the lamp blocks are new meshes. Drop
+   * the point lights (remade on the next frame for the lamps nearest the plaza; the rest glow
+   * through their emissive blocks) and reapply the glow.
+   */
+  function refreshLamps(): void {
+    for (const light of lampLights ?? []) {
+      scene.remove(light);
+      light.dispose();
+    }
+    lampLights = null;
+    appliedLampsShown = null; // forces the next update to apply lamps again
+    if (!applied) applyLamps(0, false);
+  }
+
+  return { update, release, refreshLamps };
 }

@@ -960,6 +960,35 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     }
   }
 
+  /**
+   * The walkable world changed under the crowd (the village was repainted; `config.nav`'s lists
+   * have already been refreshed). Anyone standing on ground that is now blocked steps to
+   * `nudge(p)`, and every walk in progress is planned again from where the walker is, so nobody
+   * keeps following a path through a new tree or pond.
+   */
+  function navChanged(nudge?: (p: XZ) => XZ | null): void {
+    for (const agent of [...agents.values()]) {
+      const to = nudge?.(agent);
+      if (to) {
+        agent.x = to.x;
+        agent.z = to.z;
+      }
+      if (agent.phase === 'loading' || !isWalkingPhase(agent.phase)) continue;
+      const goal = agent.path[agent.path.length - 1] ?? agent.target;
+      if (agent.phase === 'exiting') {
+        leave(agent);
+      } else if (agent.phase === 'gathering') {
+        const path = goal && config.nav ? config.nav.findPath(agent, goal) : null;
+        if (!path || path.length === 0) arriveAtGathering(agent);
+        else followPath(agent, 'gathering', path);
+      } else if (goal) {
+        startWalking(agent, agent.phase as 'entering' | 'walking', goal);
+      } else {
+        nextActivity(agent, true);
+      }
+    }
+  }
+
   function drainEvents(): CrowdEvent[] {
     const out = events;
     events = [];
@@ -975,6 +1004,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     hold,
     release,
     drainEvents,
+    navChanged,
     get: (id: string) => agents.get(id),
     list: () => [...agents.values()],
     size: () => agents.size,

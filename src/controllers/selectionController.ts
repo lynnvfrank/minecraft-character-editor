@@ -39,6 +39,8 @@ export type SelectionControllerDeps = {
   getSkinLabel: (skinPath: string) => string;
   /** Keep the camera target within this radius of the origin. */
   roamRadius: number;
+  /** True while clicks on the ground mean something else (Build mode paints): no select/deselect. */
+  isClickSuppressed?: () => boolean;
 };
 
 /** Pointer travel (px) above which a press is a camera drag, not a click. */
@@ -173,7 +175,7 @@ export function createSelectionController(deps: SelectionControllerDeps) {
     down = null;
     if (!start || start.id !== e.pointerId) return;
     if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_SLOP_PX) return;
-    if (deps.getRoute() !== 'viewer' || deps.getTransitionInFlight()) return;
+    if (deps.getRoute() !== 'viewer' || deps.getTransitionInFlight() || deps.isClickSuppressed?.()) return;
     const id = pick(e.clientX, e.clientY);
     if (id) select(id);
     else deselect();

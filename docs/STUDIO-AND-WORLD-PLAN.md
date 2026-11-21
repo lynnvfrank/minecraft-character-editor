@@ -48,7 +48,7 @@ Built features are merged into `feat/studio-world-essentials`; in-progress ones 
 | One save file | In progress | Residents, village layout, routines and time of day in one export and import |
 | Share code | In progress | A code that recreates a routine, shared per combo from the Studio and the Move panel |
 | Send to World / Open in Studio | In progress | Shortcuts in the Creator so a finished skin shows up at once, with outfits that are remembered |
-| Village editor | Not started | Paint tiles and place houses in `VILLAGE_MAP`; saved per user |
+| Village editor | Built | Build mode in the home view paints tiles with undo and reset, saved per user and in the backup. Unit-tested, not yet watched in a browser. Moving houses is not done |
 | Schematic props | Not started | Bring back `.schem` props (removed in PR 7) as scenery placed through the village editor |
 
 ## Open items
