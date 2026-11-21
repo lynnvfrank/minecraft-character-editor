@@ -113,3 +113,77 @@
     text-decoration: none;
   }
 }
+
+// Library tagging session bar (src/creator/tagSession.ts): top center while tagging library skins.
+.creator-tag-session-bar {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: calc(100vw - 560px);
+  box-sizing: border-box;
+  padding: 0.35rem 0.5rem;
+  background: rgba(var(--panel-rgb), 0.96);
+  border: 1px solid rgba(var(--fg-rgb), 0.25);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.45);
+  color: var(--text);
+  font-size: 0.8rem;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.creator-tag-session-label {
+  font-weight: 700;
+  color: rgba(var(--fg-rgb), 0.85);
+}
+
+.creator-tag-session-name {
+  min-width: 4rem;
+  max-width: 16rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.creator-tag-session-count,
+.creator-tag-session-status {
+  color: rgba(var(--fg-rgb), 0.6);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.creator-tag-session-btn {
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  background: rgba(var(--fg-rgb), 0.06);
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    border-color: rgba(var(--fg-rgb), 0.45);
+  }
+
+  &.active {
+    background: rgba(var(--fg-rgb), 0.18);
+  }
+}
+
+.creator-tag-session-done {
+  font-weight: 600;
+  border-color: rgba(96, 165, 250, 0.7);
+}
+
+// While tagging, the 3D camera bar moves below the session bar.
+body[data-tag-session='on'] .creator-top-center-panels {
+  top: 3.6rem;
+}

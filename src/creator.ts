@@ -41,7 +41,7 @@ import {
 } from './creator/mePanel';
 import { applyMe, notifyMeArmsChanged, onMeChanged, setMeArmTarget } from './creator/me';
 import { getArmModelPanelContext } from './creator/armModelPanel';
-import { setFeatureTagBrush } from './creator/featureTagBrush';
+import { endTagSession, isTagSessionActive, registerTagSession, startTagSession } from './creator/tagSession';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
@@ -74,6 +74,7 @@ import {
   creatorTexturePositionSlice,
   creatorToolsSlice,
   creatorColorSlice,
+  creatorSkinLoadSlice,
 } from './state/creatorSlices';
 import { EDIT_MODE_2D, EDIT_MODE_3D, EDIT_MODE_STYLE, type DrawingTool, type EditMode, type PartSide } from './creator/api';
 import {
@@ -416,12 +417,46 @@ function buildCreatorPanels(): void {
   });
   buildMePanel({
     getSkins: getOutfitSkins,
-    openForTagging: (path, feature) => {
-      void loadSkinFromPathFn(path).then(() => {
-        setEditMode('3d', { fromUserModeNavigation: true });
-        window.setTimeout(() => setFeatureTagBrush(feature), 400);
-      });
+    openForTagging: (path, feature) => void startTagSession(path, feature),
+  });
+  // Tagging library skins borrows the editor: the character is set aside and put back after.
+  registerTagSession({
+    getSkins: getOutfitSkins,
+    saveCharacter: () => {
+      const snapshot = {
+        image: captureCanvasImageData(getSkinCanvas()),
+        path: creatorCurrentSkinPath,
+        undo: state.undoStack,
+        redo: state.redoStack,
+      };
+      state.undoStack = [];
+      state.redoStack = [];
+      updateAllUndoRedoButtons();
+      return snapshot;
     },
+    restoreCharacter: (s) => {
+      const snap = s as { image: ImageData | null; path: string | null; undo: typeof state.undoStack; redo: typeof state.redoStack };
+      const ctx = getSkinCanvas().getContext('2d', { willReadFrequently: true });
+      if (snap.image && ctx) ctx.putImageData(snap.image, 0, 0);
+      creatorCurrentSkinPath = snap.path;
+      state.undoStack = snap.undo;
+      state.redoStack = snap.redo;
+      creatorSkinLoadSlice.notify({ path: snap.path ?? '', raw: true });
+      creatorCanvasSlice.notify();
+      if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
+      updateAllUndoRedoButtons();
+    },
+    showRawSkin: async (path) => {
+      const result = await skinIO.loadSkinToCanvas(path, getSkinCanvas(), skinIO.captureCanvasImageData);
+      if (!result) return false;
+      creatorCanvasPopulated = true;
+      creatorSkinLoadSlice.notify({ path, raw: true });
+      creatorCanvasSlice.notify();
+      if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
+      return true;
+    },
+    getEditMode: () => state.editMode,
+    setEditMode: (mode) => setEditMode(mode, { fromUserModeNavigation: true }),
   });
   buildArmModelPanel();
   // Me (and the outfit it's dressed in) shows in the Me tab and the Wardrobe.
@@ -683,6 +718,8 @@ export function setEditMode(
   mode: EditMode,
   options: { syncUrl?: boolean; fromUserModeNavigation?: boolean } = {}
 ): void {
+  // Me and the Wardrobe work on the character: end a library tagging session first.
+  if (isTagSessionActive() && mode !== EDIT_MODE_2D && mode !== EDIT_MODE_3D) endTagSession({ returnToMode: false });
   const previousMode = state.editMode;
   const wasEditMode = isCreatorEditMode(previousMode);
   const willBeEditMode = isCreatorEditMode(mode);

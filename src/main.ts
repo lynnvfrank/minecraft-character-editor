@@ -1039,7 +1039,7 @@ function setupCreatorPreviewDirtySubscription(): void {
     markDirty();
     setDetectedArmModel(detectArmModelFromCanvas(getCreatorSkinCanvas()));
     const path = detail.path;
-    if (typeof path === 'string') {
+    if (typeof path === 'string' && !detail.raw) {
       const char = getCharacter(getPrimaryCharacterId());
       if (char) {
         char.currentSkin = path;

@@ -11,7 +11,8 @@ import { composeFeaturesLabeled, FEATURE_CODE, isFaceTexel, type TaggedSkin } fr
 import { detectEyeAnchor, recolorHair, recolorSkinTone, rgbToHsv, type RGB, type SkinPixels } from './skinStyler';
 
 export type MeFeature = 'hair' | 'eyes' | 'skin';
-export const ME_FEATURES: readonly MeFeature[] = ['hair', 'eyes', 'skin'];
+/** In the order the Me tab lists them. */
+export const ME_FEATURES: readonly MeFeature[] = ['skin', 'hair', 'eyes'];
 
 /** One feature of Me: whose style (null = the outfit skin's own) and an optional color. */
 export type MeChoice = { style: TaggedSkin | null; color: RGB | null };

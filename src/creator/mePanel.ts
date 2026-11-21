@@ -33,7 +33,7 @@ const META: Record<MeFeature, { label: string; catalog: string; hint: string }> 
   skin: { label: 'Skin', catalog: 'Skin styles', hint: 'Skin with its shading from any skin, and its tone' },
 };
 
-let selected: MeFeature | null = 'hair';
+let selected: MeFeature | null = 'skin';
 const focusListeners = new Set<(f: MeFeature | null) => void>();
 let targetListener: ((hex: string) => void) | null = null;
 
@@ -64,7 +64,7 @@ export function onMeTargetChanged(fn: (hex: string) => void): void {
 export type MePanelContext = {
   getSkins: () => readonly SkinEntry[];
   /** Open a skin in the editor with the tag brush for a feature, to fix how it's cut out. */
-  openForTagging: (path: string, feature: MeFeature) => void;
+  openForTagging: (path: string | null, feature: MeFeature) => void;
 };
 
 export function buildMePanel(ctx: MePanelContext): void {
@@ -105,14 +105,13 @@ export function buildMePanel(ctx: MePanelContext): void {
     rows.set(f, { btn, thumb, name, chip, reset });
     list.appendChild(createEl('div', { className: 'creator-me-row', 'data-feature': f }, btn, chip, reset));
   }
-  const tagBtn = createEl('button', { type: 'button', className: 'creator-me-link', title: "Open this style's skin in 3D with the tag brush, to fix what counts as hair, eyes or skin" }, 'Tag this skin');
+  const tagBtn = createEl('button', { type: 'button', className: 'creator-me-link', title: 'Open the library skins as they are, to mark what is skin, hair, eyes and outfit' }, 'Tag skins');
   tagBtn.addEventListener('click', () => {
-    const path = selected ? getMeChoice(selected).style : null;
-    if (path && selected) ctx.openForTagging(path, selected);
+    if (!selected) return;
+    ctx.openForTagging(getMeChoice(selected).style, selected);
   });
   const panel = createEl('div', { id: 'creator-me-panel', className: 'creator-me-panel', role: 'region', 'aria-label': 'Me' },
     createEl('div', { className: 'creator-layers-panel-title creator-panel-title' }, 'Me'),
-    createEl('p', { className: 'creator-me-intro' }, 'Pick your hair, eyes and skin, then dress up in the Wardrobe. They stay on through every outfit.'),
     list,
     createEl('div', { className: 'creator-me-actions' }, tagBtn),
   );
@@ -238,7 +237,11 @@ export function buildMePanel(ctx: MePanelContext): void {
       ctx2d?.clearRect(0, 0, r.thumb.width, r.thumb.height);
       if (style) void ensureSource(style).then((src) => { if (src && getMeChoice(f).style === style) drawCutout(r.thumb, src, f); });
     }
-    tagBtn.disabled = !(selected && getMeChoice(selected).style);
+    const tagging = selected ? getMeChoice(selected).style : null;
+    tagBtn.textContent = tagging ? 'Tag this skin' : 'Tag skins';
+    tagBtn.title = tagging
+      ? `Open this ${selected} style's skin as it is, to mark what is skin, hair, eyes and outfit`
+      : 'Open the library skins as they are, to mark what is skin, hair, eyes and outfit';
     syncActive();
   }
 

@@ -42,6 +42,7 @@ import {
   saveFeatureTags,
   skinPixelKey,
 } from './featureTagsStore';
+import { isTagSessionActive, onTagSessionChanged, startTagSession } from './tagSession';
 
 export type FeatureTagsPanelContext = {
   getSkinCanvas: () => HTMLCanvasElement;
@@ -171,6 +172,8 @@ export function buildFeatureTagsPanel(ctx: FeatureTagsPanelContext): void {
     syncUi();
   });
 
+  const libraryBtn = createEl('button', { type: 'button', className: 'creator-feature-tags-link', title: 'Step through the library skins as they are and tag them (your character is set aside)' }, 'Tag library skins');
+  libraryBtn.addEventListener('click', () => void startTagSession(null, getFeatureTagBrush() ?? 'hair'));
   const exportBtn = createEl('button', { type: 'button', className: 'creator-feature-tags-link', title: 'Download the tags of every skin you have tagged' }, 'Export');
   exportBtn.addEventListener('click', () => {
     const blob = new Blob([exportFeatureTags()], { type: 'application/json' });
@@ -203,7 +206,7 @@ export function buildFeatureTagsPanel(ctx: FeatureTagsPanelContext): void {
     brushRow,
     createEl('div', { className: 'creator-feature-tags-modes', role: 'group', 'aria-label': 'Brush shape' }, pixelBtn, fillBtn),
     status,
-    createEl('div', { className: 'creator-feature-tags-actions' }, resetBtn, exportBtn, importBtn, importInput),
+    createEl('div', { className: 'creator-feature-tags-actions' }, libraryBtn, resetBtn, exportBtn, importBtn, importInput),
   );
   host.insertBefore(panel, host.firstChild);
 
@@ -273,6 +276,7 @@ export function buildFeatureTagsPanel(ctx: FeatureTagsPanelContext): void {
     panel.classList.toggle('is-tagging', brush != null);
     doneBtn.hidden = brush == null;
     resetBtn.disabled = !saved;
+    libraryBtn.hidden = isTagSessionActive();
     const tagged = countTaggedSkins();
     if (brush) {
       setStatus(fillMode
@@ -387,6 +391,7 @@ export function buildFeatureTagsPanel(ctx: FeatureTagsPanelContext): void {
     else window.setTimeout(syncSkin, 0);
   }));
   creatorScope.track(creatorToolsSlice.subscribe(() => setFeatureTagBrush(null)));
+  creatorScope.track(onTagSessionChanged(() => syncUi()));
   creatorScope.track(creatorCanvasSlice.subscribe(() => {
     if (overlay) return;
     window.clearTimeout(syncTimer);

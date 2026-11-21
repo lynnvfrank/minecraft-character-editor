@@ -22,6 +22,7 @@ export type CreatorTexturePositionPayload = {
   hoverColor?: string | null;
 };
 
-export type CreatorSkinLoadPayload = { path: string };
+/** `raw`: a library skin shown for tagging, not the character's skin (arm width is still re-detected). */
+export type CreatorSkinLoadPayload = { path: string; raw?: boolean };
 
 export type CreatorLockFeedbackPayload = { layer: string };

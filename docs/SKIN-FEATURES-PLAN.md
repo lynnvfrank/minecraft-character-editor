@@ -27,7 +27,7 @@ the legs, and it's drawn in every style imaginable. Detection only finds the com
 back), so the tool is built for people to paint what they see. A person's eye is the reliable source of what each
 pixel is; the guess is only a head start.
 
-Maps are **metadata beside the skin**, never baked into it. A map starts as an automatic guess from the Make it me
+Maps are **metadata beside the skin**, never baked into it. A map starts as an automatic guess from the styler's
 detectors, and a person corrects it by painting tags in the 2D and 3D editors. Once a skin is tagged, everything that
 needs to know "what is hair here" reads the tags instead of guessing.
 
@@ -49,8 +49,13 @@ needs to know "what is hair here" reads the tags instead of guessing.
     Ctrl+S, or click elsewhere.
   - When a tagged skin is lightly repainted (under 400 pixels changed), its tags carry over to the new picture.
   - Re-guess drops your edits for the skin. Export and Import share tag work.
-- **Make it me uses the tags.** `styleSkin` takes `tags` (`skinStyler.ts`). For a tagged skin, recoloring hair, skin
-  and outfit uses exactly the tagged pixels instead of detection.
+- **Tagging library skins** (`src/creator/tagSession.ts`): "Tag this skin" in Me, or "Tag library skins" in the
+  Feature tags panel, opens a session in the 2D/3D editor:
+  - Your character (its canvas, skin and undo history) is set aside, and the raw library skin shows as it really is,
+    with no Me and no outfit.
+  - A bar along the top steps through the library: previous / next / next untagged. It also has **Original** to hide
+    the tag colors, and **Back to my character**, which puts your character back exactly as it was.
+  - Switching to Me or the Wardrobe, or leaving Design, also ends the session and restores the character first.
 
 ### Mixing rules (`composeFeatures`)
 
