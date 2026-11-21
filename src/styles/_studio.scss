@@ -1,10 +1,6 @@
 // Dance studio (#/studio, see src/ui/studioPanel.ts). Same panel chrome as the Move panel and the
 // editor panels: 0.92 fill, 1px border, 8px radius. Docked on the right; the stage stays visible.
 
-// Second button under Design in the home view's lower-left panel.
-.creator-home-panel .creator-home-btn + .creator-home-btn {
-  margin-top: 0.4rem;
-}
 
 .studio-panel {
   display: none;

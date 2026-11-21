@@ -83,8 +83,6 @@ export type StudioPanelDeps = {
     /** performance.now() time of the next bar line, or null when the beat isn't playing. */
     nextBarStartMs: () => number | null;
   };
-  /** Leave the studio (back to the home view). */
-  onExit: () => void;
 };
 
 const pct = (w: number) => `${Math.round(w * 100)}%`;
@@ -123,11 +121,8 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   // --- Header ---
   const header = el('div', 'studio-header');
   const title = el('h2', 'studio-title', 'Dance studio');
-  const exitBtn = el('button', 'studio-btn', 'Home');
-  exitBtn.type = 'button';
-  exitBtn.id = 'studio-exit-btn';
-  exitBtn.addEventListener('click', () => deps.onExit());
-  header.append(title, exitBtn);
+  // Leaving the studio is the lower-right mode switcher's job (Design / Home).
+  header.append(title);
 
   const labels = new Map<string, string>();
   const labelFor = (key: string) => labels.get(key) ?? moveLabel(key);

@@ -1,0 +1,95 @@
+// Mode switcher (src/ui/routeButtons.ts): Design / Studio / Home in the lower right of every mode.
+// Each mode shows the other two; the button for the current route is hidden.
+// It sits left of the round buttons (theme, About, Residents...) that stack at right: 12px.
+
+.mode-switcher {
+  position: fixed;
+  right: 60px;
+  bottom: 12px;
+  z-index: 50;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--fg-rgb), 0.25);
+  background: rgba(var(--panel-rgb), 0.92);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: rgba(var(--fg-rgb), 0.5);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(var(--fg-rgb), 0.5);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.68;
+    cursor: wait;
+  }
+}
+
+// Design keeps its rainbow so the way into the creator still stands out.
+#enter-creator-btn {
+  border-color: transparent;
+  background:
+    linear-gradient(rgba(var(--panel-rgb), 0.9), rgba(var(--panel-rgb), 0.9)) padding-box,
+    linear-gradient(135deg, #ff9ff3, #48dbfb, #feca57, #ff9ff3) border-box;
+  border: 2px solid transparent;
+}
+
+// Each mode shows the other two.
+body[data-route='viewer'] #enter-viewer-btn,
+body[data-route='creator'] #enter-creator-btn,
+body[data-route='studio'] #enter-studio-btn {
+  display: none;
+}
+
+// Preview is a bare capture view: no switcher.
+body[data-route='preview'] .mode-switcher {
+  display: none;
+}
+
+// The studio panel is docked on the right; end it above the switcher.
+body[data-route='studio'] .studio-panel {
+  bottom: 4rem;
+}
+
+// The creator's right-hand panels reach the bottom; end them above the switcher.
+body[data-route='creator'] .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-single-library,
+body[data-route='creator'] .creator-upper-right-panels-root.creator-upper-right-panels-root--wardrobe-dual-libraries,
+body[data-route='creator'] .creator-lower-right-panels {
+  bottom: 4rem;
+}
+
+// Leaving the creator or the home view: slide away with the other panels.
+body[data-creator-exiting='1'] .mode-switcher,
+body[data-home-exiting='1'] .mode-switcher {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+@media (max-width: 620px) {
+  .mode-btn {
+    padding: 0.45rem 0.7rem;
+    font-size: 0.85rem;
+  }
+}

@@ -34,8 +34,6 @@
 
 // Text on saturated buttons stays light in both themes.
 :root[data-theme='bright'] {
-  #enter-viewer-btn,
-  #enter-creator-btn,
   .creator-tools-panel-btn.active,
   .creator-tools-panel-mode-btn.active {
     color: #fff;
