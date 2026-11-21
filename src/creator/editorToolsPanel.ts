@@ -23,8 +23,8 @@ export function buildEditorToolsPanel(ctx: EditorToolsContext): void {
 
   const modeIconOpts = { width: 18, height: 18 };
   const modePanel = createEl('div', { id: 'creator-mode-panel', className: 'creator-mode-panel', role: 'group', 'aria-label': 'Creator mode' },
+    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_STYLE, title: 'Me: your hair, eyes, skin and arms', 'aria-label': 'Me' }, createIcon('modeCreatorStyle', modeIconOpts), ' Me'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_WARDROBE, title: 'Wardrobe', 'aria-label': 'Wardrobe' }, createIcon('modeCreatorWardrobe', modeIconOpts), ' Wardrobe'),
-    createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_STYLE, title: 'Make it me: style this skin to your look', 'aria-label': 'Make it me' }, createIcon('modeCreatorStyle', modeIconOpts), ' Me'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_3D, title: 'Edit on 3D model' }, createIcon('modeCreator3D', modeIconOpts), ' 3D'),
     createEl('button', { type: 'button', className: 'creator-tools-panel-btn creator-tools-panel-mode-btn', 'data-mode': EDIT_MODE_2D, title: 'Edit on 2D canvas' }, createIcon('modeCreator2D', modeIconOpts), ' 2D')
   );

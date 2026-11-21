@@ -64,18 +64,31 @@ The outfit skin is the base. The other features are laid onto it in this order:
    - Elsewhere it uses the source's median tone, shaded like the pixel it replaces.
 5. Leftover overlay texels are cleared, so unchosen hair or outfit doesn't linger.
 
-## Phase 2: mix and match in the Wardrobe (built)
+## Phase 2: Me, then the Wardrobe (built)
 
-- **Pieces buttons** (`src/creator/wardrobePieces.ts`): Hair, Eyes and Skin sit above the layer tree in the
-  Wardrobe panel and work like the layers. The outfit is still picked with the Outfits list and the part libraries.
-- Selecting a piece shows its **library on the right**, in the same place and style as a layer's parts library. It is
-  every skin's face, plus "Outfit's own". Hovering a face previews it on the character, and clicking picks it.
-  Selecting any layer row hands the right side back to that layer's library.
-- The mix runs as the Wardrobe's final pass (`finalizeComposite`), before Lock my look. Pieces therefore stay on
-  through every outfit and part you pick, and the outfit's own hair and face are replaced rather than layered under.
-- Picked skins are read the same way the editor loads them, so tags painted in 2D/3D are found by pixel hash.
-  Untagged skins use the automatic guess (cached). Picks are remembered in localStorage.
-- Still to do: show which skins are hand-tagged in the picker, with a way to jump to the tag tool for an untagged one.
+Design starts in **Me**, where a person designs themself. The **Wardrobe** then dresses that Me in outfits.
+
+- **Me tab** (`src/creator/mePanel.ts`, the first mode of Design):
+  - Rows for **Hair**, **Eyes** and **Skin**. Each is a **style** (any skin in the library, or "Outfit's own") plus an
+    optional **color**.
+  - Selecting a row shows that feature's **style catalog** on the right: every skin with just that feature cut out of
+    it by its tags (`drawCutout`). Hair shows on a faint head and shoulders, eyes on a plain face, and skin with its
+    own shading. Skins with none of a feature are left out.
+  - Hover a style to preview it, click to keep it. The shared color picker colors the selected feature, and × goes
+    back to the style's own colors.
+  - **Arms** (Auto / Slim / Classic) live in Me too. Slim or Classic converts every outfit's and style's arm textures
+    to that shape (`src/skin/armConvert.ts`), so any outfit fits. Auto leaves each outfit as it is.
+  - "Tag this skin" opens the selected style's skin in 3D with that feature's tag brush, to fix how it's cut out.
+- **Dressing** (`src/styler/meLook.ts` `dressMe`, `src/creator/me.ts` `applyMe`) is the Wardrobe's final pass:
+  - The outfit's own hair, face and skin are replaced by Me's styles.
+  - Each feature is then recolored on exactly its own pixels. Skin keeps its shading, and hair keeps its highlights.
+    Eyes change only their colored iris pixels, not the whites, lashes or mouth.
+  - Me stays on through every outfit and part picked in the Wardrobe, and in the Me tab it shows on the current outfit.
+- Styles are read the same way the editor loads skins, so tags painted in 2D/3D are found by pixel hash. Untagged
+  skins use the automatic guess, which is cached. Me is remembered in localStorage.
+- Later, **outfits may override Me** through outfit metadata. For example, a helmet hides the hair, and a costume can
+  say "hair goes inside". Today hair is always drawn over the outfit.
+- Still to do: mark hand-tagged skins in the catalogs, and remove duplicate styles. Many skins share the same base.
 
 ## Phase 3: ship tags for the built-in wardrobe
 
@@ -88,8 +101,6 @@ The outfit skin is the base. The other features are laid onto it in this order:
 
 - Brush sizes, plus a "mirror left/right" option, since most faces and outfits are symmetric.
 - **Eye placement:** move eyes to the target face's eye row. `makeFaceTemplate` already finds an eye anchor.
-- **Arm width:** slim and classic arms use different texel columns. Map tags between the two shapes when sources
-  differ.
 - **Stacking choices:** hair over a hat or a hat over hair, and long hair over or under a jacket.
 - Tag-aware hover previews, and an "untagged pixels" highlight to find gaps quickly.
 

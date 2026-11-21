@@ -234,12 +234,18 @@ function medianTagged(t: TaggedSkin, label: FeatureLabel): RGB | null {
  * cleared, so hair or outfit that isn't chosen doesn't linger on the outer layer.
  */
 export function composeFeatures(sources: FeatureSources): SkinPixels {
+  return composeFeaturesLabeled(sources).pixels;
+}
+
+/** composeFeatures, plus what each output pixel is (so the result can be recolored by feature). */
+export function composeFeaturesLabeled(sources: FeatureSources): { pixels: SkinPixels; labels: FeatureMap } {
   const outfit = sources.outfit;
   const skinSrc = sources.skin ?? outfit;
   const hairSrc = sources.hair ?? outfit;
   const eyesSrc = sources.eyes ?? outfit;
   const out = { width: 64, height: 64, data: new Uint8ClampedArray(FEATURE_MAP_SIZE * 4) };
   const o = out.data;
+  const labels = createFeatureMap();
 
   const tone = medianTagged(skinSrc, 'skin') ?? medianTagged(outfit, 'skin') ?? [224, 172, 138];
   const outfitTone = medianTagged(outfit, 'skin');
@@ -253,11 +259,15 @@ export function composeFeatures(sources: FeatureSources): SkinPixels {
     if (!isUsedTexel(k)) continue;
     if (isFaceTexel(k) && eyesSrc.map[k] === FEATURE_CODE.eyes) {
       copy(eyesSrc.pixels, k);
+      labels[k] = FEATURE_CODE.eyes;
     } else if (hairSrc.map[k] === FEATURE_CODE.hair) {
       copy(hairSrc.pixels, k);
+      labels[k] = FEATURE_CODE.hair;
     } else if (outfit.map[k] === FEATURE_CODE.outfit) {
       copy(outfit.pixels, k);
+      labels[k] = FEATURE_CODE.outfit;
     } else if (!isOverlayTexel(k)) {
+      labels[k] = FEATURE_CODE.skin;
       if (skinSrc.map[k] === FEATURE_CODE.skin) {
         copy(skinSrc.pixels, k);
       } else {
@@ -282,5 +292,5 @@ export function composeFeatures(sources: FeatureSources): SkinPixels {
       o[k * 4 + 3] = 255;
     }
   }
-  return out;
+  return { pixels: out, labels };
 }

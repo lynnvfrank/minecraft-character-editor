@@ -109,7 +109,7 @@ export function createCreatorState(): CreatorState {
     skinSwatchColors: [],
     activeSwatchPalette: 'skin',
     activeTool: 'navigate',
-    editMode: 'wardrobe',
+    editMode: 'style',
     layer3DVisible: Object.fromEntries(LAYER_KEYS.map((k) => [k, true])),
     layer3DPartVisible: {},
     layer3DLocked: Object.fromEntries(LAYER_KEYS.map((k) => [k, false])),

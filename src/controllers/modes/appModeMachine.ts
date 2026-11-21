@@ -198,7 +198,7 @@ export function parseHashToRouteInfo(): RouteInfo {
     const creatorMode: EditMode =
       modeSegment === '2d' || modeSegment === 'wardrobe' || modeSegment === '3d' || modeSegment === 'style'
         ? modeSegment
-         : 'wardrobe';
+         : 'style';
     return { route: 'creator', creatorMode };
   }
   return { route: 'viewer', creatorMode: null };

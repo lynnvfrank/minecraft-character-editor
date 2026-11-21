@@ -61,8 +61,6 @@ export type WardrobeDeps = {
   getFocusedCreationEnabled: () => boolean;
   /** Optional last pass over the composed outfit (e.g. the locked "Make it me" look). */
   finalizeComposite?: (data: ImageData) => ImageData | null;
-  /** While a Pieces button (hair / eyes / skin) is selected: its right-side library replaces the layer's. */
-  getPieceLibraryPanelId?: () => string | null;
 };
 
 export type WardrobeApi = {
@@ -223,8 +221,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
   function showWardrobeLibraryPanel(layer: WardrobeLayerKey | null): void {
     const root = document.getElementById('creator-upper-right-panels-root');
-    const pieceId = layer != null && layer === wardrobeSelectedLayer ? deps.getPieceLibraryPanelId?.() ?? null : null;
-    const targetIds = pieceId ? [pieceId] : getWardrobeLibraryPanelIdsForLayer(layer);
+    const targetIds = getWardrobeLibraryPanelIdsForLayer(layer);
     const currentIds = getVisibleWardrobeLibraryPanelIds();
 
     if (targetIds.length === 0) {
@@ -234,7 +231,7 @@ export function createWardrobeApi(deps: WardrobeDeps): WardrobeApi {
 
     // Invalidate any in-flight hide-all or cross-fade (e.g. fast hover away then back to selection).
     const token = ++wardrobePanelTransitionToken;
-    const isDualLibraries = !pieceId && layer != null && isWardrobeDualLibrarySplitLayer(layer);
+    const isDualLibraries = layer != null && isWardrobeDualLibrarySplitLayer(layer);
     root?.classList.toggle('creator-upper-right-panels-root--wardrobe-dual-libraries', isDualLibraries);
     root?.classList.toggle(
       'creator-upper-right-panels-root--wardrobe-single-library',

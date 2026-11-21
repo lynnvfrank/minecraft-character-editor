@@ -18,7 +18,7 @@ export const MODE_PANEL_HIDDEN_CLASS = 'creator-mode-panel-hidden';
 export const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
   { id: 'creator-save-download-panel', modes: ['wardrobe', 'style', '2d', '3d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-wardrobe-parts-panel', modes: ['wardrobe'], enterFrom: 'left', exitTo: 'left' },
-  { id: 'creator-arm-model-panel', modes: ['wardrobe', '2d', '3d'], enterFrom: 'left', exitTo: 'left' },
+  { id: 'creator-arm-model-panel', modes: ['style', '2d', '3d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-upper-right-panels-root', modes: ['wardrobe'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-canvas-overlays-panel', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-layers-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
@@ -27,7 +27,8 @@ export const MODE_PANEL_CONFIGS: readonly ModePanelConfig[] = [
   { id: 'creator-right-panels-group', modes: ['style', '2d', '3d'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-3d-preview-slot', modes: ['2d'], enterFrom: 'left', exitTo: 'left' },
   { id: 'creator-top-center-panels', modes: ['wardrobe', '3d'], enterFrom: 'top', exitTo: 'top' },
-  { id: 'creator-style-panel', modes: ['style'], enterFrom: 'left', exitTo: 'left' },
+  { id: 'creator-me-panel', modes: ['style'], enterFrom: 'left', exitTo: 'left' },
+  { id: 'creator-me-catalog', modes: ['style'], enterFrom: 'right', exitTo: 'right' },
   { id: 'creator-feature-tags-panel', modes: ['2d', '3d'], enterFrom: 'left', exitTo: 'left' },
 ];
 
@@ -108,7 +109,7 @@ export function createModePanelTransitions(): ModePanelTransitions {
       clearModeAnimClasses(el);
       const isVisibleInMode = cfg.modes.includes(mode);
       setModePanelHidden(el, !isVisibleInMode);
-      if (isVisibleInMode && (cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group' || cfg.id === 'creator-upper-right-panels-root' || cfg.id === 'creator-style-panel')) {
+      if (isVisibleInMode && (cfg.id === 'creator-3d-preview-slot' || cfg.id === 'creator-right-panels-group' || cfg.id === 'creator-upper-right-panels-root' || cfg.id === 'creator-me-panel')) {
         needsResizeAfterShow = true;
       }
     }

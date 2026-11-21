@@ -23,6 +23,11 @@ export function registerArmModelPanelContext(ctx: ArmModelPanelContext): void {
   registered = ctx;
 }
 
+/** The arm setting's owner (main.ts), once registered. */
+export function getArmModelPanelContext(): ArmModelPanelContext | null {
+  return registered;
+}
+
 const LABELS: Record<ArmModelSetting, string> = { auto: 'Auto', slim: 'Slim', classic: 'Classic' };
 const TITLES: Record<ArmModelSetting, string> = {
   auto: 'Pick arm width from the skin',
@@ -78,7 +83,7 @@ export function buildArmModelPanel(): void {
 
   // Sit under whichever main panel is showing: Layers (3D/2D) or Wardrobe. They never
   // show together, so placing after the later of the two works for every mode.
-  const anchor = ['creator-layers-panel', 'creator-wardrobe-parts-panel']
+  const anchor = ['creator-layers-panel', 'creator-wardrobe-parts-panel', 'creator-me-panel']
     .map((id) => document.getElementById(id))
     .find((el) => el?.parentElement === host);
   if (anchor) host.insertBefore(panel, anchor.nextSibling);

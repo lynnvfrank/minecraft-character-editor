@@ -33,15 +33,15 @@ import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
 import { buildArmModelPanel } from './creator/armModelPanel';
 import { buildFeatureTagsPanel } from './creator/featureTagsPanel';
 import {
-  buildStylePanel,
-  getStyleTargetColor,
-  isStyleColorTargetActive,
-  noteStyleUndoRedo,
-  onLockedLookChanged,
-  onStyleTargetChanged,
-  setStyleTargetColor,
-  styleWithLockedLook,
-} from './creator/stylePanel';
+  buildMePanel,
+  getMeTargetColor,
+  isMeColorTargetActive,
+  onMeTargetChanged,
+  setMeTargetColor,
+} from './creator/mePanel';
+import { applyMe, notifyMeArmsChanged, onMeChanged, setMeArmTarget } from './creator/me';
+import { getArmModelPanelContext } from './creator/armModelPanel';
+import { setFeatureTagBrush } from './creator/featureTagBrush';
 import * as skinIO from './creator/skinIO';
 import * as undo from './creator/undo';
 import * as brush from './creator/brush';
@@ -62,13 +62,6 @@ import {
 import type { WardrobeLayerKey } from './creator/wardrobeLayers';
 import { createColorActions, extractColorsFromSkin } from './creator/swatches';
 import { createSkinGalleryApi, getOutfitSkins } from './creator/skinGallery';
-import {
-  applyPieces,
-  buildPiecesPanel,
-  clearPieceSelection,
-  getPiecesLibraryPanelId,
-  onPiecesChanged,
-} from './creator/wardrobePieces';
 import { creatorScope } from './creator/lifecycle';
 
 // --- Imports: events, state, lib, viewer ---
@@ -178,12 +171,8 @@ const wardrobeApi = createWardrobeApi({
   animateModePanelIn: modePanelTransitions.animateModePanelIn,
   animateModePanelOut: modePanelTransitions.animateModePanelOut,
   getFocusedCreationEnabled: () => state.focusedCreationEnabled,
-  // Pieces (hair / eyes / skin from other skins) first, then the locked Make it me look.
-  finalizeComposite: (data) => {
-    const mixed = applyPieces(data);
-    return styleWithLockedLook(mixed ?? data) ?? mixed;
-  },
-  getPieceLibraryPanelId: getPiecesLibraryPanelId,
+  // Every outfit is worn by Me: my hair, eyes, skin and arm shape (me.ts).
+  finalizeComposite: (data) => applyMe(data),
 });
 
 const skinGalleryApi = createSkinGalleryApi({
@@ -267,7 +256,6 @@ function updateCanvasCursor(): void {
 
 function performUndo(): void {
   if (!blockyCtx) return;
-  noteStyleUndoRedo();
   undo.performUndo({
     undoStack: state.undoStack,
     redoStack: state.redoStack,
@@ -283,7 +271,6 @@ function updateAllUndoRedoButtons(): void {
 
 function performRedo(): void {
   if (!blockyCtx) return;
-  noteStyleUndoRedo();
   undo.performRedo({
     undoStack: state.undoStack,
     redoStack: state.redoStack,
@@ -329,17 +316,17 @@ export function updateHoverInfo(part: string | null, skinX: number, skinY: numbe
 
 /** Current color for the shared picker/swatches: the selected look part in the Me tab, else the paint color. */
 function getPickerColor(): string {
-  return (isStyleColorTargetActive() && getStyleTargetColor()) || state.currentColor;
+  return (isMeColorTargetActive() && getMeTargetColor()) || state.currentColor;
 }
 
 /** Apply a color from the shared picker/swatches; in the Me tab it recolors the selected look part. */
 function applyPickerColor(hex: string, addToSwatchList = true, markAsUserSelected = true): void {
-  if (!isStyleColorTargetActive()) {
+  if (!isMeColorTargetActive()) {
     applyColorToUI(hex, addToSwatchList, markAsUserSelected);
     return;
   }
   const normalized = hex.slice(0, 7).toLowerCase();
-  setStyleTargetColor(normalized);
+  setMeTargetColor(normalized);
   if (addToSwatchList) addToSwatch(normalized);
   creatorColorSlice.notify({ color: normalized });
 }
@@ -421,51 +408,44 @@ function buildCreatorPanels(): void {
   buildWardrobePartsPanel({
     getEditMode: () => state.editMode,
     getSelectedLayer: () => wardrobeApi.getWardrobeSelectedLayer(),
-    setSelectedLayer: (layer) => {
-      clearPieceSelection();
-      wardrobeApi.setWardrobeSelectedLayer(layer);
-    },
+    setSelectedLayer: (layer) => wardrobeApi.setWardrobeSelectedLayer(layer),
   });
   buildSaveDownloadPanel({
     onSave: skinGalleryApi.saveCurrentSkinToOutfits,
     onDownload: skinGalleryApi.downloadCurrentSkin,
   });
-  buildArmModelPanel();
-  buildPiecesPanel({
+  buildMePanel({
     getSkins: getOutfitSkins,
-    showLibrary: () => wardrobeApi.showWardrobeLibraryPanel(wardrobeApi.getWardrobeSelectedLayer()),
+    openForTagging: (path, feature) => {
+      void loadSkinFromPathFn(path).then(() => {
+        setEditMode('3d', { fromUserModeNavigation: true });
+        window.setTimeout(() => setFeatureTagBrush(feature), 400);
+      });
+    },
   });
-  const resolvePieces = () => {
-    if (state.editMode !== 'wardrobe') return;
+  buildArmModelPanel();
+  // Me (and the outfit it's dressed in) shows in the Me tab and the Wardrobe.
+  const redressMe = () => {
+    if (state.editMode !== 'wardrobe' && state.editMode !== 'style') return;
     // No outfit captured yet (first skin of the visit): take the canvas as the outfit.
     if (!wardrobeApi.hasWardrobeBase()) wardrobeApi.captureWardrobeBaseFromCurrentCanvas();
     void wardrobeApi.resolveWardrobeComposite();
   };
-  creatorScope.track(onPiecesChanged(resolvePieces));
-  onStyleTargetChanged((hex) => creatorColorSlice.notify({ color: hex }));
-  // Locked look toggled or its face finished loading: refresh the outfit shown in the Wardrobe.
-  creatorScope.track(onLockedLookChanged(() => {
-    if (state.editMode === 'wardrobe') void wardrobeApi.resolveWardrobeComposite();
-  }));
+  creatorScope.track(onMeChanged(redressMe));
+  onMeTargetChanged((hex) => creatorColorSlice.notify({ color: hex }));
+  // Arms: Slim / Classic make every outfit fit that shape; Auto leaves each outfit as it is.
+  const armCtx = getArmModelPanelContext();
+  setMeArmTarget(() => {
+    const setting = armCtx?.getSetting();
+    return setting === 'slim' || setting === 'classic' ? setting : null;
+  });
+  if (armCtx) creatorScope.track(armCtx.subscribe(() => notifyMeArmsChanged()));
   buildFeatureTagsPanel({
     getSkinCanvas,
     onCanvasChange: () => {
       if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
       creatorCanvasSlice.notify();
     },
-  });
-  buildStylePanel({
-    getSkinCanvas,
-    onCanvasChange: () => {
-      if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
-      creatorCanvasSlice.notify();
-    },
-    pushUndoLoad: (beforeData, afterData) => {
-      state.redoStack = [];
-      state.undoStack.push({ type: 'load', beforeData, afterData });
-      if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
-    },
-    updateUndoRedoButtons: updateAllUndoRedoButtons,
   });
   buildTexturePositionPanel();
   buildCameraControls({
@@ -737,6 +717,11 @@ export function setEditMode(
     wardrobeApi.showWardrobeLibraryPanel(wardrobeApi.getWardrobeSelectedLayer());
   } else {
     wardrobeApi.showWardrobeLibraryPanel(null);
+  }
+  if (mode === EDIT_MODE_STYLE) {
+    // Me tab: show the current outfit worn by Me (a 2D/3D paint since becomes part of the outfit).
+    wardrobeApi.captureWardrobeBaseFromCurrentCanvas(creatorCurrentSkinPath);
+    void wardrobeApi.resolveWardrobeComposite();
   }
   if (options.syncUrl !== false) {
     syncCreatorModeUrl(mode);

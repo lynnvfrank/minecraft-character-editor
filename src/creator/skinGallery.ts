@@ -85,9 +85,9 @@ export function createSkinGalleryApi(deps: SkinGalleryDeps): SkinGalleryApi {
     renderToDisplay();
     updateAllUndoRedoButtons();
 
-    if (state.editMode === 'wardrobe' && !wardrobeApi.hasWardrobeLibrarySelection()) {
+    if ((state.editMode === 'wardrobe' || state.editMode === 'style') && !wardrobeApi.hasWardrobeLibrarySelection()) {
       wardrobeApi.captureWardrobeBaseFromCurrentCanvas(path);
-      // Run the Wardrobe's final pass so picked pieces and a locked look show on this skin too.
+      // Run the Wardrobe's final pass so this skin is worn by Me.
       void wardrobeApi.resolveWardrobeComposite();
     }
     wardrobeApi.syncWardrobeLibraryActiveStates();

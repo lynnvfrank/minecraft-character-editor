@@ -40,7 +40,7 @@ import {
   flushDeferredWardrobeLibraryPanelsAfterCamera,
 } from './creator';
 import { EDIT_MODE_STYLE, EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
-import { getStyleFocus, onStyleFocusChanged } from './creator/stylePanel';
+import { getMeFocus, onMeFocusChanged } from './creator/mePanel';
 import { createIcon } from './creator/icons';
 import { createCharacterController } from './controllers/character';
 import {
@@ -208,7 +208,7 @@ const previewRouteController = createPreviewRouteController(
 // Route and layout helpers
 // -----------------------------------------------------------------------------
 
-function getCreatorHash(mode: EditMode = EDIT_MODE_WARDROBE): string {
+function getCreatorHash(mode: EditMode = EDIT_MODE_STYLE): string {
   return `#/creator/${mode}`;
 }
 
@@ -1011,19 +1011,19 @@ function setupStyleFocusCamera(): void {
     );
     void creatorPoseController.animateCameraToCreatorView({ position, target, fov: preset.fov ?? 35 });
   };
-  const focusCamera = (section: ReturnType<typeof getStyleFocus>) => {
+  const focusCamera = (feature: ReturnType<typeof getMeFocus>) => {
     if (getRoute() !== 'creator' || getEditMode() !== EDIT_MODE_STYLE) return;
-    // Hair needs shoulders/back in view; the face wants a close-up.
-    moveCamera(section === 'face' ? 'head' : section === 'hair' ? 'top' : 'fullOutfit');
+    // Hair needs shoulders/back in view; eyes want a close-up; skin the whole body.
+    moveCamera(feature === 'eyes' ? 'head' : feature === 'hair' ? 'top' : 'fullOutfit');
   };
-  onStyleFocusChanged(focusCamera);
+  onMeFocusChanged(focusCamera);
   // Leaving the Me tab: don't strand the other modes on a hair/face close-up.
   creatorModeSlice.subscribe((detail) => {
     if (getRoute() !== 'creator') return;
     if (detail.previousMode === EDIT_MODE_STYLE && detail.mode !== EDIT_MODE_STYLE) moveCamera('fullOutfit');
   });
   // Loaded straight into the Me tab: the panel announced its section before this hook existed.
-  window.setTimeout(() => focusCamera(getStyleFocus()), 300);
+  window.setTimeout(() => focusCamera(getMeFocus()), 300);
 }
 
 function setupCreatorPreviewDirtySubscription(): void {
