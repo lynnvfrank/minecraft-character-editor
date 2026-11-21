@@ -5,9 +5,29 @@
  * the primary (selected / main) character included. `null` means the user never chose: the crowd
  * then runs as it always has (random visitors from every skin).
  *
+ * A roster entry is a bundled skin's path or, for one of the user's own outfits
+ * (domain/outfits.ts), the key `outfit:<id>`. The crowd controller turns that key into the
+ * outfit's image and arm model when the character appears.
+ *
  * Pure rules only; state/residentsStore.ts persists the roster and
  * controllers/crowdController.ts applies it to the live crowd.
  */
+
+export const OUTFIT_KEY_PREFIX = 'outfit:';
+
+/** Roster entry for the outfit with this id. */
+export function outfitRosterKey(id: string): string {
+  return `${OUTFIT_KEY_PREFIX}${id}`;
+}
+
+export function isOutfitKey(skin: string | null | undefined): skin is string {
+  return typeof skin === 'string' && skin.startsWith(OUTFIT_KEY_PREFIX) && skin.length > OUTFIT_KEY_PREFIX.length;
+}
+
+/** The outfit id a roster entry names, or null for a bundled skin. */
+export function outfitIdFromKey(skin: string | null | undefined): string | null {
+  return isOutfitKey(skin) ? skin.slice(OUTFIT_KEY_PREFIX.length) : null;
+}
 
 /** Keep only a well-formed roster from untrusted JSON. null = nothing (usable) stored. */
 export function parseResidents(json: string | null): string[] | null {
@@ -77,6 +97,28 @@ export function toggleResident(
   return { roster: [...current, skin], outcome: 'added' };
 }
 
+export type AddResidentOutcome = 'added' | 'already' | 'full' | 'unknown';
+
+/**
+ * Move one skin in (the creator's "Send to village"). Starts from the stored roster or, with
+ * nothing stored, from whoever is in the world right now, like the Residents panel does.
+ * Refused (outcome says why, `roster` is that starting roster) when the skin doesn't exist or
+ * the village is at its cap; 'already' when it lives there.
+ */
+export function addResident(
+  stored: readonly string[] | null,
+  present: readonly string[],
+  available: readonly string[],
+  cap: number,
+  skin: string
+): { roster: string[]; outcome: AddResidentOutcome } {
+  const roster = normalizeRoster(stored ?? present, available, cap);
+  if (!available.includes(skin)) return { roster, outcome: 'unknown' };
+  if (roster.includes(skin)) return { roster, outcome: 'already' };
+  if (roster.length >= cap) return { roster, outcome: 'full' };
+  return { roster: [...roster, skin], outcome: 'added' };
+}
+
 /** "Everyone": keep who is there and fill the free places in list order, up to the cap. */
 export function fillRoster(roster: readonly string[], available: readonly string[], cap: number): string[] {
   return normalizeRoster([...roster, ...available], available, cap);
@@ -115,9 +157,11 @@ export function crowdSkinsFor(roster: readonly string[], primarySkin: string | n
  * A skin that isn't in the skin list: a design the user edited and never saved (e.g. a former
  * main character back in the crowd). The roster can't name it, so it is never sent home for
  * "not being on the list" and doesn't take a resident's place.
+ * An outfit key is never custom: the roster can name it, so an outfit that was deleted (its key
+ * is no longer available) is sent home like any other skin that left the roster.
  */
 export function isCustomSkin(skin: string | null, available: readonly string[]): skin is string {
-  return skin != null && !available.includes(skin);
+  return skin != null && !isOutfitKey(skin) && !available.includes(skin);
 }
 
 /**

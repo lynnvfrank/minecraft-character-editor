@@ -37,6 +37,7 @@ import {
   applyFocusedSoloForWardrobeLayer,
   setLayersPanelFocusedListExpanded,
   flushDeferredWardrobeLibraryPanelsAfterCamera,
+  exportTo64x64DataURL,
 } from './creator';
 import { EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
 import { createCharacterController } from './controllers/character';
@@ -104,6 +105,10 @@ import { initAboutPanel } from './ui/aboutPanel';
 import { createMovePanel } from './ui/movePanel';
 import { createResidentsPanel } from './ui/residentsPanel';
 import { createResidentsStore } from './state/residentsStore';
+import { getOutfitsStore } from './state/outfitsStore';
+import { createOutfitResidents } from './controllers/outfitResidents';
+import { createCreatorToWorld } from './controllers/creatorToWorld';
+import { outfitIdFromKey } from './domain/residents';
 import { createStudioPanel } from './ui/studioPanel';
 import { createStudioCapturePanel } from './ui/studioCapturePanel';
 import { createStudioDancersPanel } from './ui/studioDancersPanel';
@@ -612,6 +617,9 @@ async function main(): Promise<void> {
   initAboutPanel();
   const savedSequences = createSavedSequencesStore(getLocalStorage());
   const residents = createResidentsStore(getLocalStorage());
+  // My outfits (kept in the creator) can live in the village: roster entries `outfit:<id>`.
+  const outfits = getOutfitsStore();
+  const outfitResidents = createOutfitResidents(outfits);
   const movePanel = createMovePanel({
     getRoute,
     getCamera: () => sceneContext?.camera ?? null,
@@ -751,6 +759,7 @@ async function main(): Promise<void> {
     resolveModelPath: async (skinPath) =>
       ARM_MODEL_PATHS[(await detectArmModelFromPath(skinPath)) ?? 'classic'],
     getRoster: () => residents.get(),
+    outfits: outfitResidents,
     getCombos: () => savedSequences.list(),
     getTimeOfDay: () => timeOfDay.get().time,
     config: blockWorld ? { nav: blockWorld.crowdNav } : undefined,
@@ -758,12 +767,20 @@ async function main(): Promise<void> {
   // Residents panel: who lives in the village. The store holds the choice; the crowd applies it.
   residents.subscribe(() => crowd.syncRoster());
   createResidentsPanel({
-    getSkins: () => skinsList,
+    getSkins: () => [...outfitResidents.entries(), ...skinsList],
     store: residents,
     getPresentSkins: crowd.presentSkins,
     getPrimarySkin: crowd.primarySkin,
     cap: crowd.residentsCap,
+    onRemoveOutfit: (key) => void outfits.remove(outfitIdFromKey(key) ?? ''),
+    subscribeSkins: outfits.subscribe,
   });
+  /** Everything a roster may name; drops residents whose skin or outfit no longer exists. */
+  const rosterSkins = () => [...skinsList.map((s) => s.path), ...outfitResidents.keys()];
+  const pruneResidents = () => {
+    if (skinsList.length > 0) residents.prune(rosterSkins(), crowd.residentsCap);
+  };
+  outfits.subscribe(pruneResidents); // a deleted outfit takes its resident with it
 
   // Studio "Dancers" section: backup dancers that copy the lead. They live only on the studio stage.
   const groupDance = createGroupDanceStore(getLocalStorage());
@@ -838,7 +855,7 @@ async function main(): Promise<void> {
     skins = FALLBACK_SKINS;
   }
   skinsList = skins;
-  residents.prune(skins.map((s) => s.path), crowd.residentsCap);
+  pruneResidents();
 
   let animations: AnimationEntry[];
   try {
@@ -882,6 +899,26 @@ async function main(): Promise<void> {
   });
   app.provide('transitions', { getTransitionInFlight: creatorTransitionHandler.getTransitionInFlight });
   routeButtons.setup(creatorTransitionHandler);
+  // Creator "Send to village" / "Dance in studio" (buttons in the creator's Keep/Save panel).
+  createCreatorToWorld({
+    getRoute,
+    hasSkin: getCreatorCanvasPopulated,
+    exportSkin: exportTo64x64DataURL,
+    getArmModel: armModelState.getResolved,
+    outfits,
+    residents,
+    getPresentSkins: crowd.presentSkins,
+    getAvailableSkins: rosterSkins,
+    cap: crowd.residentsCap,
+    wearOutfit: (dataUrl) => {
+      const char = getCharacter(getPrimaryCharacterId());
+      if (!char) return;
+      char.currentSkin = dataUrl;
+      router.noteCreatorLoadedPath(dataUrl);
+      viewerUIController.highlightActiveSkin(char.id, dataUrl);
+    },
+    exitCreator: creatorTransitionHandler.exitCreator,
+  }).start();
 
   const characterEventsController = createCharacterEventsController({
     getCharacter,
@@ -1004,7 +1041,7 @@ async function main(): Promise<void> {
       }
     },
     getSkinLabel: (path) =>
-      skinsList.find((s) => s.path === path)?.label ?? path.split('/').pop()?.replace(/[.]png$/i, '') ?? 'Character',
+      outfitResidents.labelOf(path) ?? skinsList.find((s) => s.path === path)?.label ?? path.split('/').pop()?.replace(/[.]png$/i, '') ?? 'Character',
     roamRadius: blockWorld?.roamRadius ?? DEFAULT_CROWD_CONFIG.edgeRadius + 6,
   }));
 

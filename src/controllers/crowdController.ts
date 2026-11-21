@@ -17,6 +17,9 @@
  * With no roster (null) nothing changes: random visitors from every skin.
  * A character wearing a skin that isn't in the skin list (an edited design, e.g. a former primary
  * swapped back into the crowd) is never removed by the roster and doesn't use up a resident's place.
+ * The user's own outfits (optional `outfits`) are residents too: the roster names one as
+ * `outfit:<id>`, which is turned into the outfit's image and rig when the character appears.
+ * Everything here that compares skins with the roster does so by roster key (`keyOf`).
  *
  * Social life (the sim decides who does what, this file picks the clips):
  * - Greeting: the sim's emote (a wave, a nod...) on each of the two, idle while waiting to answer.
@@ -32,7 +35,7 @@ import { createCrowdSim, DEFAULT_CROWD_CONFIG, type CrowdConfig, type CrowdEvent
 import { comboToRoutine } from '../animation/crowdCombo';
 import type { RoutineStep } from '../animation/studioRoutine';
 import type { XZ } from '../animation/wander';
-import { crowdSkinsFor, diffResidents, isCustomSkin } from '../domain/residents';
+import { crowdSkinsFor, diffResidents, isCustomSkin, isOutfitKey } from '../domain/residents';
 import type { SavedSequence } from '../domain/sequences';
 import { logger } from '../lib';
 import { skyStateAt } from '../lib/dayNight';
@@ -54,6 +57,15 @@ export type CrowdControllerDeps = {
   resolveModelPath: (skinPath: string) => Promise<string>;
   /** Skins chosen to live in the village (primary included), or null for the default crowd. */
   getRoster?: () => readonly string[] | null;
+  /** The user's outfits as residents (controllers/outfitResidents.ts). */
+  outfits?: {
+    /** Roster keys (`outfit:<id>`) of the outfits that exist. */
+    keys: () => readonly string[];
+    /** Roster key for a worn skin: an outfit's key for its image, any other skin unchanged. */
+    keyOf: (skin: string) => string;
+    /** Image and rig for an outfit key; null if there is no such outfit (any more). */
+    resolve: (key: string) => { skin: string; modelPath: string } | null;
+  };
   /** The user's saved combos; a plaza gathering dances one of them. */
   getCombos?: () => readonly SavedSequence[];
   /** Time of day in hours [0, 24); after dusk residents slow down and keep to the lamps. */
@@ -171,21 +183,32 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     }
   }
 
+  /** What a character wears, as the roster names it (an outfit's key rather than its image). */
+  function keyOf(skin: string | null | undefined): string | null {
+    if (skin == null) return null;
+    return deps.outfits?.keyOf(skin) ?? skin;
+  }
+
+  /** Everything a roster may name: bundled skin paths and outfit keys. */
+  function rosterKeys(): string[] {
+    return [...deps.getSkins().map((s) => s.path), ...(deps.outfits?.keys() ?? [])];
+  }
+
   function primarySkin(): string | null {
-    return getChar(deps.getPrimaryCharacterId())?.currentSkin ?? null;
+    return keyOf(getChar(deps.getPrimaryCharacterId())?.currentSkin);
   }
 
   /** Skins the crowd should wear under the roster (null = no roster, anything goes). */
   function wantedCrowdSkins(): string[] | null {
     const roster = deps.getRoster?.() ?? null;
     if (!roster) return null;
-    const known = new Set(deps.getSkins().map((s) => s.path));
+    const known = new Set(rosterKeys());
     return crowdSkinsFor(roster.filter((s) => known.has(s)), primarySkin());
   }
 
   /** Wanted skins nobody in the scene wears (or is loading) yet. */
   function missingResidents(wanted: readonly string[]): string[] {
-    const worn = new Set(Object.values(deps.getSceneContext().characters).map((c) => c.currentSkin));
+    const worn = new Set(Object.values(deps.getSceneContext().characters).map((c) => keyOf(c.currentSkin)));
     for (const p of pending.values()) worn.add(p.skin);
     return wanted.filter((s) => !worn.has(s));
   }
@@ -230,13 +253,16 @@ export function createCrowdController(deps: CrowdControllerDeps) {
   /** Start loading a crowd character. Walks in from the edge unless `at` says where it appears. */
   function spawn(skin: string | null = pickSkin(), at?: XZ): boolean {
     if (!skin) return false;
+    // `skin` is a roster key: an outfit brings its own image and rig.
+    const outfit = deps.outfits?.resolve(skin) ?? null;
+    if (!outfit && isOutfitKey(skin)) return false; // deleted outfit: nothing to wear
     const id = sim.reserve(at);
     if (!id) return false;
     pending.set(id, { waited: 0, skin });
     const agent = sim.get(id)!;
-    void deps.resolveModelPath(skin).then((modelPath) => {
+    void (outfit ? Promise.resolve(outfit.modelPath) : deps.resolveModelPath(skin)).then((modelPath) => {
       if (!sim.get(id)) return; // removed while resolving
-      const cfg = buildCharacterConfig(skin, deps.getAnimations(), id, modelPath);
+      const cfg = buildCharacterConfig(outfit?.skin ?? skin, deps.getAnimations(), id, modelPath);
       cfg.label = `Crowd ${id}`;
       cfg.position = new THREE.Vector3(agent.x, 0, agent.z);
       deps.loadCharacter(cfg, deps.getSkins());
@@ -376,8 +402,8 @@ export function createCrowdController(deps: CrowdControllerDeps) {
 
   /** Crowd characters wearing a skin that isn't in the skin list (an edited design). */
   function customSkinCount(): number {
-    const available = deps.getSkins().map((s) => s.path);
-    return sim.list().filter((a) => isCustomSkin(getChar(a.id)?.currentSkin ?? null, available)).length;
+    const available = rosterKeys();
+    return sim.list().filter((a) => isCustomSkin(keyOf(getChar(a.id)?.currentSkin), available)).length;
   }
 
   /**
@@ -391,9 +417,9 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     if (!wanted || !started) return;
     const current = sim.list().map((a) => ({
       id: a.id,
-      skin: getChar(a.id)?.currentSkin ?? pending.get(a.id)?.skin ?? null,
+      skin: keyOf(getChar(a.id)?.currentSkin) ?? pending.get(a.id)?.skin ?? null,
     }));
-    const { toAdd, toRemove } = diffResidents(current, wanted, deps.getSkins().map((s) => s.path));
+    const { toAdd, toRemove } = diffResidents(current, wanted, rosterKeys());
     for (const id of toRemove) removeResident(id);
     if (toAdd.length > 0) {
       quickFill = true;
@@ -402,13 +428,13 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     logger.debug('general', 'Crowd roster applied', { added: toAdd.length, removed: toRemove.length });
   }
 
-  /** Skins in the world right now, the primary's first (crowd models still loading included). */
+  /** Skins in the world right now as roster keys, the primary's first (crowd models still loading included). */
   function presentSkins(): string[] {
     const out: string[] = [];
     const main = primarySkin();
     if (main) out.push(main);
     for (const a of sim.list()) {
-      const skin = getChar(a.id)?.currentSkin ?? pending.get(a.id)?.skin;
+      const skin = keyOf(getChar(a.id)?.currentSkin) ?? pending.get(a.id)?.skin;
       if (skin) out.push(skin);
     }
     return out;
