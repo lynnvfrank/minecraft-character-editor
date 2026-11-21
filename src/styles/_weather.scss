@@ -1,0 +1,107 @@
+// Weather control: home view only (see src/ui/weatherPanel.ts).
+// Four small icon buttons inside the time-of-day pill (_time-of-day.scss), after its Auto button,
+// in the same visual language as that button. The pill hides itself off the home view and fades
+// with the Move panels, so this needs no route rules of its own.
+
+.weather-control {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.15rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid rgba(var(--fg-rgb), 0.15);
+}
+
+.weather-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: rgba(var(--fg-rgb), 0.12);
+  }
+
+  &.active {
+    background: rgba(63, 140, 255, 0.22);
+    border-color: #3f8cff;
+  }
+
+  // Surprise me: a dot under what the sky is doing right now.
+  &.now::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -1px;
+    width: 4px;
+    height: 4px;
+    margin-left: -2px;
+    border-radius: 50%;
+    background: #3f8cff;
+  }
+}
+
+// The single stepping button: narrow windows only.
+.weather-cycle {
+  display: none;
+  width: auto;
+  min-width: 1.75rem;
+  padding: 0 0.3rem;
+  border-color: rgba(var(--fg-rgb), 0.2);
+  background: rgba(var(--fg-rgb), 0.06);
+  white-space: nowrap;
+}
+
+// Below this the centered pill with all four buttons would reach the Design/Studio buttons
+// (bottom left), so show one button that steps through the four.
+@media (max-width: 1100px) {
+  .weather-control {
+    padding-left: 0.4rem;
+
+    .weather-button:not(.weather-cycle) {
+      display: none;
+    }
+
+    .weather-cycle {
+      display: grid;
+    }
+  }
+}
+
+// The tightest stretch (pill squeezed between the bottom-left buttons and the round buttons):
+// the sun/moon icon makes room; the time label still says what time it is.
+@media (min-width: 621px) and (max-width: 760px) {
+  .time-of-day:has(.weather-control) .time-of-day-icon {
+    display: none;
+  }
+}
+
+// Without a time-of-day pill to sit in: a pill of its own, bottom center.
+.weather-control--standalone {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 999px;
+  background: rgba(var(--panel-rgb), 0.92);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+  pointer-events: auto;
+
+  body:not([data-route='viewer']) & {
+    display: none;
+  }
+}

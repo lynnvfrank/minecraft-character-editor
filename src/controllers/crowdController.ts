@@ -58,6 +58,8 @@ export type CrowdControllerDeps = {
   getCombos?: () => readonly SavedSequence[];
   /** Time of day in hours [0, 24); after dusk residents slow down and keep to the lamps. */
   getTimeOfDay?: () => number;
+  /** 0..1: how hard it is raining in the home view (residents head for shelter). */
+  getRain?: () => number;
   config?: Partial<CrowdConfig>;
 };
 
@@ -339,7 +341,7 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     // The selected character isn't in the sim; the crowd keeps clear of it.
     const primary = getChar(deps.getPrimaryCharacterId())?.container.position;
     const night = deps.getTimeOfDay ? skyStateAt(deps.getTimeOfDay()).night : 0;
-    handleEvents(sim.tick(step, primary ? [{ x: primary.x, z: primary.z }] : [], { night }));
+    handleEvents(sim.tick(step, primary ? [{ x: primary.x, z: primary.z }] : [], { night, rain: deps.getRain?.() ?? 0 }));
     combos.update(step);
     applyTransforms();
   }

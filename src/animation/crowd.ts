@@ -16,6 +16,8 @@
  *   together for a while ('performing'), then disperse.
  * - Night (tick's `env.night`, 0..1): agents walk a bit slower, stay put longer, prefer the
  *   nav's rest spots (lamp posts, doorsteps) and pick sleepy emotes.
+ * - Rain (tick's `env.rain`, 0..1): walks head for the same rest spots (shelter) and no new plaza
+ *   gathering is called until it stops.
  * An agent taken out with remove() (selected by the user, sent home) leaves its greeting or
  * gathering cleanly: the partner carries on, the gathering goes on without it or breaks up.
  */
@@ -156,6 +158,8 @@ export type CrowdNav = {
 export type CrowdEnv = {
   /** 0 = day, 1 = full night. */
   night?: number;
+  /** 0 = dry, 1 = raining hard. */
+  rain?: number;
 };
 
 export type CrowdEvent =
@@ -250,6 +254,10 @@ const NIGHT_STAY_CHANCE = 0.6;
 const NIGHT_REST_SPOT_CHANCE = 0.8;
 /** Gatherings come around this much slower at night. */
 const NIGHT_GATHER_RATE = 0.5;
+/** Above this `rain` level residents look for shelter and gatherings wait. */
+const RAIN_THRESHOLD = 0.5;
+/** In the rain: chance that a walk heads for a rest spot (doorstep, lamp post). */
+const RAIN_SHELTER_CHANCE = 0.9;
 
 export type CrowdGathering = {
   id: number;
@@ -274,6 +282,8 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
   let bodies: readonly XZ[] = [];
   /** 0 = day, 1 = full night (from the latest tick). */
   let night = 0;
+  /** 0 = dry, 1 = raining hard (from the latest tick). */
+  let rain = 0;
   /** Pair key → seconds until those two may greet again. */
   const greetCooldowns = new Map<string, number>();
   /** The plaza gathering in progress (one at a time). */
@@ -284,6 +294,7 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
   const pickOne = <T>(list: readonly T[]): T | null =>
     list.length > 0 ? list[Math.min(list.length - 1, Math.floor(random() * list.length))]! : null;
   const isNight = () => night > NIGHT_THRESHOLD;
+  const isRaining = () => rain > RAIN_THRESHOLD;
   const walkSpeed = () => config.walkSpeed * (1 - NIGHT_SLOW * night);
   let gatherTimer = config.gatherInterval ? between(config.gatherInterval) : Infinity;
 
@@ -304,7 +315,9 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
     others.push(...bodies);
     // After dark most walks end by a lamp post or on a doorstep.
     const rest = nav?.restSpots ?? [];
-    const spots = isNight() && rest.length > 0 && random() < NIGHT_REST_SPOT_CHANCE ? rest : (nav?.spots ?? []);
+    // In the rain nearly all of them do (shelter).
+    const restChance = isRaining() ? RAIN_SHELTER_CHANCE : isNight() ? NIGHT_REST_SPOT_CHANCE : 0;
+    const spots = restChance > 0 && rest.length > 0 && random() < restChance ? rest : (nav?.spots ?? []);
     let best: XZ = { x: 0, z: 0 };
     let bestScore = -Infinity;
     for (let i = 0; i < TARGET_SAMPLES; i++) {
@@ -597,7 +610,8 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
   function tickGathering(dt: number): void {
     const g = gathering;
     if (!g) {
-      if (!config.gatherInterval) return;
+      // Nobody calls a get-together in the rain (one already under way carries on).
+      if (!config.gatherInterval || isRaining()) return;
       gatherTimer -= dt * (isNight() ? NIGHT_GATHER_RATE : 1);
       if (gatherTimer > 0) return;
       gatherTimer = tryStartGathering() ? between(config.gatherInterval) : GATHER_RETRY_SEC;
@@ -844,11 +858,12 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
   /**
    * Advance the simulation; returns everything that happened since the last tick.
    * `others` are characters outside the sim (e.g. the selected one) that the crowd keeps clear of.
-   * `env` describes the world (night level).
+   * `env` describes the world (night and rain levels).
    */
   function tick(dt: number, others: readonly XZ[] = [], env: CrowdEnv = {}): CrowdEvent[] {
     bodies = others;
     night = Math.min(1, Math.max(0, env.night ?? 0));
+    rain = Math.min(1, Math.max(0, env.rain ?? 0));
     for (const agent of [...agents.values()]) tickAgent(agent, dt);
     separate();
     checkGreetings(dt);

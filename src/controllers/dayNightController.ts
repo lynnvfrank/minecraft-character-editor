@@ -17,6 +17,7 @@ import {
   skyStateAt,
   type SkyState,
 } from '../lib/dayNight';
+import { applyWeatherToSky, type WeatherLevels } from '../lib/weather';
 import { setDayNightLighting } from '../viewer/scene';
 import { DEFAULT_LAMP_EMISSIVE, LAMP_LIGHT_NAME } from '../viewer/blockWorldMesh';
 
@@ -35,6 +36,12 @@ export type DayNightControllerDeps = {
     setGlow: (emissiveIntensity: number) => void;
     isShown: () => boolean;
   } | null;
+  /**
+   * The home view's weather (controllers/weatherController.ts): how much rain and snow is in the
+   * air. It dims and greys this controller's sky state before it reaches the scene, so weather is
+   * part of the one day/night modulation and is handed back with it. All zero = no effect.
+   */
+  weather?: { getLevels: () => Readonly<WeatherLevels> } | null;
   /** Seconds of real time for a full day while Auto is on. */
   dayLengthSeconds?: number;
 };
@@ -54,7 +61,7 @@ const AUTO_SAVE_SECONDS = 5;
 export type DayNightController = ReturnType<typeof createDayNightController>;
 
 export function createDayNightController(deps: DayNightControllerDeps) {
-  const { scene, store, lamps = null, dayLengthSeconds = DEFAULT_DAY_LENGTH_SECONDS } = deps;
+  const { scene, store, lamps = null, weather = null, dayLengthSeconds = DEFAULT_DAY_LENGTH_SECONDS } = deps;
 
   /** Lamp lights are made the first time the village shows at home, so other routes never pay for them. */
   let lampLights: THREE.PointLight[] | null = null;
@@ -86,7 +93,7 @@ export function createDayNightController(deps: DayNightControllerDeps) {
     }
   }
 
-  function applySky(s: SkyState): void {
+  function applySky(s: SkyState, fogScale: number): void {
     setDayNightLighting({
       // The sky color is defined against a clear midday; scale whatever sky the preset/theme has.
       skyScale: [
@@ -101,12 +108,15 @@ export function createDayNightController(deps: DayNightControllerDeps) {
       sunScale: s.sunIntensity,
       ambientTint: s.ambientTint,
       ambientScale: s.ambientIntensity,
+      fogScale,
     });
   }
 
   let applied = false;
   let appliedTime = NaN;
   let appliedLampsShown: boolean | null = null;
+  let appliedRain = 0;
+  let appliedSnow = 0;
   let sinceSave = 0;
 
   /** Give the scene back to the plain lighting preset. */
@@ -140,12 +150,20 @@ export function createDayNightController(deps: DayNightControllerDeps) {
     }
     const time = store.get().time;
     const lampsShown = lamps?.isShown() ?? false;
-    if (applied && time === appliedTime && lampsShown === appliedLampsShown) return;
+    const levels = weather?.getLevels();
+    const rain = levels?.rain ?? 0;
+    const snow = levels?.snow ?? 0;
+    const sameWeather = rain === appliedRain && snow === appliedSnow;
+    if (applied && time === appliedTime && lampsShown === appliedLampsShown && sameWeather) return;
     applied = true;
     appliedTime = time;
     appliedLampsShown = lampsShown;
+    appliedRain = rain;
+    appliedSnow = snow;
     const s = skyStateAt(time);
-    applySky(s);
+    // Clear weather gives back `s` itself and a fog scale of 1: exactly the plain day/night.
+    const overcast = levels ? applyWeatherToSky(s, levels) : null;
+    applySky(overcast?.sky ?? s, overcast?.fogScale ?? 1);
     applyLamps(s.lampGlow, lampsShown);
   }
 

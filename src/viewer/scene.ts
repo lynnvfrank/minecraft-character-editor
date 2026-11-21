@@ -168,7 +168,16 @@ function applyBackground(): void {
   // A stage backdrop (the dance studio) shows instead of the sky, which keeps tracking the theme underneath.
   scene.background = stageBackdrop?.background ?? sky;
   if (scene.fog) scene.fog.color.copy(stageBackdrop?.fog ?? sky);
+  // Weather thickens the fog through day/night's fogScale; without one the distances are the scene's own.
+  if (scene.fog instanceof THREE.Fog) {
+    fogBase ??= [scene.fog.near, scene.fog.far];
+    const k = dayNight?.fogScale ?? 1;
+    scene.fog.near = fogBase[0] * k;
+    scene.fog.far = fogBase[1] * k;
+  }
 }
+/** The scene fog's own near and far distances (read the first time the background is applied). */
+let fogBase: [number, number] | null = null;
 
 /**
  * A backdrop shown in place of the sky (the dance studio; see viewer/studioBackdrop.ts). While set,
@@ -227,6 +236,8 @@ export type DayNightLighting = {
   /** Applied to the sky/ground ambient, the rim and fill lights and the image-based ambient. */
   ambientTint: RGB;
   ambientScale: number;
+  /** Multiplier on the fog's near/far distances (weather: below 1 is thicker). Default 1. */
+  fogScale?: number;
 };
 
 let dayNight: DayNightLighting | null = null;

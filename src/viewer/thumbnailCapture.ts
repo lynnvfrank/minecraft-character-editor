@@ -20,6 +20,7 @@ import { buildLayerVisibleState, createPixelSkinTexture, type SkinCompositor } f
 import { renderTargetPixelsToImageData } from './captureHelpers';
 import { placeAroundCharacter, type CharacterAnchor } from '../domain/preview';
 import { BLOCK_WORLD_NAME, LAMP_LIGHT_NAME } from './blockWorldMesh';
+import { WEATHER_NAME } from './weatherParticles';
 
 export type ThumbnailCaptureDeps = {
   getSceneContext: () => SceneContext | null;
@@ -41,6 +42,7 @@ const ORIGIN_ANCHOR: CharacterAnchor = { x: 0, y: 0, z: 0, yaw: 0 };
  * Thumbnails show the character on the plain ground, as they always have: hide the home view's
  * block village (if any) and show the ground disc for the duration of `render`. Likewise the home
  * view's day/night: thumbnails are lit by the plain lighting preset, without the lamp lights.
+ * And its weather: no rain or snow in front of the character (the overcast light goes with day/night).
  */
 function withPlainStage<T>(scene: THREE.Scene, render: () => T): T {
   const world = scene.getObjectByName(BLOCK_WORLD_NAME);
@@ -52,9 +54,13 @@ function withPlainStage<T>(scene: THREE.Scene, render: () => T): T {
   const restoreDayNight = suspendDayNightLighting();
   const lampLights = scene.children.filter((o) => o.name === LAMP_LIGHT_NAME && o.visible);
   lampLights.forEach((o) => (o.visible = false));
+  const weather = scene.getObjectByName(WEATHER_NAME);
+  const weatherWas = weather?.visible;
+  if (weather) weather.visible = false;
   try {
     return render();
   } finally {
+    if (weather && weatherWas !== undefined) weather.visible = weatherWas;
     lampLights.forEach((o) => (o.visible = true));
     restoreDayNight();
     if (world && worldWas !== undefined) world.visible = worldWas;

@@ -48,6 +48,7 @@ import { createCharacterEventsController } from './controllers/characterEvents';
 import { createCrowdController, type CrowdController } from './controllers/crowdController';
 import { createBlockWorldController } from './controllers/blockWorldController';
 import { createDayNightController } from './controllers/dayNightController';
+import { createWeatherController } from './controllers/weatherController';
 import { createSelectionController, type SelectionController } from './controllers/selectionController';
 import { DEFAULT_CROWD_CONFIG } from './animation/crowd';
 import { createAnimationLoopController } from './controllers/animationLoop';
@@ -117,6 +118,9 @@ import { createStudioController, type StudioController } from './controllers/stu
 import { createSavedSequencesStore } from './state/savedSequences';
 import { createTimeOfDayStore } from './state/timeOfDay';
 import { createTimeOfDayPanel } from './ui/timeOfDayPanel';
+import { createWeatherStore } from './state/weather';
+import { createWeatherPanel } from './ui/weatherPanel';
+import { createWeatherParticles } from './viewer/weatherParticles';
 import {
   initElectronStatus,
 } from './ui';
@@ -672,9 +676,25 @@ async function main(): Promise<void> {
   // Home view day and night: a time-of-day control, and lighting laid over the active preset.
   const timeOfDay = createTimeOfDayStore(getLocalStorage());
   createTimeOfDayPanel({ store: timeOfDay });
+  // Home view weather (rain, snow) over the village: particles here, the overcast light through day/night.
+  const weatherStore = createWeatherStore(getLocalStorage());
+  if (blockWorld) createWeatherPanel({ store: weatherStore });
+  const weather = createWeatherController({
+    store: weatherStore,
+    createParticles: () =>
+      createWeatherParticles(sceneContext.scene, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        pixelRatio: window.devicePixelRatio,
+      }),
+    getCenter: () => sceneContext.controls.target,
+    isVillageShown: () => blockWorld?.isShown() ?? false,
+    getTimeOfDay: () => timeOfDay.get().time,
+  });
   const dayNight = createDayNightController({
     scene: sceneContext.scene,
     store: timeOfDay,
+    weather,
     lamps: blockWorld && { positions: blockWorld.lampPositions, setGlow: blockWorld.setLampGlow, isShown: blockWorld.isShown },
   });
 
@@ -753,6 +773,7 @@ async function main(): Promise<void> {
     getRoster: () => residents.get(),
     getCombos: () => savedSequences.list(),
     getTimeOfDay: () => timeOfDay.get().time,
+    getRain: weather.getRain,
     config: blockWorld ? { nav: blockWorld.crowdNav } : undefined,
   }));
   // Residents panel: who lives in the village. The store holds the choice; the crowd applies it.
@@ -903,6 +924,7 @@ async function main(): Promise<void> {
     if (route === 'studio') studio.update(delta);
     studioStage.update(delta, route);
     blockWorld?.update(route);
+    weather.update(delta, route); // before day/night, which lights the sky for it
     dayNight.update(delta, route);
     if (blockWorld) {
       // Editor (and the camera move into it): keep walls and trees out from between camera and character.
