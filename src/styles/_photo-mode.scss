@@ -30,6 +30,15 @@
   }
 }
 
+// Phones: the time-of-day pill covers the stack above Residents; sit in the row left of it,
+// next to the Build button (right: 56px).
+@media (max-width: 620px) {
+  .photo-mode-btn {
+    right: 100px;
+    bottom: 100px;
+  }
+}
+
 body:not([data-route='viewer']) {
   .photo-mode-btn,
   .photo-bar {
