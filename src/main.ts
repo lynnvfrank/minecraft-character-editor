@@ -116,7 +116,8 @@ import { createStudioBackdropStore } from './state/studioBackdrop';
 import { captureStagePhoto } from './viewer/stagePhoto';
 import { createStudioController, type StudioController } from './controllers/studioController';
 import { createSavedSequencesStore } from './state/savedSequences';
-import { initSaveAndShare } from './controllers/saveAndShare';
+import { initSaveAndShare, saveRegistry } from './controllers/saveAndShare';
+import { isWeatherMode, WEATHER_LABELS } from './lib/weather';
 import { createTimeOfDayStore } from './state/timeOfDay';
 import { createTimeOfDayPanel } from './ui/timeOfDayPanel';
 import { createWeatherStore } from './state/weather';
@@ -802,6 +803,14 @@ async function main(): Promise<void> {
     getAvailableSkins: () => skinsList.map((s) => s.path),
     residentsCap: crowd.residentsCap,
     getClipKeys: () => animationsList.map((a) => a.key),
+  });
+  saveRegistry.register({
+    key: 'weather',
+    label: 'Weather',
+    read: () => weatherStore.get().mode,
+    parse: (raw: unknown) => (isWeatherMode(raw) ? raw : null),
+    write: (mode) => weatherStore.setMode(mode),
+    describe: (mode) => WEATHER_LABELS[mode],
   });
   const studioDancers = createStudioDancersController({
     getSceneContext,
