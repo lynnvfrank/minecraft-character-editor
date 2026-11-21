@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { snapWorkingToSkinCellCenter, uvToWorkingCoords, RESOLUTION_MULTIPLIER } from '../skin';
 import { getHairBrushMode, hairBrushEnd, hairBrushPaint, onHairBrushModeChanged } from '../creator/hairFixBrush';
+import { featureTagEnd, featureTagPaint, getFeatureTagBrush, onFeatureTagBrushChanged } from '../creator/featureTagBrush';
 import {
   getEditMode3D,
   getActiveTool,
@@ -259,14 +260,20 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
   const hairBrushAt = (clientX: number, clientY: number): boolean => {
     const hit = raycastToVisibleSkinPixel(deps, clientX, clientY);
     if (!hit) return false;
-    hairBrushPaint(Math.floor(hit.x / RESOLUTION_MULTIPLIER), Math.floor(hit.y / RESOLUTION_MULTIPLIER));
+    const sx = Math.floor(hit.x / RESOLUTION_MULTIPLIER);
+    const sy = Math.floor(hit.y / RESOLUTION_MULTIPLIER);
+    if (getFeatureTagBrush()) featureTagPaint(sx, sy);
+    else hairBrushPaint(sx, sy);
     return true;
   };
+  /** Me tab hair fixes, or the 2D/3D feature tag brush: both paint pixels on the model. */
+  const pixelBrushOn = () => deps.getRoute() === 'creator' && (getHairBrushMode() != null || getFeatureTagBrush() != null);
   const updateHairBrushCursor = () => {
-    if (deps.getRoute() === 'creator' && getHairBrushMode()) canvas.style.cursor = 'crosshair';
+    if (pixelBrushOn()) canvas.style.cursor = 'crosshair';
     else updateCreator3DCanvasCursor(renderer, deps.getRoute);
   };
   onHairBrushModeChanged(updateHairBrushCursor);
+  onFeatureTagBrushChanged(updateHairBrushCursor);
 
   const refreshControls = () => {
     if (controlsTemporarilyDisabled) return;
@@ -285,7 +292,7 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
   };
 
   function handlePointerDown(e: MouseEvent) {
-    if (deps.getRoute() === 'creator' && getHairBrushMode() && e.button === 0) {
+    if (pixelBrushOn() && e.button === 0) {
       controlsTemporarilyDisabled = true;
       getControls().enabled = false;
       isHairBrushing = true;
@@ -329,6 +336,7 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
       return;
     }
     if (deps.getRoute() !== 'creator' || !getEditMode3D()) return;
+    if (getFeatureTagBrush()) return; // no color hover preview while tagging
     const activeTool = getActiveTool();
     const eyedropperHoverColor = activeTool === 'eyedropper'
       ? sampleColorFromRaycast(deps, e.clientX, e.clientY)
@@ -381,7 +389,8 @@ export function setupCreator3DPaint(deps: Creator3DPaintDeps): void {
     if (e.button !== 0) return;
     if (isHairBrushing) {
       isHairBrushing = false;
-      hairBrushEnd();
+      if (getFeatureTagBrush()) featureTagEnd();
+      else hairBrushEnd();
       controlsTemporarilyDisabled = false;
       getControls().enabled = true;
       updateHairBrushCursor();

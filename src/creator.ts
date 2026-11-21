@@ -31,6 +31,7 @@ import {
 } from './creator/index';
 import { buildSaveDownloadPanel } from './creator/saveDownloadPanel';
 import { buildArmModelPanel } from './creator/armModelPanel';
+import { buildFeatureTagsPanel } from './creator/featureTagsPanel';
 import {
   buildStylePanel,
   getStyleTargetColor,
@@ -420,6 +421,13 @@ function buildCreatorPanels(): void {
   creatorScope.track(onLockedLookChanged(() => {
     if (state.editMode === 'wardrobe') void wardrobeApi.resolveWardrobeComposite();
   }));
+  buildFeatureTagsPanel({
+    getSkinCanvas,
+    onCanvasChange: () => {
+      if (blockyCtx) blockyEditor.renderToDisplay(blockyCtx);
+      creatorCanvasSlice.notify();
+    },
+  });
   buildStylePanel({
     getSkinCanvas,
     onCanvasChange: () => {

@@ -1,0 +1,115 @@
+// Feature tags panel (src/creator/featureTagsPanel.ts): 2D and 3D editor, top of the right column.
+.creator-feature-tags-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(var(--panel-rgb), 0.92);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem 0.45rem;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+
+  &.is-tagging {
+    border-color: rgba(var(--fg-rgb), 0.4);
+  }
+}
+
+.creator-feature-tags-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.creator-feature-tags-done {
+  padding: 0.15rem 0.6rem;
+  font-weight: 600;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.creator-feature-tags-brushes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+}
+
+.creator-feature-tags-brush {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.3rem 0.4rem;
+  text-align: left;
+
+  &[data-brush='erase'] {
+    grid-column: 1 / -1;
+  }
+}
+
+.creator-feature-tags-swatch {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(var(--fg-rgb), 0.35);
+}
+
+.creator-feature-tags-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+.creator-feature-tags-modes {
+  display: flex;
+  gap: 0.3rem;
+
+  .creator-tools-panel-btn {
+    flex: 1;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
+  }
+}
+
+.creator-feature-tags-status {
+  margin: 0;
+  color: rgba(var(--fg-rgb), 0.7);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.creator-feature-tags-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.creator-feature-tags-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(var(--fg-rgb), 0.75);
+  font: inherit;
+  font-size: 0.75rem;
+  text-decoration: underline;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+    text-decoration: none;
+  }
+}

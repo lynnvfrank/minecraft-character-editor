@@ -13,6 +13,8 @@ import { styleSkin, makeFaceTemplate, type FaceTemplate, type StyleSkinOptions }
 import { createEl } from './dom';
 import { creatorScope } from './lifecycle';
 import { EDIT_MODE_STYLE } from './api';
+import { loadFeatureTags } from './featureTagsStore';
+import { pixelsWithLabel } from '../styler/featureMap';
 import { onHairBrushModeChanged, registerHairBrushHandlers, setHairBrushMode, getHairBrushMode, type HairBrushMode } from './hairFixBrush';
 
 const STORAGE_KEY = 'blockygotchi.makeItMe.v1';
@@ -723,7 +725,7 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     const token = ++renderToken;
     const template = await ensureFaceTemplate();
     if (token !== renderToken) return;
-    const options = lookOptions(template, fixes);
+    const options = lookOptions(template, fixes, fixesKey);
     try {
       const started = performance.now();
       const result = styleSkin(base64, options);
@@ -739,8 +741,13 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     }
   }
 
-  function lookOptions(template: FaceTemplate | null, hairFixes: HairFixes | null): StyleSkinOptions {
+  function lookOptions(template: FaceTemplate | null, hairFixes: HairFixes | null, tagKey: string | null): StyleSkinOptions {
+    const tagMap = tagKey ? loadFeatureTags(tagKey) : null;
     return {
+      // Hand-made feature tags (2D/3D editor) replace hair/skin/outfit detection for this skin.
+      tags: tagMap
+        ? { hair: pixelsWithLabel(tagMap, 'hair'), skin: pixelsWithLabel(tagMap, 'skin'), clothing: pixelsWithLabel(tagMap, 'clothing') }
+        : null,
       targetHairColor: look.hair.on ? hexToRgb(look.hair.color) : null,
       tolerance: look.tolerance,
       faceTemplate: template,
@@ -822,7 +829,8 @@ export function buildStylePanel(ctx: StylePanelContext): void {
     const template = ref && faceTemplateFor === ref ? faceTemplate : null;
     const small = downsample(work.data);
     try {
-      const result = styleSkin(small, lookOptions(template, loadFixes(skinKey(small))));
+      const smallKey = skinKey(small);
+      const result = styleSkin(small, lookOptions(template, loadFixes(smallKey), smallKey));
       const out = new ImageData(WORK_SIZE, WORK_SIZE);
       out.data.set(upsampleChanged(work.data, small, result.image as ImageData));
       return out;
