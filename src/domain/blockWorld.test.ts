@@ -95,6 +95,36 @@ describe('blockWorld village', () => {
     }
   });
 
+  test('social spots: plaza centres, lamp sides and doorsteps are walkable and where they should be', () => {
+    const world = buildBlockWorld();
+    const at = (p: { x: number; z: number }) => {
+      const { col, row } = cellAt(world.nav, p);
+      return { col, row, tile: tileAt(VILLAGE_MAP, col, row) };
+    };
+    assert.ok(world.plaza.length >= 16, `plaza centres: ${world.plaza.length}`);
+    for (const p of world.plaza) {
+      const { col, row, tile } = at(p);
+      assert.equal(tile, 'o');
+      // Two cells of stone on every side: a ring of dancers stays on the plaza.
+      for (const [dc, dr] of [[2, 0], [-2, 0], [0, 2], [0, -2], [2, 2], [-2, -2]] as const) {
+        assert.equal(tileAt(VILLAGE_MAP, col + dc, row + dr), 'o');
+      }
+    }
+    const lamps = world.blocks.filter((b) => b.kind === 'lamp');
+    assert.ok(lamps.length > 0 && world.lampSides.length >= lamps.length);
+    for (const p of world.lampSides) {
+      assert.ok(isWalkableAt(world.nav, p));
+      assert.ok(lamps.some((l) => Math.max(Math.abs(l.x - p.x), Math.abs(l.z - p.z)) <= 1 + 1e-9), 'next to a lamp');
+    }
+    const doorBlocks = world.blocks.filter((b) => b.kind === 'door' && b.y < 1);
+    assert.equal(world.doorsteps.length, VILLAGE_HOUSES.reduce((n, h) => n + h.door.at.length, 0));
+    for (const p of world.doorsteps) {
+      assert.ok(isWalkableAt(world.nav, p));
+      assert.ok(doorBlocks.some((d) => Math.abs(d.x - p.x) + Math.abs(d.z - p.z) <= 1 + 1e-9), 'in front of a door');
+      assert.ok(findPath(world.nav, { x: 0.5, z: 0.5 }, p, { radius: 0.3 }), 'reachable from the plaza');
+    }
+  });
+
   test('blocks are deterministic', () => {
     const again = buildBlockWorld();
     assert.equal(again.blocks.length, world.blocks.length);

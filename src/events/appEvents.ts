@@ -23,6 +23,12 @@ export const APP_EVENTS = {
   'app:creator:camera-move-start': 'app:creator:camera-move-start',
   /** Creator: camera move ended */
   'app:creator:camera-move-end': 'app:creator:camera-move-end',
+  /** Creator: keep the current skin as an outfit, move it into the village and go Home */
+  'app:creator:send-to-village': 'app:creator:send-to-village',
+  /** Creator: leave for the dance studio wearing the current skin */
+  'app:creator:dance-in-studio': 'app:creator:dance-in-studio',
+  /** Creator: a short message for the user about one of the two requests above */
+  'app:creator:world-status': 'app:creator:world-status',
   /** Character: skin changed (UI or external) */
   'app:character:skin-change': 'app:character:skin-change',
   /** Character: animation play requested (UI or external) */
@@ -33,6 +39,9 @@ export type AppEventName = (typeof APP_EVENTS)[keyof typeof APP_EVENTS];
 
 /** Detail for app:creator:camera-yaw-left, camera-yaw-right, camera-pitch-up, camera-pitch-down */
 export type AppCreatorCameraAngleDetail = { degrees?: number };
+
+/** Detail for app:creator:world-status */
+export type AppCreatorWorldStatusDetail = { message: string };
 
 /** Detail for app:character:skin-change */
 export type AppCharacterSkinChangeDetail = {
@@ -80,6 +89,9 @@ export type AppEventMap = {
   'app:creator:camera-recenter': AppEmptyDetail;
   'app:creator:camera-move-start': AppEmptyDetail;
   'app:creator:camera-move-end': AppEmptyDetail;
+  'app:creator:send-to-village': AppEmptyDetail;
+  'app:creator:dance-in-studio': AppEmptyDetail;
+  'app:creator:world-status': AppCreatorWorldStatusDetail;
   'app:character:skin-change': AppCharacterSkinChangeDetail;
   'app:character:animation-play': AppCharacterAnimationPlayDetail;
 };

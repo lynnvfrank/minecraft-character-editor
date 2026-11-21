@@ -1,0 +1,70 @@
+// "Camera" section of the dance studio panel (src/ui/studioCapturePanel.ts). Reuses the studio
+// panel's section, row, button, check and hint classes; only the capture-specific bits live here.
+
+.studio-capture {
+  flex: 0 0 auto;
+}
+
+.studio-capture-btn {
+  flex: 1 1 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.studio-capture.recording .studio-record-btn {
+  background: rgba(230, 70, 70, 0.28);
+  border-color: rgba(230, 70, 70, 0.75);
+}
+
+// Collapsed header while recording: "● REC 0:12" in red (click the header to get to Stop).
+.studio-capture.recording .studio-section-summary {
+  color: #ff6b6b;
+  font-weight: 700;
+  opacity: 1;
+}
+
+// "REC m:ss" over the top-left of the stage while recording. It is DOM on top of the canvas, so it
+// never ends up in the video, and it lets clicks and drags through to the stage.
+.studio-rec-badge {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 20;
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(20, 20, 24, 0.72);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
+
+  &::before {
+    content: '';
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: #e64646;
+    animation: studio-rec-blink 1.2s ease-in-out infinite;
+  }
+}
+
+body[data-route='studio'] .studio-rec-badge:not([hidden]) {
+  display: inline-flex;
+}
+
+@keyframes studio-rec-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-rec-badge::before {
+    animation: none;
+  }
+}

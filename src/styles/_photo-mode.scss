@@ -1,0 +1,242 @@
+// Home view photo mode (src/ui/photoModeBar.ts, src/controllers/photoModeController.ts).
+// body[data-photo-mode] ("on" or "frozen") hides ALL chrome except the canvas, the photo bar and
+// toasts. Hiding is by exclusion, so chrome added later (by other features) is hidden too.
+
+// Camera button: bottom-right stack, above Residents (100px), About (56px) and the theme toggle.
+.photo-mode-btn {
+  position: fixed;
+  right: 12px;
+  bottom: 144px;
+  z-index: 50;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  background: rgba(var(--panel-rgb), 0.92);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.3);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    border-color: rgba(var(--fg-rgb), 0.45);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(var(--fg-rgb), 0.45);
+    outline-offset: 1px;
+  }
+}
+
+// Phones: the time-of-day pill covers the stack above Residents; sit in the row left of it,
+// next to the Build button (right: 56px).
+@media (max-width: 620px) {
+  .photo-mode-btn {
+    right: 100px;
+    bottom: 100px;
+  }
+}
+
+body:not([data-route='viewer']) {
+  .photo-mode-btn,
+  .photo-bar {
+    display: none !important;
+  }
+}
+
+body[data-photo-mode] {
+  > *:not(#creator-view-wrapper):not(.photo-bar):not(.photo-flash):not(.share-layer):not(script),
+  #creator-view-wrapper > *:not(#app),
+  #app > *:not(#three-canvas-container),
+  #three-canvas-container > *:not(canvas) {
+    display: none !important;
+  }
+}
+
+.photo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  box-sizing: border-box;
+  max-width: calc(100vw - 24px);
+  padding: 0.4rem 0.5rem;
+  background: rgba(var(--panel-rgb), 0.88);
+  border: 1px solid rgba(var(--fg-rgb), 0.15);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
+  color: var(--text);
+  font-size: 0.8rem;
+
+  &[hidden] {
+    display: none;
+  }
+
+  &.recording .photo-record-btn {
+    color: #fff;
+    background: #d33;
+    border-color: #d33;
+  }
+}
+
+.photo-bar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.photo-btn {
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  background: rgba(var(--fg-rgb), 0.06);
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: rgba(var(--fg-rgb), 0.45);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  &.active {
+    background: rgba(127, 212, 255, 0.3);
+    border-color: rgba(127, 212, 255, 0.8);
+  }
+}
+
+.photo-btn--primary {
+  font-weight: 600;
+  background: rgba(var(--fg-rgb), 0.14);
+}
+
+.photo-exit-btn {
+  width: 1.9rem;
+  padding: 0.3rem 0;
+}
+
+.photo-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.photo-slider-input {
+  width: 80px;
+}
+
+.photo-check {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.photo-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+
+  &.is-on {
+    animation: photo-flash 0.35s ease-out;
+  }
+}
+
+@keyframes photo-flash {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+// Camera spot chips (src/ui/cameraBookmarkChips.ts), in the photo bar and the studio.
+.cam-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.cam-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(var(--fg-rgb), 0.2);
+  border-radius: 999px;
+  background: rgba(var(--fg-rgb), 0.06);
+  overflow: hidden;
+}
+
+.cam-chip-go,
+.cam-chip-del,
+.cam-chip-add {
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.cam-chip-go {
+  padding: 0.2rem 0.3rem 0.2rem 0.6rem;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cam-chip-del {
+  padding: 0.2rem 0.45rem 0.2rem 0.2rem;
+  opacity: 0.6;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.cam-chip-go:hover,
+.cam-chip-add:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.cam-chip-add {
+  padding: 0.2rem 0.5rem;
+  border: 1px dashed rgba(var(--fg-rgb), 0.3);
+  border-radius: 999px;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.cam-chip-input {
+  width: 8rem;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--fg-rgb), 0.4);
+  background: rgba(var(--panel-rgb), 1);
+  color: inherit;
+}

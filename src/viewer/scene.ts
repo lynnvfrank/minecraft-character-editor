@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import type { RGB, Vec3 } from '../lib/dayNight';
 
 export type SceneContext = {
   scene: THREE.Scene;
@@ -127,7 +128,14 @@ type LightRig = {
   sun: THREE.DirectionalLight;
   rim: THREE.DirectionalLight;
   fill: THREE.DirectionalLight;
+  /**
+   * What the lights are set to before day/night: the startup values from addLights (slightly
+   * different from the 'shader' preset), then whichever preset was last picked.
+   */
+  base: LightValues;
 };
+
+type LightValues = Pick<LightingPreset, 'envIntensity' | 'hemi' | 'sun' | 'rim' | 'fill'>;
 
 let rig: LightRig | null = null;
 let currentPreset: LightingPresetId = 'shader';
@@ -140,13 +148,62 @@ export type SkyTheme = { background: number; ground: number };
 let skyTheme: SkyTheme | null = null;
 const THEMED_PRESETS: ReadonlySet<LightingPresetId> = new Set(['shader', 'classic']);
 
-function applySky(): void {
+/** Background and fog color: the preset's (or theme's) sky, times day/night if set. */
+function applyBackground(): void {
   if (!rig) return;
   const { scene } = rig;
   const p = LIGHTING_PRESETS[currentPreset];
   const background = skyTheme && THEMED_PRESETS.has(currentPreset) ? skyTheme.background : p.background;
-  (scene.background as THREE.Color).setHex(background);
-  if (scene.fog) scene.fog.color.setHex(background);
+  const sky = (skyColor ??= scene.background as THREE.Color).setHex(background);
+  if (dayNight) {
+    // Scale in sRGB (the space the hex colors are written in) so dusk reads orange, not grey.
+    sky.getRGB(scratchRgb, THREE.SRGBColorSpace);
+    sky.setRGB(
+      Math.min(1, scratchRgb.r * dayNight.skyScale[0]),
+      Math.min(1, scratchRgb.g * dayNight.skyScale[1]),
+      Math.min(1, scratchRgb.b * dayNight.skyScale[2]),
+      THREE.SRGBColorSpace
+    );
+  }
+  // A stage backdrop (the dance studio) shows instead of the sky, which keeps tracking the theme underneath.
+  scene.background = stageBackdrop?.background ?? sky;
+  if (scene.fog) scene.fog.color.copy(stageBackdrop?.fog ?? sky);
+  // Weather thickens the fog through day/night's fogScale; without one the distances are the scene's own.
+  if (scene.fog instanceof THREE.Fog) {
+    fogBase ??= [scene.fog.near, scene.fog.far];
+    const k = dayNight?.fogScale ?? 1;
+    scene.fog.near = fogBase[0] * k;
+    scene.fog.far = fogBase[1] * k;
+  }
+}
+/** The scene fog's own near and far distances (read the first time the background is applied). */
+let fogBase: [number, number] | null = null;
+
+/**
+ * A backdrop shown in place of the sky (the dance studio; see viewer/studioBackdrop.ts). While set,
+ * theme and preset changes keep updating the sky underneath but don't show; null puts the sky back
+ * exactly. The scales multiply the active preset's ambient and sun strengths (1 = unchanged).
+ */
+export type StageBackdrop = {
+  background: THREE.Color | THREE.Texture;
+  fog: THREE.Color;
+  ambientScale: number;
+  sunScale: number;
+};
+let stageBackdrop: StageBackdrop | null = null;
+/** The scene's own sky color object (scene.background unless a stage backdrop is showing). */
+let skyColor: THREE.Color | null = null;
+
+export function setStageBackdrop(backdrop: StageBackdrop | null): void {
+  if (!backdrop && !stageBackdrop) return;
+  stageBackdrop = backdrop;
+  applyLightValues();
+}
+
+function applySky(): void {
+  if (!rig) return;
+  const { scene } = rig;
+  applyBackground();
   const groundColor = skyTheme && THEMED_PRESETS.has(currentPreset) ? skyTheme.ground : GROUND_DEFAULT_COLOR;
   scene.traverse((obj) => {
     if (obj.name === 'ground' && (obj as THREE.Mesh).isMesh) {
@@ -160,6 +217,100 @@ export function setSkyTheme(sky: SkyTheme | null): void {
   applySky();
 }
 
+/**
+ * Day/night on top of the active preset (the home view; see controllers/dayNightController.ts and
+ * lib/dayNight.ts). Everything is relative to the preset: scales of 1, white tints and
+ * `presetDirection: 1` leave it exactly as it is, so `null` and "midday" look the same.
+ */
+export type DayNightLighting = {
+  /** Per-channel multiplier on the background / fog color. */
+  skyScale: RGB;
+  /** Unit vector toward the key light (sun or moon). */
+  lightDirection: Vec3;
+  /** `lightDirection` at midday; a preset whose sun is elsewhere keeps its own direction then. */
+  referenceDirection: Vec3;
+  /** 1 at midday: how much of the preset's own sun direction to keep (see referenceDirection). */
+  presetDirection: number;
+  sunTint: RGB;
+  sunScale: number;
+  /** Applied to the sky/ground ambient, the rim and fill lights and the image-based ambient. */
+  ambientTint: RGB;
+  ambientScale: number;
+  /** Multiplier on the fog's near/far distances (weather: below 1 is thicker). Default 1. */
+  fogScale?: number;
+};
+
+let dayNight: DayNightLighting | null = null;
+const scratchRgb = { r: 0, g: 0, b: 0 };
+const scratchDir = new THREE.Vector3();
+
+const scratchColor = new THREE.Color();
+
+function tint(color: THREE.Color, hex: number, t: RGB | null): void {
+  color.setHex(hex);
+  // Light colors multiply in the renderer's (linear) working space, like stacking a gel on a lamp.
+  if (t) color.multiply(scratchColor.setRGB(t[0], t[1], t[2], THREE.SRGBColorSpace));
+}
+
+/** Light colors, strengths and the sun's position: the rig's base values, times day/night if set. */
+function applyLightValues(): void {
+  if (!rig) return;
+  const p = rig.base;
+  const { scene, hemi, sun, rim, fill } = rig;
+  const dn = dayNight;
+  const ambient = (dn ? dn.ambientScale : 1) * (stageBackdrop?.ambientScale ?? 1);
+  scene.environmentIntensity = p.envIntensity * ambient;
+  applyBackground();
+  tint(hemi.color, p.hemi[0], dn?.ambientTint ?? null);
+  tint(hemi.groundColor, p.hemi[1], dn?.ambientTint ?? null);
+  hemi.intensity = p.hemi[2] * ambient;
+  tint(sun.color, p.sun[0], dn?.sunTint ?? null);
+  sun.intensity = p.sun[1] * (dn ? dn.sunScale : 1) * (stageBackdrop?.sunScale ?? 1);
+  if (dn) {
+    // Same distance as the preset's sun, along the day/night direction (shifted by however far
+    // this preset's sun is from the reference one, so midday is the preset's own direction).
+    const dist = Math.hypot(p.sun[2], p.sun[3], p.sun[4]);
+    const k = dn.presetDirection;
+    scratchDir
+      .set(
+        dn.lightDirection[0] + (p.sun[2] / dist - dn.referenceDirection[0]) * k,
+        dn.lightDirection[1] + (p.sun[3] / dist - dn.referenceDirection[1]) * k,
+        dn.lightDirection[2] + (p.sun[4] / dist - dn.referenceDirection[2]) * k
+      )
+      .normalize()
+      .multiplyScalar(dist);
+    sun.position.set(scratchDir.x + sunFocus.x, scratchDir.y, scratchDir.z + sunFocus.z);
+  } else {
+    sun.position.set(p.sun[2] + sunFocus.x, p.sun[3], p.sun[4] + sunFocus.z);
+  }
+  tint(rim.color, p.rim[0], dn?.ambientTint ?? null);
+  rim.intensity = p.rim[1] * ambient;
+  rim.visible = p.rim[1] > 0;
+  tint(fill.color, p.fill[0], dn?.ambientTint ?? null);
+  fill.intensity = p.fill[1] * ambient;
+}
+
+/**
+ * Lay day/night over the active lighting preset, or pass null to go back to the plain preset.
+ * Cheap enough to call every frame the time changes (no material recompiles).
+ */
+export function setDayNightLighting(lighting: DayNightLighting | null): void {
+  if (!lighting && !dayNight) return;
+  dayNight = lighting;
+  applyLightValues();
+}
+
+/**
+ * Drop day/night for a moment (thumbnail captures render the plain preset) and get back a function
+ * that puts it back.
+ */
+export function suspendDayNightLighting(): () => void {
+  const was = dayNight;
+  if (!was) return () => {};
+  setDayNightLighting(null);
+  return () => setDayNightLighting(was);
+}
+
 export function getLightingPreset(): LightingPresetId {
   return currentPreset;
 }
@@ -169,17 +320,14 @@ export function setLightingPreset(id: LightingPresetId): void {
   currentPreset = id;
   if (!rig) return;
   const p = LIGHTING_PRESETS[id];
-  const { scene, renderer, hemi, sun, rim, fill } = rig;
+  const { scene, renderer } = rig;
+  rig.base = p;
   if (renderer) {
     renderer.toneMapping = p.toneMapping;
     renderer.toneMappingExposure = p.exposure;
   }
-  scene.environmentIntensity = p.envIntensity;
   applySky();
-  hemi.color.setHex(p.hemi[0]); hemi.groundColor.setHex(p.hemi[1]); hemi.intensity = p.hemi[2];
-  sun.color.setHex(p.sun[0]); sun.intensity = p.sun[1]; sun.position.set(p.sun[2] + sunFocus.x, p.sun[3], p.sun[4] + sunFocus.z);
-  rim.color.setHex(p.rim[0]); rim.intensity = p.rim[1]; rim.visible = p.rim[1] > 0;
-  fill.color.setHex(p.fill[0]); fill.intensity = p.fill[1];
+  applyLightValues();
   // Toggle self-shadowing on every character mesh (ground keeps receiving shadows).
   scene.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
@@ -235,7 +383,17 @@ export function addLights(scene: THREE.Scene, renderer?: THREE.WebGLRenderer): v
   fillLight.position.set(0, -4, 2);
   scene.add(fillLight);
 
-  rig = { scene, renderer, hemi: hemiLight, sun, rim, fill: fillLight };
+  rig = {
+    scene, renderer, hemi: hemiLight, sun, rim, fill: fillLight,
+    // Keep in step with the light values above.
+    base: {
+      envIntensity: renderer ? 0.7 : 1,
+      hemi: [0xdfeaff, 0x8a7a68, 1.1],
+      sun: [0xfff1d6, 2.4, 2.5, 5, 3],
+      rim: [0x9ab8ff, 1.6],
+      fill: [0xfff0e0, 0.9],
+    },
+  };
 }
 
 /** Ground point the sun's shadow frustum is centered on (see setSunFocus). */

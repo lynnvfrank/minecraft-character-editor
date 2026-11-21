@@ -23,6 +23,11 @@ export function registerArmModelPanelContext(ctx: ArmModelPanelContext): void {
   registered = ctx;
 }
 
+/** The arm model the character is shown with right now; null before main registered the context. */
+export function getResolvedArmModel(): ArmModel | null {
+  return registered?.getResolved() ?? null;
+}
+
 const LABELS: Record<ArmModelSetting, string> = { auto: 'Auto', slim: 'Slim', classic: 'Classic' };
 const TITLES: Record<ArmModelSetting, string> = {
   auto: 'Pick arm width from the skin',

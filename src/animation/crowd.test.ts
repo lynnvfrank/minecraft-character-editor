@@ -16,7 +16,8 @@ function seeded(seed: number): () => number {
 }
 
 function makeSim(overrides: Partial<CrowdConfig> = {}) {
-  return createCrowdSim({ ...DEFAULT_CROWD_CONFIG, random: seeded(42), ...overrides });
+  // Greetings and gatherings are off here (they have their own tests in crowdSocial.test.ts).
+  return createCrowdSim({ ...DEFAULT_CROWD_CONFIG, greetChance: 0, gatherInterval: null, random: seeded(42), ...overrides });
 }
 
 /** Run the sim, auto-spawning on request (models "load" instantly). */
@@ -249,5 +250,49 @@ describe('crowd sim', () => {
     for (let t = 0; t < 8; t += 0.05) sim.tick(0.05);
     assert.notEqual(w.phase, 'walking', 'still pushing against the blocker');
     assert.ok(w.x < -0.5, 'never walked through the blocker');
+  });
+
+  test('reserve(at) starts the agent at that spot and still respects maxAgents', () => {
+    const sim = makeSim({ maxAgents: 1 });
+    const id = sim.reserve({ x: 1.5, z: -2 });
+    assert.ok(id);
+    const a = sim.get(id)!;
+    assert.deepEqual([a.x, a.z, a.phase], [1.5, -2, 'loading']);
+    assert.equal(sim.reserve({ x: 0, z: 0 }), null);
+    sim.activate(id);
+    assert.equal(a.phase, 'entering');
+  });
+
+  test('navChanged moves agents off newly blocked ground and re-plans walks around it', () => {
+    const grid = createNavGrid(12, 12, -6, -6, 1);
+    const spots = [{ x: -4.5, z: 0.5 }, { x: 4.5, z: 0.5 }];
+    const sim = makeSim({
+      maxAgents: 2,
+      stay: [100, 200],
+      idle: [100, 200],
+      nav: { spots, gates: [], findPath: (a, b) => findPath(grid, a, b, { radius: 0.3 }), isClear: (p) => isClearAt(grid, p, 0.24) },
+    });
+    // One walker heading east along z = 0.5, one idler standing at the origin cell.
+    const walker = sim.addAgentAt('walker', -4.5, 0.5, 0);
+    const idler = sim.addAgentAt('idler', 0.5, -3.5, 0);
+    walker.phase = 'walking';
+    walker.target = { x: 4.5, z: 0.5 };
+    walker.path = [];
+    // Build a wall across x = 0 (a gap at the north end) and on the idler's cell.
+    for (let r = 1; r < 12; r++) setBlocked(grid, 6, r);
+    const nudge = (p: { x: number; z: number }) => {
+      const col = Math.floor(p.x + 6), row = Math.floor(p.z + 6);
+      return grid.blocked[row * 12 + col] ? { x: 1.5, z: -3.5 } : null;
+    };
+    sim.navChanged(nudge);
+    assert.deepEqual({ x: idler.x, z: idler.z }, { x: 1.5, z: -3.5 }, 'idler stepped off the wall');
+    assert.equal(walker.phase, 'walking');
+    const route = [walker.target!, ...walker.path];
+    assert.ok(route.length >= 2, 'walk was re-planned around the wall');
+    // Walk it out: nobody crosses the wall.
+    for (let i = 0; i < 600; i++) {
+      sim.tick(0.05);
+      for (const a of sim.list()) assert.ok(isClearAt(grid, a, 0.25), `${a.id} inside the wall`);
+    }
   });
 });

@@ -69,8 +69,8 @@ export function initAboutPanel(): void {
   const btn = el('button', 'about-btn', '?');
   btn.type = 'button';
   btn.id = 'about-btn';
-  btn.title = 'About & credits';
-  btn.setAttribute('aria-label', 'About and credits');
+  btn.title = 'About, backup & credits';
+  btn.setAttribute('aria-label', 'About, backup and credits');
   btn.setAttribute('aria-haspopup', 'dialog');
 
   const overlay = el('div', 'about-overlay');

@@ -1,0 +1,18 @@
+// "Dancers" section of the dance studio panel (src/ui/studioDancersPanel.ts). Reuses the studio
+// panel's section, row, button and hint classes; only the group-dance bits live here.
+
+.studio-dancers {
+  flex: 0 0 auto;
+}
+
+.studio-dancers-label {
+  flex: 0 0 4.6rem;
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+.studio-dancers-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 0.3rem;
+}

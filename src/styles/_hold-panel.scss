@@ -1,0 +1,18 @@
+// Hold panel: home view, in the Move panels' column (see src/ui/holdPanel.ts).
+// Tiles and chrome come from _move-panel.scss; this only marks the chosen item.
+
+.hold-panel {
+  flex: 0 0 auto;
+}
+
+.hold-tile {
+  &.is-active {
+    border-color: rgba(var(--fg-rgb), 0.55);
+    background: rgba(var(--fg-rgb), 0.16);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}

@@ -37,6 +37,7 @@ import {
   applyFocusedSoloForWardrobeLayer,
   setLayersPanelFocusedListExpanded,
   flushDeferredWardrobeLibraryPanelsAfterCamera,
+  exportTo64x64DataURL,
 } from './creator';
 import { EDIT_MODE_WARDROBE, type EditMode } from './creator/api';
 import { createCharacterController } from './controllers/character';
@@ -47,7 +48,11 @@ import {
 import { createCharacterEventsController } from './controllers/characterEvents';
 import { createCrowdController, type CrowdController } from './controllers/crowdController';
 import { createBlockWorldController } from './controllers/blockWorldController';
+import { createDayNightController } from './controllers/dayNightController';
+import { createWeatherController } from './controllers/weatherController';
 import { createSelectionController, type SelectionController } from './controllers/selectionController';
+import { createVillageEditorController } from './controllers/villageEditorController';
+import { createVillageSaveSection, createVillageStore } from './state/villageStore';
 import { DEFAULT_CROWD_CONFIG } from './animation/crowd';
 import { createAnimationLoopController } from './controllers/animationLoop';
 import { createCreatorPoseController, type CreatorPoseController } from './controllers/creatorPose';
@@ -101,13 +106,44 @@ import { createArmModelState } from './state/armModelState';
 import { initTheme } from './ui/theme';
 import { initAboutPanel } from './ui/aboutPanel';
 import { createMovePanel } from './ui/movePanel';
+import { createResidentsPanel } from './ui/residentsPanel';
+import { createResidentsStore } from './state/residentsStore';
+import { getOutfitsStore } from './state/outfitsStore';
+import { createOutfitResidents } from './controllers/outfitResidents';
+import { createCreatorToWorld } from './controllers/creatorToWorld';
+import { outfitIdFromKey } from './domain/residents';
 import { createStudioPanel } from './ui/studioPanel';
+import { createStudioCapturePanel } from './ui/studioCapturePanel';
+import { createStudioBeatPanel } from './ui/studioBeatPanel';
+import { createStudioBeatController } from './controllers/studioBeatController';
+import { createBeatSaveSection, createStudioBeatStore } from './state/studioBeatStore';
+import { createStudioDancersPanel } from './ui/studioDancersPanel';
+import { createStudioDancersController } from './controllers/studioDancersController';
+import { createGroupDanceStore } from './state/groupDanceStore';
+import { createStudioStagePanel } from './ui/studioStagePanel';
+import { createStudioStageController } from './controllers/studioStageController';
+import { createStudioBackdropStore } from './state/studioBackdrop';
+import { createCameraBookmarksStore, cameraBookmarksSaveSection } from './state/cameraBookmarks';
+import { createCameraGlide } from './controllers/cameraGlide';
+import { createPhotoModeController } from './controllers/photoModeController';
+import { createBookmarkChips } from './ui/cameraBookmarkChips';
+import { createPhotoModeBar } from './ui/photoModeBar';
+import { partOfDay } from './lib/dayNight';
+import { captureStagePhoto } from './viewer/stagePhoto';
 import { createStudioController, type StudioController } from './controllers/studioController';
 import { createSavedSequencesStore } from './state/savedSequences';
+import { initSaveAndShare, saveRegistry } from './controllers/saveAndShare';
+import { isWeatherMode, WEATHER_LABELS } from './lib/weather';
+import { createTimeOfDayStore } from './state/timeOfDay';
+import { createTimeOfDayPanel } from './ui/timeOfDayPanel';
+import { createWeatherStore } from './state/weather';
+import { createWeatherPanel } from './ui/weatherPanel';
+import { createWeatherParticles } from './viewer/weatherParticles';
 import {
   initElectronStatus,
 } from './ui';
 import { createThumbnailCapture } from './viewer/thumbnailCapture';
+import { setupHeldItems } from './controllers/heldItemsSetup';
 import { createSkinCompositor, loadCachedImage } from './viewer/skinCompositor';
 import { registerCapture3DThumbnail, registerCapture3DPartThumbnail } from './viewer/capture3DThumbnail';
 import {
@@ -598,6 +634,10 @@ async function main(): Promise<void> {
   initTheme();
   initAboutPanel();
   const savedSequences = createSavedSequencesStore(getLocalStorage());
+  const residents = createResidentsStore(getLocalStorage());
+  // My outfits (kept in the creator) can live in the village: roster entries `outfit:<id>`.
+  const outfits = getOutfitsStore();
+  const outfitResidents = createOutfitResidents(outfits);
   const movePanel = createMovePanel({
     getRoute,
     getCamera: () => sceneContext?.camera ?? null,
@@ -653,7 +693,34 @@ async function main(): Promise<void> {
   const getAction = characterController.getAction;
 
   // Home view block village (?world=0 for the old open stage). Walks route around its buildings.
-  const blockWorld = params.get('world') === '0' ? null : createBlockWorldController(sceneContext.scene);
+  // The layout itself is the player's (Build mode, state/villageStore.ts); the built-in one by default.
+  const villageStore = createVillageStore(getLocalStorage());
+  const blockWorld = params.get('world') === '0' ? null : createBlockWorldController(sceneContext.scene, villageStore.get());
+
+  // Home view day and night: a time-of-day control, and lighting laid over the active preset.
+  const timeOfDay = createTimeOfDayStore(getLocalStorage());
+  createTimeOfDayPanel({ store: timeOfDay });
+  // Home view weather (rain, snow) over the village: particles here, the overcast light through day/night.
+  const weatherStore = createWeatherStore(getLocalStorage());
+  if (blockWorld) createWeatherPanel({ store: weatherStore });
+  const weather = createWeatherController({
+    store: weatherStore,
+    createParticles: () =>
+      createWeatherParticles(sceneContext.scene, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        pixelRatio: window.devicePixelRatio,
+      }),
+    getCenter: () => sceneContext.controls.target,
+    isVillageShown: () => blockWorld?.isShown() ?? false,
+    getTimeOfDay: () => timeOfDay.get().time,
+  });
+  const dayNight = createDayNightController({
+    scene: sceneContext.scene,
+    store: timeOfDay,
+    weather,
+    lamps: blockWorld && { get positions() { return blockWorld.lampPositions; }, setGlow: blockWorld.setLampGlow, isShown: blockWorld.isShown },
+  });
 
   const animationManager = createAnimationManager({
     getCharacter,
@@ -686,15 +753,65 @@ async function main(): Promise<void> {
     getSceneContext: () => sceneContext,
     getFacing: () => animationManager.getFacing(),
   }));
+  // Studio "Beat" section: synthesized music, snap-to-beat routines, bounce and record with sound.
+  const studioBeatStore = createStudioBeatStore(getLocalStorage());
+  const studioBeat = createStudioBeatController({ store: studioBeatStore, getLead: () => getCharacter(getPrimaryCharacterId()) });
   const studioPanel = createStudioPanel({
     studio,
     savedSequences,
+    routineBeat: { ...studioBeatStore, setSnap: (snap) => studioBeatStore.set({ snap }), nextBarStartMs: studioBeat.nextBarStartMs },
     onExit: () => {
       location.hash = '#/';
     },
   });
   // The route may have been applied (e.g. a direct #/studio load) before the controller existed.
   if (getRoute() === 'studio') studio.enter();
+  // Studio "Camera" section (photo + video); a recording stops by itself when the route changes.
+  createStudioCapturePanel({
+    mount: document.getElementById('studio-panel'),
+    getCanvas: () => sceneContext.renderer.domElement,
+    takePhoto: (options) => captureStagePhoto(sceneContext, options),
+    isOnStage: () => getRoute() === 'studio',
+    getAudioTrack: studioBeat.lendAudioTrack,
+  });
+  createStudioBeatPanel({ mount: document.getElementById('studio-panel'), beat: studioBeat, settings: studioBeatStore });
+  saveRegistry.register(createBeatSaveSection(studioBeatStore));
+  // Studio "Backdrop" and "Camera moves" sections; both apply on the studio route only.
+  const studioBackdrop = createStudioBackdropStore(getLocalStorage());
+  const studioStage = createStudioStageController({
+    scene: sceneContext.scene,
+    camera: sceneContext.camera,
+    controls: {
+      target: sceneContext.controls.target,
+      addEventListener: (type, listener) => sceneContext.controls.addEventListener(type, listener),
+    },
+    backdrop: studioBackdrop,
+    getCharacterPosition: () => getCharacter(getPrimaryCharacterId())?.container.position ?? null,
+    getFacing: () => animationManager.getFacing(),
+    getGroupShot: () => studioDancers.groupShot(), // framings and the turntable take in the backup dancers
+  });
+  // Camera spots (bookmarks) for the studio and the home view's photo mode; glides run on real time.
+  const cameraBookmarks = createCameraBookmarksStore(getLocalStorage());
+  saveRegistry.register(cameraBookmarksSaveSection(cameraBookmarks));
+  const photoMode = createPhotoModeController({ camera: sceneContext.camera, controls: sceneContext.controls, scene: sceneContext.scene, getRoute });
+  const cameraGlide = createCameraGlide({ camera: sceneContext.camera, controls: sceneContext.controls, onArrive: photoMode.refresh });
+  const studioSpots = createBookmarkChips({ store: cameraBookmarks, place: 'studio', getPose: cameraGlide.currentPose,
+    goTo: (b) => { studioStage.setTurntable(false); cameraGlide.to(b); } });
+  createStudioStagePanel({ mount: document.getElementById('studio-panel'), backdrop: studioBackdrop, camera: studioStage, cameraSpots: studioSpots.root });
+  createPhotoModeBar({
+    mode: photoMode,
+    getCanvas: () => sceneContext.renderer.domElement,
+    takePhoto: () => captureStagePhoto(sceneContext),
+    getPartOfDay: () => partOfDay(timeOfDay.get().time),
+    chips: createBookmarkChips({ store: cameraBookmarks, place: 'home', getPose: cameraGlide.currentPose,
+      goTo: (b) => { app.tryGet('selection')?.deselect(); cameraGlide.to(b); } }).root, // following would fight the glide
+  });
+  /** Photo mode's Freeze scales the world's delta to 0; camera moves and rendering keep real time. */
+  const cameraHooks = {
+    getTimeScale: photoMode.timeScale,
+    onCameraUpdate: (realDelta: number, route: AppRoute) => { photoMode.update(route); cameraGlide.update(realDelta, route); },
+    beforeRender: () => photoMode.beforeRender(),
+  };
 
   const crowd = app.provide('crowd', createCrowdController({
     getSceneContext,
@@ -706,8 +823,87 @@ async function main(): Promise<void> {
     getAnimations: () => animationsList,
     resolveModelPath: async (skinPath) =>
       ARM_MODEL_PATHS[(await detectArmModelFromPath(skinPath)) ?? 'classic'],
+    getRoster: () => residents.get(),
+    outfits: outfitResidents,
+    getCombos: () => savedSequences.list(),
+    getTimeOfDay: () => timeOfDay.get().time,
+    getRain: weather.getRain,
     config: blockWorld ? { nav: blockWorld.crowdNav } : undefined,
   }));
+  // Residents panel: who lives in the village. The store holds the choice; the crowd applies it.
+  residents.subscribe(() => crowd.syncRoster());
+  createResidentsPanel({
+    getSkins: () => [...outfitResidents.entries(), ...skinsList],
+    store: residents,
+    getPresentSkins: crowd.presentSkins,
+    getPrimarySkin: crowd.primarySkin,
+    cap: crowd.residentsCap,
+    onRemoveOutfit: (key) => void outfits.remove(outfitIdFromKey(key) ?? ''),
+    subscribeSkins: outfits.subscribe,
+  });
+  /** Everything a roster may name; drops residents whose skin or outfit no longer exists. */
+  const rosterSkins = () => [...skinsList.map((s) => s.path), ...outfitResidents.keys()];
+  const pruneResidents = () => {
+    if (skinsList.length > 0) residents.prune(rosterSkins(), crowd.residentsCap);
+  };
+  outfits.subscribe(pruneResidents); // a deleted outfit takes its resident with it
+
+  // Studio "Dancers" section: backup dancers that copy the lead. They live only on the studio stage.
+  const groupDance = createGroupDanceStore(getLocalStorage());
+  createStudioDancersPanel({ mount: document.getElementById('studio-panel'), store: groupDance });
+  // Backup file (About panel) and shared-combo links (?combo=). New stores join the backup with
+  // saveRegistry.register(...) (exported by controllers/saveAndShare).
+  // Registered before the core sections so a restore brings outfits back before the roster that names them.
+  saveRegistry.register({
+    key: 'outfits',
+    label: 'My outfits',
+    read: () => (outfits.list().length > 0 ? outfits.exportOutfits() : undefined),
+    parse: (raw: unknown) => (raw && typeof raw === 'object' ? raw : null),
+    write: (data) => void outfits.importOutfits(data),
+    describe: () => 'My outfits (added to yours)',
+  });
+  initSaveAndShare({
+    savedSequences,
+    residents,
+    timeOfDay,
+    groupDance,
+    backdrop: studioBackdrop,
+    getAvailableSkins: rosterSkins,
+    residentsCap: crowd.residentsCap,
+    getClipKeys: () => animationsList.map((a) => a.key),
+  });
+  saveRegistry.register({
+    key: 'weather',
+    label: 'Weather',
+    read: () => weatherStore.get().mode,
+    parse: (raw: unknown) => (isWeatherMode(raw) ? raw : null),
+    write: (mode) => weatherStore.setMode(mode),
+    describe: (mode) => WEATHER_LABELS[mode],
+  });
+  const heldItems = setupHeldItems({
+    storage: getLocalStorage(),
+    getSceneContext,
+    getPrimary: () => getCharacter(getPrimaryCharacterId()),
+    getDancers: () => studioDancers.characters(),
+    keyOf: outfitResidents.keyOf,
+    getTimeOfDay: () => timeOfDay.get().time,
+    saveRegistry,
+  });
+  saveRegistry.register(createVillageSaveSection(villageStore));
+  const studioDancers = createStudioDancersController({
+    getSceneContext,
+    getLead: () => getCharacter(getPrimaryCharacterId()),
+    getLeadWeights: () => studio.getSnapshot().applied,
+    getFacing: () => animationManager.getFacing(),
+    getSettings: groupDance.get,
+    loadCharacter: characterController.loadCharacter,
+    getSkins: () => skinsList,
+    getAnimations: () => animationsList,
+    resolveModelPath: async (skinPath) =>
+      ARM_MODEL_PATHS[(await detectArmModelFromPath(skinPath)) ?? 'classic'],
+    getRoster: () => residents.get(),
+    getCameraSerial: studioStage.userCameraSerial,
+  });
 
   const creatorPoseController = createCreatorPoseController({
     getCharacter,
@@ -765,6 +961,7 @@ async function main(): Promise<void> {
     skins = FALLBACK_SKINS;
   }
   skinsList = skins;
+  pruneResidents();
 
   let animations: AnimationEntry[];
   try {
@@ -808,6 +1005,26 @@ async function main(): Promise<void> {
   });
   app.provide('transitions', { getTransitionInFlight: creatorTransitionHandler.getTransitionInFlight });
   routeButtons.setup(creatorTransitionHandler);
+  // Creator "Send to village" / "Dance in studio" (buttons in the creator's Keep/Save panel).
+  createCreatorToWorld({
+    getRoute,
+    hasSkin: getCreatorCanvasPopulated,
+    exportSkin: exportTo64x64DataURL,
+    getArmModel: armModelState.getResolved,
+    outfits,
+    residents,
+    getPresentSkins: crowd.presentSkins,
+    getAvailableSkins: rosterSkins,
+    cap: crowd.residentsCap,
+    wearOutfit: (dataUrl) => {
+      const char = getCharacter(getPrimaryCharacterId());
+      if (!char) return;
+      char.currentSkin = dataUrl;
+      router.noteCreatorLoadedPath(dataUrl);
+      viewerUIController.highlightActiveSkin(char.id, dataUrl);
+    },
+    exitCreator: creatorTransitionHandler.exitCreator,
+  }).start();
 
   const characterEventsController = createCharacterEventsController({
     getCharacter,
@@ -827,7 +1044,11 @@ async function main(): Promise<void> {
   /** Crowd, selection and camera follow. The world stops while the creator is open. */
   function onWorldUpdate(delta: number, route: AppRoute): void {
     if (route === 'studio') studio.update(delta);
+    studioBeat.update(route); // after studio.update; stops the beat off the studio route
+    studioStage.update(delta, route);
     blockWorld?.update(route);
+    weather.update(delta, route); // before day/night, which lights the sky for it
+    dayNight.update(delta, route);
     if (blockWorld) {
       // Editor (and the camera move into it): keep walls and trees out from between camera and character.
       const editing = route === 'creator' || (route === 'viewer' && getCreatorTransitionInFlight());
@@ -842,6 +1063,8 @@ async function main(): Promise<void> {
     }
     crowd.update(delta, route, !getCreatorTransitionInFlight());
     app.tryGet('selection')?.update(delta, route);
+    studioDancers.update(delta, route); // after studio.update: mirrors what it applied this frame
+    heldItems.update(route);
     const target = sceneContext.controls.target;
     setSunFocus(target.x, target.z);
   }
@@ -860,6 +1083,7 @@ async function main(): Promise<void> {
       onFrameUpdate: creatorPreview.onFrame,
       shouldUpdateCharacter: (char) => crowd.shouldUpdateCharacter(char, getRoute()),
       onWorldUpdate,
+      ...cameraHooks,
     });
     setupTestControls({
       animationManager,
@@ -893,6 +1117,7 @@ async function main(): Promise<void> {
       onFrameUpdate: creatorPreview.onFrame,
       shouldUpdateCharacter: (char) => crowd.shouldUpdateCharacter(char, getRoute()),
       onWorldUpdate,
+      ...cameraHooks,
     });
     setFacingLogContextProvider(() => ({
       state: characterAI?.getState(),
@@ -927,9 +1152,21 @@ async function main(): Promise<void> {
       }
     },
     getSkinLabel: (path) =>
-      skinsList.find((s) => s.path === path)?.label ?? path.split('/').pop()?.replace(/[.]png$/i, '') ?? 'Character',
+      outfitResidents.labelOf(path) ?? skinsList.find((s) => s.path === path)?.label ?? path.split('/').pop()?.replace(/[.]png$/i, '') ?? 'Character',
     roamRadius: blockWorld?.roamRadius ?? DEFAULT_CROWD_CONFIG.edgeRadius + 6,
+    isClickSuppressed: () => villageEditor?.isBuilding() ?? false,
   }));
+  // Home view Build mode: paint the village; rebuilds and refreshes crowd, lamps and weather spots.
+  const villageEditor = blockWorld && createVillageEditorController({
+    getSceneContext,
+    getRoute,
+    blockWorld,
+    store: villageStore,
+    dayNight,
+    crowd,
+    animationManager,
+    deselect: () => app.get('selection').deselect(),
+  });
 
   if (import.meta.env.DEV) {
     // Dev-only handle for poking at the home world from the console.

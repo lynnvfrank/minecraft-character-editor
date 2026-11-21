@@ -1,6 +1,19 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { linearToSrgb, renderTargetPixelsToImageData } from './captureHelpers';
+import { flipPixelRows, linearToSrgb, renderTargetPixelsToImageData } from './captureHelpers';
+
+describe('flipPixelRows', () => {
+  test('flips rows of a non-square buffer without changing values', () => {
+    // 2 wide, 3 tall: each row filled with its WebGL row index x 100 (row 0 = bottom)
+    const px = new Uint8Array(2 * 3 * 4);
+    for (let row = 0; row < 3; row++) px.fill(row * 100, row * 8, row * 8 + 8);
+    const out = flipPixelRows(px, 2, 3);
+    assert.equal(out.length, px.length);
+    assert.deepEqual([...out.slice(0, 8)], Array(8).fill(200), 'top row was the last WebGL row');
+    assert.deepEqual([...out.slice(8, 16)], Array(8).fill(100));
+    assert.deepEqual([...out.slice(16, 24)], Array(8).fill(0));
+  });
+});
 
 describe('linearToSrgb', () => {
   test('endpoints are fixed', () => {
