@@ -115,6 +115,7 @@ import { createStudioBackdropStore } from './state/studioBackdrop';
 import { captureStagePhoto } from './viewer/stagePhoto';
 import { createStudioController, type StudioController } from './controllers/studioController';
 import { createSavedSequencesStore } from './state/savedSequences';
+import { initSaveAndShare } from './controllers/saveAndShare';
 import { createTimeOfDayStore } from './state/timeOfDay';
 import { createTimeOfDayPanel } from './ui/timeOfDayPanel';
 import {
@@ -768,6 +769,18 @@ async function main(): Promise<void> {
   // Studio "Dancers" section: backup dancers that copy the lead. They live only on the studio stage.
   const groupDance = createGroupDanceStore(getLocalStorage());
   createStudioDancersPanel({ mount: document.getElementById('studio-panel'), store: groupDance });
+  // Backup file (About panel) and shared-combo links (?combo=). New stores join the backup with
+  // saveRegistry.register(...) (exported by controllers/saveAndShare).
+  initSaveAndShare({
+    savedSequences,
+    residents,
+    timeOfDay,
+    groupDance,
+    backdrop: studioBackdrop,
+    getAvailableSkins: () => skinsList.map((s) => s.path),
+    residentsCap: crowd.residentsCap,
+    getClipKeys: () => animationsList.map((a) => a.key),
+  });
   const studioDancers = createStudioDancersController({
     getSceneContext,
     getLead: () => getCharacter(getPrimaryCharacterId()),

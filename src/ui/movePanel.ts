@@ -269,11 +269,10 @@ export function createMovePanel(deps: MovePanelDeps) {
   const tiles = new Map<string, Tile>();
 
   function tileButton(t: Tile): HTMLButtonElement {
-    const b = button(
-      'move-tile',
-      `<span class="move-tile-icon" aria-hidden="true">${t.emoji}</span><span class="move-tile-label">${t.label}</span>`,
-      t.label
-    );
+    // Labels can come from a share link or a backup file: set them as text, never as HTML.
+    const b = button('move-tile', '<span class="move-tile-icon" aria-hidden="true"></span><span class="move-tile-label"></span>', t.label);
+    b.querySelector('.move-tile-icon')!.textContent = t.emoji;
+    b.querySelector('.move-tile-label')!.textContent = t.label;
     b.dataset.move = t.id;
     b.addEventListener('click', () => {
       t.run(b);

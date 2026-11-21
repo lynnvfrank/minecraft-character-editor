@@ -17,3 +17,24 @@ export type SavedSequenceStep =
 
 /** A user-made sequence (from the dance studio), replayable from the Move panel. */
 export type SavedSequence = { id: string; label: string; steps: SavedSequenceStep[] };
+
+/** Shape check for one stored step (untrusted JSON). Limits and clamping are in sequenceImport.ts. */
+export function isSavedSequenceStep(v: unknown): v is SavedSequenceStep {
+  if (!v || typeof v !== 'object') return false;
+  const s = v as Record<string, unknown>;
+  if (s.type === 'animation') return typeof s.name === 'string';
+  if (s.type === 'pause') return true;
+  if (s.type === 'blend') {
+    return (
+      Array.isArray(s.layers) &&
+      s.layers.length > 0 &&
+      s.layers.every(
+        (l) =>
+          l && typeof l === 'object' &&
+          typeof (l as Record<string, unknown>).name === 'string' &&
+          typeof (l as Record<string, unknown>).weight === 'number'
+      )
+    );
+  }
+  return false;
+}

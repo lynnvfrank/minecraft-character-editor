@@ -32,6 +32,7 @@ import {
   type RoutineStep,
 } from '../animation/studioRoutine';
 import { MOVEMENT_CLIPS, moveEmoji, moveLabel } from './moveInfo';
+import { shareCombo } from './shareComboUi';
 
 type AnimationEntry = { key: string; label: string };
 
@@ -386,7 +387,12 @@ export function createStudioPanel(deps: StudioPanelDeps) {
         del.title = `Delete “${sq.label}”`;
         del.setAttribute('aria-label', `Delete ${sq.label}`);
         del.addEventListener('click', () => deps.savedSequences.remove(sq.id));
-        li.append(name, del);
+        const share = el('button', 'studio-btn studio-btn--icon', '🔗');
+        share.type = 'button';
+        share.title = `Share “${sq.label}” (copies a link)`;
+        share.setAttribute('aria-label', `Share ${sq.label}`);
+        share.addEventListener('click', () => void shareCombo(sq));
+        li.append(name, share, del);
         return li;
       })
     );
