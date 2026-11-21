@@ -2,13 +2,14 @@
  * "Backdrop" and "Camera moves" sections of the dance studio panel (`#/studio`): pick what is
  * behind the dancer, hide the floor, spin the camera around the stage or jump to a framing.
  *
- * A separate module from studioPanel.ts (like studioCapturePanel.ts): it builds its own
- * `<section>`s and inserts them under the Camera section. Created once at startup.
+ * A separate module from studioPanel.ts (like studioCapturePanel.ts): it builds its own collapsible
+ * sections and mounts them at their places in the panel. Created once at startup.
  */
 import {
   CUSTOM_BACKDROP_ID,
   STUDIO_BACKDROPS,
   backdropSwatchCss,
+  findBackdrop,
   type BackdropSettings,
 } from '../lib/studioBackdrop';
 import {
@@ -19,6 +20,7 @@ import {
   type CameraFramingId,
   type TurntableSpeedId,
 } from '../lib/turntable';
+import { createCollapsibleSection, mountStudioSection } from './collapsibleSection';
 
 export type StudioStagePanelDeps = {
   /** The studio panel root (`#studio-panel`). */
@@ -55,9 +57,18 @@ function button(className: string, text?: string): HTMLButtonElement {
 }
 
 function buildBackdropSection(store: StudioStagePanelDeps['backdrop']): HTMLElement {
-  const root = el('section', 'studio-section studio-backdrop');
-  root.id = 'studio-backdrop';
-  root.append(el('h3', 'studio-section-title', 'Backdrop'));
+  const section = createCollapsibleSection({
+    id: 'backdrop',
+    title: 'Backdrop',
+    className: 'studio-backdrop',
+    domId: 'studio-backdrop',
+    summary: () => {
+      const s = store.get();
+      const name = s.id === CUSTOM_BACKDROP_ID ? 'Your color' : (findBackdrop(s.id)?.label ?? 'Default');
+      return s.floor ? name : `${name} · No floor`;
+    },
+  });
+  const root = section.root;
 
   const grid = el('div', 'studio-swatches');
   grid.setAttribute('role', 'group');
@@ -99,7 +110,7 @@ function buildBackdropSection(store: StudioStagePanelDeps['backdrop']): HTMLElem
   floorBox.addEventListener('change', () => store.setFloor(floorBox.checked));
   row.append(floorLabel);
 
-  root.append(grid, row);
+  section.body.append(grid, row);
 
   function render(): void {
     const s = store.get();
@@ -111,6 +122,7 @@ function buildBackdropSection(store: StudioStagePanelDeps['backdrop']): HTMLElem
     custom.style.background = s.customColor;
     if (customInput.value !== s.customColor) customInput.value = s.customColor;
     floorBox.checked = s.floor;
+    section.refresh();
   }
   store.subscribe(render);
   render();
@@ -118,14 +130,22 @@ function buildBackdropSection(store: StudioStagePanelDeps['backdrop']): HTMLElem
 }
 
 function buildCameraSection(camera: StudioStagePanelDeps['camera']): HTMLElement {
-  const root = el('section', 'studio-section studio-camera-moves');
-  root.id = 'studio-camera-moves';
-  root.append(el('h3', 'studio-section-title', 'Camera moves'));
+  const section = createCollapsibleSection({
+    id: 'cameraMoves',
+    title: 'Camera moves',
+    className: 'studio-camera-moves',
+    domId: 'studio-camera-moves',
+    summary: () => {
+      const s = camera.getSnapshot();
+      return s.turntable ? `Turntable on · ${TURNTABLE_SPEEDS[s.speed].label}` : 'Turntable off';
+    },
+  });
+  const root = section.root;
 
   const spinRow = el('div', 'studio-row');
   const spinBtn = button('studio-btn studio-turntable-btn', '⟳ Turntable');
   spinBtn.id = 'studio-turntable-btn';
-  spinBtn.title = 'Slowly circle the camera around the dancer';
+  spinBtn.title = 'Slowly circle the camera around the stage';
   spinBtn.addEventListener('click', () => camera.setTurntable(!camera.getSnapshot().turntable));
   const speeds = el('div', 'studio-seg');
   speeds.setAttribute('role', 'group');
@@ -150,12 +170,13 @@ function buildCameraSection(camera: StudioStagePanelDeps['camera']): HTMLElement
     frameRow.append(btn);
   }
 
-  root.append(spinRow, frameRow);
+  section.body.append(spinRow, frameRow);
 
   function render(): void {
     const s = camera.getSnapshot();
     spinBtn.setAttribute('aria-pressed', String(s.turntable));
     for (const [id, btn] of speedBtns) btn.setAttribute('aria-pressed', String(id === s.speed));
+    section.refresh();
   }
   camera.subscribe(render);
   render();
@@ -164,10 +185,6 @@ function buildCameraSection(camera: StudioStagePanelDeps['camera']): HTMLElement
 
 export function createStudioStagePanel(deps: StudioStagePanelDeps): void {
   if (!deps.mount) return;
-  const backdrop = buildBackdropSection(deps.backdrop);
-  const cameraMoves = buildCameraSection(deps.camera);
-  // Under the Camera (photo / video) section when it exists, else right under the header.
-  const anchor = deps.mount.querySelector('#studio-capture') ?? deps.mount.querySelector('.studio-header');
-  if (anchor) anchor.after(backdrop, cameraMoves);
-  else deps.mount.prepend(backdrop, cameraMoves);
+  mountStudioSection(deps.mount, buildBackdropSection(deps.backdrop));
+  mountStudioSection(deps.mount, buildCameraSection(deps.camera));
 }

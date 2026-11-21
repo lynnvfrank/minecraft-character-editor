@@ -13,6 +13,9 @@ import {
   orbitPosition,
   stepTurntable,
   wrapAngle,
+  approach,
+  groupFramingPose,
+  GROUP_FRAMINGS,
 } from './turntable';
 
 const near = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≈ ${b}`);
@@ -121,5 +124,49 @@ describe('camera framings', () => {
     near(cam.x, Math.sin(0.45) * 5.2);
     near(cam.y, 1.8);
     near(cam.z, Math.cos(0.45) * 5.2);
+  });
+});
+
+describe('group framings and re-centring', () => {
+  const anchor = { x: 2, y: 0, z: -3, yaw: 0.4 };
+
+  test('no group: the plain framing at the lead', () => {
+    assert.deepEqual(groupFramingPose(CAMERA_FRAMINGS.fullBody, anchor, null), framingPose(CAMERA_FRAMINGS.fullBody, anchor));
+  });
+
+  test('a group moves the target to its middle and pulls the camera back', () => {
+    const solo = framingPose(CAMERA_FRAMINGS.wide, anchor);
+    const group = groupFramingPose(CAMERA_FRAMINGS.wide, anchor, { dx: 1, dz: -0.5, extraDistance: 1.8 });
+    assert.ok(Math.abs(group.target.x - (solo.target.x + 1)) < 1e-9);
+    assert.ok(Math.abs(group.target.z - (solo.target.z - 0.5)) < 1e-9);
+    assert.equal(group.target.y, solo.target.y);
+    assert.ok(Math.abs(group.orbit.radius - (solo.orbit.radius + 1.8)) < 1e-9);
+    assert.equal(group.orbit.angle, solo.orbit.angle);
+    assert.equal(group.orbit.height, solo.orbit.height);
+  });
+
+  test('a negative extra distance never brings the camera closer', () => {
+    const solo = framingPose(CAMERA_FRAMINGS.fullBody, anchor);
+    const group = groupFramingPose(CAMERA_FRAMINGS.fullBody, anchor, { dx: 0, dz: 0, extraDistance: -2 });
+    assert.equal(group.orbit.radius, solo.orbit.radius);
+  });
+
+  test('full body and wide show the group; the close-up stays on the lead', () => {
+    assert.ok(GROUP_FRAMINGS.includes('fullBody'));
+    assert.ok(GROUP_FRAMINGS.includes('wide'));
+    assert.ok(!GROUP_FRAMINGS.includes('closeUp'));
+  });
+
+  test('approach closes the gap without overshooting', () => {
+    assert.equal(approach(1, 5, 3, 0), 1);
+    assert.equal(approach(1, 5, 0, 0.1), 1);
+    const step = approach(0, 10, 3, 1 / 60);
+    assert.ok(step > 0 && step < 10);
+    assert.ok(approach(0, 10, 3, 100) <= 10);
+    assert.ok(Math.abs(approach(0, 10, 3, 100) - 10) < 1e-6);
+    // Two half steps land where one full step does (frame-rate independent).
+    const half = approach(approach(0, 10, 3, 0.05), 10, 3, 0.05);
+    assert.ok(Math.abs(half - approach(0, 10, 3, 0.1)) < 1e-9);
+    assert.ok(approach(10, 0, 3, 0.1) < 10);
   });
 });

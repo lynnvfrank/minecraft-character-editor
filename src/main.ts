@@ -737,6 +737,7 @@ async function main(): Promise<void> {
     backdrop: studioBackdrop,
     getCharacterPosition: () => getCharacter(getPrimaryCharacterId())?.container.position ?? null,
     getFacing: () => animationManager.getFacing(),
+    getGroupShot: () => studioDancers.groupShot(), // framings and the turntable take in the backup dancers
   });
   createStudioStagePanel({ mount: document.getElementById('studio-panel'), backdrop: studioBackdrop, camera: studioStage });
 
@@ -780,6 +781,7 @@ async function main(): Promise<void> {
     resolveModelPath: async (skinPath) =>
       ARM_MODEL_PATHS[(await detectArmModelFromPath(skinPath)) ?? 'classic'],
     getRoster: () => residents.get(),
+    getCameraSerial: studioStage.userCameraSerial,
   });
 
   const creatorPoseController = createCreatorPoseController({

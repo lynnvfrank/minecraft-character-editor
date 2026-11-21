@@ -121,6 +121,43 @@ export function groupFraming(offsets: readonly StageOffset[]): { center: StageOf
 }
 
 /**
+ * The group as a camera sees it: the world XZ shift from the lead to the middle of the group (for
+ * a lead facing `yaw`) and how much further back to stand than for one character. The framing
+ * buttons and the turntable use it so they work on the whole group.
+ */
+export type GroupShot = { dx: number; dz: number; extraDistance: number };
+
+export function groupShot(offsets: readonly StageOffset[], yaw: number): GroupShot {
+  const framing = groupFraming(offsets);
+  const c = stageToWorld(framing.center, yaw);
+  return { dx: c.x, dz: c.z, extraDistance: framing.distance - SOLO_CAMERA_DISTANCE };
+}
+
+/**
+ * Dancers load a moment after they are asked for, so the group is framed a second time once they
+ * are all in (or a load gave up). `cameraSerial` counts the times the user took the camera (a
+ * drag, a framing button, the turntable); it is remembered when the group changes.
+ */
+export type PendingReframe = { cameraSerial: number };
+
+/**
+ * What to do about a pending re-frame this frame:
+ * - `none`: nothing is pending.
+ * - `skip`: the user has moved the camera since the change; leave it alone and forget about it.
+ * - `wait`: dancers are still loading.
+ * - `frame`: everyone who is coming is on stage; frame the group now (once).
+ */
+export function reframeDecision(
+  pending: PendingReframe | null,
+  stillLoading: number,
+  cameraSerial: number
+): 'none' | 'skip' | 'wait' | 'frame' {
+  if (!pending) return 'none';
+  if (cameraSerial !== pending.cameraSerial) return 'skip';
+  return stillLoading > 0 ? 'wait' : 'frame';
+}
+
+/**
  * Skins for `count` backup dancers. Residents (the roster) come first, in roster order; places
  * left over are filled with random skins. Skins in `exclude` (the lead's, dancers already on
  * stage) are only used when nothing else is left, so twins appear only when there is no way

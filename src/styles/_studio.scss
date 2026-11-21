@@ -23,7 +23,8 @@
   box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.4);
   color: var(--text);
   font-size: 0.85rem;
-  // Scrolls as a whole when the sections above the clip list leave it too little room.
+  // The clip list (first section) takes the height the others leave and scrolls by itself. When
+  // they leave it less than its minimum (short window, many sections open) the panel scrolls too.
   overflow: hidden auto;
 }
 
@@ -33,10 +34,16 @@ body[data-route='studio'] .studio-panel {
 }
 
 .studio-header {
+  // Stays in view when the panel itself scrolls, so Home is always one click away.
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.55rem 0.75rem;
+  background: rgb(var(--panel-rgb));
   border-bottom: 1px solid rgba(var(--fg-rgb), 0.1);
 }
 
@@ -48,11 +55,16 @@ body[data-route='studio'] .studio-panel {
 }
 
 .studio-section {
+  flex: 0 0 auto;
   padding: 0.55rem 0.75rem;
   border-bottom: 1px solid rgba(var(--fg-rgb), 0.1);
 
   &[hidden] {
     display: none;
+  }
+
+  &:last-child {
+    border-bottom: 0;
   }
 }
 
@@ -65,13 +77,108 @@ body[data-route='studio'] .studio-panel {
   opacity: 0.7;
 }
 
+// --- Collapsible sections (src/ui/collapsibleSection.ts) --------------------
+// The header row is one big button: chevron, title and, while collapsed, a one-line summary.
+.studio-collapsible {
+  padding: 0;
+
+  > .studio-section-title {
+    margin: 0;
+    opacity: 1; // dimming moves to the title text, so the summary can stay readable
+  }
+}
+
+.studio-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  @media (hover: hover) {
+    &:hover {
+      background: rgba(var(--fg-rgb), 0.05);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(var(--fg-rgb), 0.45);
+    outline-offset: -2px;
+  }
+}
+
+.studio-section-chevron {
+  flex: 0 0 auto;
+  width: 0.8rem;
+  text-align: center;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+
+  .studio-section-toggle[aria-expanded='true'] & {
+    transform: rotate(90deg);
+  }
+}
+
+.studio-section-name {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+.studio-section-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.studio-section-body {
+  padding: 0 0.75rem 0.55rem;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
 // The clip list takes the remaining height and scrolls.
 .studio-clips-section {
-  flex: 1 1 auto;
+  flex: 1 1 12rem;
   min-height: 12rem;
   display: flex;
   flex-direction: column;
-  border-bottom: 0;
+
+  > .studio-section-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+
+    &[hidden] {
+      display: none;
+    }
+  }
+
+  // Collapsed: just its header, like the others; the free height stays empty below the sections.
+  &.is-collapsed {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
 }
 
 .studio-row {
@@ -438,5 +545,11 @@ body[data-route='studio'] .studio-panel {
     width: auto;
     max-width: none;
     height: 55%;
+  }
+
+  // Less room: let the clip list get a little shorter before the panel starts scrolling.
+  .studio-clips-section {
+    flex-basis: 10rem;
+    min-height: 10rem;
   }
 }

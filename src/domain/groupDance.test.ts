@@ -7,7 +7,9 @@ import {
   groupFraming,
   normalizeGroupDance,
   parseGroupDance,
+  groupShot,
   pickDancerSkins,
+  reframeDecision,
   stageToWorld,
 } from './groupDance';
 
@@ -144,5 +146,54 @@ describe('pickDancerSkins', () => {
 
   test('a random() of exactly 1 stays in range', () => {
     assert.deepEqual(pickDancerSkins({ roster: null, available, exclude: [], count: 1, random: () => 1 }), ['d']);
+  });
+});
+
+describe('group shot', () => {
+  test('nobody on stage: the lead itself, no extra distance', () => {
+    const shot = groupShot([], 1.2);
+    near(shot.dx, 0);
+    near(shot.dz, 0);
+    near(shot.extraDistance, 0);
+  });
+
+  test('a line of three is centred on the lead and stands further back', () => {
+    const shot = groupShot(formationOffsets('line', 2), 0);
+    near(shot.dx, 0);
+    near(shot.dz, 0);
+    assert.ok(shot.extraDistance > 1);
+  });
+
+  test('the centre follows the lead facing', () => {
+    // Triangle: the group's middle is behind the lead.
+    const offsets = formationOffsets('triangle', 2);
+    const front = groupShot(offsets, 0); // facing +Z: behind is -Z
+    near(front.dx, 0);
+    assert.ok(front.dz < 0);
+    const turned = groupShot(offsets, Math.PI / 2); // facing +X: behind is -X
+    assert.ok(turned.dx < 0);
+    near(turned.dz, 0);
+    near(turned.extraDistance, front.extraDistance);
+    near(front.extraDistance, groupFraming(offsets).distance - SOLO_CAMERA_DISTANCE);
+  });
+});
+
+describe('re-framing once the dancers are in', () => {
+  test('nothing pending, nothing to do', () => {
+    assert.equal(reframeDecision(null, 0, 3), 'none');
+    assert.equal(reframeDecision(null, 2, 3), 'none');
+  });
+
+  test('waits while dancers load, then frames', () => {
+    const pending = { cameraSerial: 4 };
+    assert.equal(reframeDecision(pending, 2, 4), 'wait');
+    assert.equal(reframeDecision(pending, 1, 4), 'wait');
+    assert.equal(reframeDecision(pending, 0, 4), 'frame');
+  });
+
+  test('never steals the camera once the user has moved it', () => {
+    const pending = { cameraSerial: 4 };
+    assert.equal(reframeDecision(pending, 2, 5), 'skip');
+    assert.equal(reframeDecision(pending, 0, 5), 'skip');
   });
 });

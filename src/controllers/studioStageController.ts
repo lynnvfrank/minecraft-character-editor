@@ -6,8 +6,10 @@
  *   while the route is the studio and takes it out on any other route, so the home view (and its
  *   day/night), the editor, previews and thumbnails never see it.
  * - Turntable: slowly orbits the camera around whatever the orbit controls look at, keeping the
- *   distance and height it has. It waits while the user drags (or zooms) and stops on leaving.
- * - Framings: smooth camera moves to presets placed at the character (lib/turntable.ts).
+ *   distance and height it has. With backup dancers on stage it drifts onto the middle of the
+ *   group. It waits while the user drags (or zooms) and stops on leaving.
+ * - Framings: smooth camera moves to presets placed at the character (lib/turntable.ts). "Full
+ *   body" and "Wide" take in the backup dancers; the close-up stays on the lead.
  *
  * Driven once per frame from main.ts's onWorldUpdate, like dayNightController.
  */
@@ -17,13 +19,16 @@ import { resolveBackdrop, type BackdropSettings } from '../lib/studioBackdrop';
 import {
   CAMERA_FRAMINGS,
   DEFAULT_TURNTABLE_SPEED,
+  GROUP_FRAMINGS,
+  approach,
   easeInOut,
-  framingPose,
+  groupFramingPose,
   lerpOrbit,
   orbitFromOffset,
   orbitPosition,
   stepTurntable,
   type CameraFramingId,
+  type GroupShift,
   type OrbitPose,
   type Point3,
   type TurntableSpeedId,
@@ -45,6 +50,8 @@ export type StudioStageControllerDeps = {
   getCharacterPosition: () => Point3 | null;
   /** Visual heading of the dancer (radians). */
   getFacing: () => number;
+  /** The lead plus backup dancers as one group, or null when the lead dances alone. */
+  getGroupShot?: () => GroupShift | null;
 };
 
 export type StudioCameraSnapshot = { turntable: boolean; speed: TurntableSpeedId };
@@ -53,6 +60,8 @@ export type StudioCameraSnapshot = { turntable: boolean; speed: TurntableSpeedId
 const FRAMING_MOVE_SEC = 0.8;
 /** A long frame (tab was in the background) doesn't swing the camera. */
 const MAX_STEP_SEC = 0.1;
+/** How fast the turntable drifts onto the middle of the group (per second, see `approach`). */
+const TURNTABLE_RECENTER_RATE = 3;
 
 export function createStudioStageController(deps: StudioStageControllerDeps) {
   const { camera, controls } = deps;
@@ -82,10 +91,13 @@ export function createStudioStageController(deps: StudioStageControllerDeps) {
   let turntable = false;
   let speed: TurntableSpeedId = DEFAULT_TURNTABLE_SPEED;
   let dragging = false;
+  /** Counts the times the user took the camera: a drag or zoom, a framing button, the turntable. */
+  let userCameraSerial = 0;
   let move: { fromTarget: Point3; toTarget: Point3; from: OrbitPose; to: OrbitPose; time: number } | null = null;
 
   controls.addEventListener('start', () => {
     dragging = true;
+    userCameraSerial++;
     move = null; // the user takes the camera
   });
   controls.addEventListener('end', () => {
@@ -121,7 +133,16 @@ export function createStudioStageController(deps: StudioStageControllerDeps) {
     if (!turntable || dragging || dt === 0) return;
     // Read the pose back from the camera every frame, so zooming or dragging between frames sticks.
     const orbit = currentOrbit();
-    placeCamera(controls.target, { ...orbit, angle: stepTurntable(orbit.angle, speed, dt) });
+    const t = controls.target;
+    const center: Point3 = { x: t.x, y: t.y, z: t.z };
+    // With backup dancers the stage turns around the middle of the group, not the lead.
+    const group = deps.getGroupShot?.() ?? null;
+    const lead = group ? deps.getCharacterPosition() : null;
+    if (group && lead) {
+      center.x = approach(center.x, lead.x + group.dx, TURNTABLE_RECENTER_RATE, dt);
+      center.z = approach(center.z, lead.z + group.dz, TURNTABLE_RECENTER_RATE, dt);
+    }
+    placeCamera(center, { ...orbit, angle: stepTurntable(orbit.angle, speed, dt) });
   }
 
   function leaveStage(): void {
@@ -151,6 +172,7 @@ export function createStudioStageController(deps: StudioStageControllerDeps) {
     setTurntable(on: boolean): void {
       if (on === turntable || (on && !onStage)) return;
       turntable = on;
+      if (on) userCameraSerial++;
       slice.notify();
     },
     setTurntableSpeed(next: TurntableSpeedId): void {
@@ -158,11 +180,21 @@ export function createStudioStageController(deps: StudioStageControllerDeps) {
       speed = next;
       slice.notify();
     },
-    /** Glide the camera to a framing of the dancer. False when there is no dancer yet. */
+    /**
+     * How many times the user has taken the camera. The dancers controller compares it to tell
+     * whether its own late re-framing would steal the camera.
+     */
+    userCameraSerial: (): number => userCameraSerial,
+    /**
+     * Glide the camera to a framing of the dancer, or of the whole group for the framings in
+     * GROUP_FRAMINGS when backup dancers are on stage. False when there is no dancer yet.
+     */
     frame(id: CameraFramingId): boolean {
       const p = deps.getCharacterPosition();
       if (!onStage || !p) return false;
-      const to = framingPose(CAMERA_FRAMINGS[id], { x: p.x, y: p.y, z: p.z, yaw: deps.getFacing() });
+      userCameraSerial++;
+      const group = GROUP_FRAMINGS.includes(id) ? (deps.getGroupShot?.() ?? null) : null;
+      const to = groupFramingPose(CAMERA_FRAMINGS[id], { x: p.x, y: p.y, z: p.z, yaw: deps.getFacing() }, group);
       const t = controls.target;
       move = { fromTarget: { x: t.x, y: t.y, z: t.z }, toTarget: to.target, from: currentOrbit(), to: to.orbit, time: 0 };
       return true;
