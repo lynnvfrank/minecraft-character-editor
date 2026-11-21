@@ -731,6 +731,8 @@ async function main(): Promise<void> {
     resolveModelPath: async (skinPath) =>
       ARM_MODEL_PATHS[(await detectArmModelFromPath(skinPath)) ?? 'classic'],
     getRoster: () => residents.get(),
+    getCombos: () => savedSequences.list(),
+    getTimeOfDay: () => timeOfDay.get().time,
     config: blockWorld ? { nav: blockWorld.crowdNav } : undefined,
   }));
   // Residents panel: who lives in the village. The store holds the choice; the crowd applies it.

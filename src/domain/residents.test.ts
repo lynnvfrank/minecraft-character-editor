@@ -5,6 +5,7 @@ import {
   diffResidents,
   effectiveRoster,
   fillRoster,
+  isCustomSkin,
   normalizeRoster,
   parseResidents,
   randomRoster,
@@ -123,5 +124,22 @@ describe('residents', () => {
       { id: 'crowd-3', skin: null },
     ];
     assert.deepEqual(diffResidents(crowd, ['a']), { toAdd: [], toRemove: ['crowd-2', 'crowd-3'] });
+  });
+
+  test('a character in a custom skin (not in the skin list) is never sent home by the roster', () => {
+    assert.equal(isCustomSkin('blob:edited', ALL), true);
+    assert.equal(isCustomSkin('a', ALL), false);
+    assert.equal(isCustomSkin(null, ALL), false);
+    const crowd = [
+      { id: 'crowd-1', skin: 'a' },
+      { id: 'crowd-2', skin: 'blob:edited' },
+      { id: 'crowd-3', skin: 'b' },
+      { id: 'crowd-4', skin: null },
+    ];
+    // Stays whether or not anyone else does, and doesn't count as one of the wanted skins.
+    assert.deepEqual(diffResidents(crowd, ['a', 'c'], ALL), { toAdd: ['c'], toRemove: ['crowd-3', 'crowd-4'] });
+    assert.deepEqual(diffResidents(crowd, [], ALL), { toAdd: [], toRemove: ['crowd-1', 'crowd-3', 'crowd-4'] });
+    // Without the skin list the old rule applies (unknown skins go).
+    assert.deepEqual(diffResidents(crowd, ['a']).toRemove, ['crowd-2', 'crowd-3', 'crowd-4']);
   });
 });

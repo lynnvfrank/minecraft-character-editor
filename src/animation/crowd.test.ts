@@ -16,7 +16,8 @@ function seeded(seed: number): () => number {
 }
 
 function makeSim(overrides: Partial<CrowdConfig> = {}) {
-  return createCrowdSim({ ...DEFAULT_CROWD_CONFIG, random: seeded(42), ...overrides });
+  // Greetings and gatherings are off here (they have their own tests in crowdSocial.test.ts).
+  return createCrowdSim({ ...DEFAULT_CROWD_CONFIG, greetChance: 0, gatherInterval: null, random: seeded(42), ...overrides });
 }
 
 /** Run the sim, auto-spawning on request (models "load" instantly). */

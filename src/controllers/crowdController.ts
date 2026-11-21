@@ -15,12 +15,28 @@
  * whose skin was switched off are removed on the spot, new ones appear at a walkable spot.
  * Residents still stroll out and come back like any visitor. The primary is never removed.
  * With no roster (null) nothing changes: random visitors from every skin.
+ * A character wearing a skin that isn't in the skin list (an edited design, e.g. a former primary
+ * swapped back into the crowd) is never removed by the roster and doesn't use up a resident's place.
+ *
+ * Social life (the sim decides who does what, this file picks the clips):
+ * - Greeting: the sim's emote (a wave, a nod...) on each of the two, idle while waiting to answer.
+ * - Plaza gathering: one of the user's saved combos (`getCombos`) on everyone in the group, in
+ *   step (controllers/crowdComboPlayer.ts sets the blend weights); with no combos, or none whose
+ *   clips exist, the sim's dance clip.
+ * - Night: `getTimeOfDay` is turned into a 0..1 night level for the sim.
+ * Clips are looked up by a preference list and fall back to idle, so a missing clip never breaks
+ * a character.
  */
 import * as THREE from 'three';
 import { createCrowdSim, DEFAULT_CROWD_CONFIG, type CrowdConfig, type CrowdEvent } from '../animation/crowd';
+import { comboToRoutine } from '../animation/crowdCombo';
+import type { RoutineStep } from '../animation/studioRoutine';
 import type { XZ } from '../animation/wander';
-import { crowdSkinsFor, diffResidents } from '../domain/residents';
+import { crowdSkinsFor, diffResidents, isCustomSkin } from '../domain/residents';
+import type { SavedSequence } from '../domain/sequences';
 import { logger } from '../lib';
+import { skyStateAt } from '../lib/dayNight';
+import { createCrowdComboPlayer } from './crowdComboPlayer';
 import type { SkinEntry, AnimationEntry } from '../domain';
 import { buildCharacterConfig, type CharacterConfig, type CharacterState } from './characterTypes';
 
@@ -38,8 +54,16 @@ export type CrowdControllerDeps = {
   resolveModelPath: (skinPath: string) => Promise<string>;
   /** Skins chosen to live in the village (primary included), or null for the default crowd. */
   getRoster?: () => readonly string[] | null;
+  /** The user's saved combos; a plaza gathering dances one of them. */
+  getCombos?: () => readonly SavedSequence[];
+  /** Time of day in hours [0, 24); after dusk residents slow down and keep to the lamps. */
+  getTimeOfDay?: () => number;
   config?: Partial<CrowdConfig>;
 };
+
+/** Tried in order after the sim's own pick when that clip is missing; idle is the last resort. */
+const GREET_FALLBACK = ['waving', 'acknowledging', 'hard-head-nod'];
+const DANCE_FALLBACK = ['groove', 'dancing-twerk', 'happy', 'excited', 'clapping'];
 
 /** Give up on a crowd model that hasn't loaded after this long. */
 const LOAD_TIMEOUT_SEC = 30;
@@ -62,6 +86,10 @@ export function createCrowdController(deps: CrowdControllerDeps) {
   /** Roster just changed: bring missing residents in right away instead of waiting for the spawn timer. */
   let quickFill = false;
   let quickFillTimer = 0;
+
+  const combos = createCrowdComboPlayer();
+  /** What the gathering in progress dances: a saved combo as routine steps, or null for a clip. */
+  let groupDance: { gatheringId: number; routine: RoutineStep[] | null } | null = null;
 
   const zoneRing = createZoneRing(config.zoneRadius);
   deps.getSceneContext().scene.add(zoneRing);
@@ -86,19 +114,58 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     deps.fadeToAction(char, action, FADE_SEC);
   }
 
+  /** The first of `keys` this character has a clip for, else idle. */
+  function clipFor(char: CharacterState, keys: readonly (string | null)[]): THREE.AnimationAction | undefined {
+    for (const key of keys) {
+      const action = key ? char.actions[key] : undefined;
+      if (action) return action;
+    }
+    return char.idleAction;
+  }
+
+  /** A random saved combo this rig can play, as routine steps; null if there is none. */
+  function pickCombo(): RoutineStep[] | null {
+    const list = deps.getCombos?.() ?? [];
+    if (list.length === 0) return null;
+    const known = new Set(deps.getAnimations().map((a) => a.key));
+    const start = Math.floor(Math.random() * list.length);
+    for (let i = 0; i < list.length; i++) {
+      const routine = comboToRoutine(list[(start + i) % list.length]!.steps, (name) => known.has(name));
+      if (routine.length > 0) return routine;
+    }
+    return null;
+  }
+
   function playForPhase(id: string): void {
     const agent = sim.get(id);
     const char = getChar(id);
     if (!agent || !char) return;
+    // Whatever comes next goes through fadeToAction again.
+    combos.stop(char);
     switch (agent.phase) {
       case 'entering':
       case 'walking':
       case 'exiting':
+      case 'gathering':
         playLoop(char, char.actions['walking'] ?? char.idleAction);
         break;
       case 'emoting':
-        playLoop(char, (agent.emote && char.actions[agent.emote]) || char.idleAction);
+        playLoop(char, clipFor(char, [agent.emote]));
         break;
+      case 'greeting':
+        // The answering side idles (and turns) until its reply starts.
+        playLoop(char, agent.emote ? clipFor(char, [agent.emote, ...GREET_FALLBACK]) : char.idleAction);
+        break;
+      case 'performing': {
+        const routine = groupDance && groupDance.gatheringId === agent.group ? groupDance.routine : null;
+        // Only clips this character really has (a rig that failed to load some keeps idling).
+        if (routine && routine.some((s) => s.type === 'blend' && s.layers.every((l) => char.actions[l.name]))) {
+          combos.start(char, routine);
+        } else {
+          playLoop(char, clipFor(char, [agent.emote, ...DANCE_FALLBACK]));
+        }
+        break;
+      }
       default:
         playLoop(char, char.idleAction);
     }
@@ -183,6 +250,7 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     const chars = deps.getSceneContext().characters;
     const char = chars[id];
     if (!char) return;
+    combos.drop(char);
     char.mixer.stopAllAction();
     char.mixer.uncacheRoot(char.model);
     char.container.removeFromParent();
@@ -205,6 +273,12 @@ export function createCrowdController(deps: CrowdControllerDeps) {
       if (e.type === 'spawn-request') spawn();
       else if (e.type === 'phase') playForPhase(e.id);
       else if (e.type === 'despawn') despawn(e.id);
+      else if (e.type === 'gathering') {
+        // 'performing' arrives just before the members' phase events, which start the dance.
+        if (e.stage === 'performing') groupDance = { gatheringId: e.id, routine: pickCombo() };
+        else if (e.stage === 'ended' && groupDance?.gatheringId === e.id) groupDance = null;
+        logger.debug('general', 'Crowd gathering', { id: e.id, stage: e.stage, members: e.ids.length });
+      }
     }
   }
 
@@ -264,7 +338,9 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     applyRosterLimits(step);
     // The selected character isn't in the sim; the crowd keeps clear of it.
     const primary = getChar(deps.getPrimaryCharacterId())?.container.position;
-    handleEvents(sim.tick(step, primary ? [{ x: primary.x, z: primary.z }] : []));
+    const night = deps.getTimeOfDay ? skyStateAt(deps.getTimeOfDay()).night : 0;
+    handleEvents(sim.tick(step, primary ? [{ x: primary.x, z: primary.z }] : [], { night }));
+    combos.update(step);
     applyTransforms();
   }
 
@@ -280,7 +356,8 @@ export function createCrowdController(deps: CrowdControllerDeps) {
   /** Per frame: with a roster, the crowd is only as big as the residents it still has to host. */
   function applyRosterLimits(dt: number): void {
     const wanted = wantedCrowdSkins();
-    config.maxAgents = wanted ? Math.min(baseMaxAgents, wanted.length) : baseMaxAgents;
+    // Custom-skin characters are guests on top of the roster, not one of its residents.
+    config.maxAgents = wanted ? Math.min(baseMaxAgents, wanted.length) + customSkinCount() : baseMaxAgents;
     if (!wanted) {
       quickFill = false;
       return;
@@ -297,10 +374,17 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     quickFillTimer = QUICK_FILL_SEC;
   }
 
+  /** Crowd characters wearing a skin that isn't in the skin list (an edited design). */
+  function customSkinCount(): number {
+    const available = deps.getSkins().map((s) => s.path);
+    return sim.list().filter((a) => isCustomSkin(getChar(a.id)?.currentSkin ?? null, available)).length;
+  }
+
   /**
    * The roster changed (Residents panel): remove crowd characters whose skin is no longer wanted
    * (and twins), then let the missing ones appear. The primary is not in the sim, so it is never
-   * removed here. Does nothing without a roster.
+   * removed here, and neither is anyone wearing a custom skin (the roster can't name those).
+   * Does nothing without a roster.
    */
   function syncRoster(): void {
     const wanted = wantedCrowdSkins();
@@ -309,7 +393,7 @@ export function createCrowdController(deps: CrowdControllerDeps) {
       id: a.id,
       skin: getChar(a.id)?.currentSkin ?? pending.get(a.id)?.skin ?? null,
     }));
-    const { toAdd, toRemove } = diffResidents(current, wanted);
+    const { toAdd, toRemove } = diffResidents(current, wanted, deps.getSkins().map((s) => s.path));
     for (const id of toRemove) removeResident(id);
     if (toAdd.length > 0) {
       quickFill = true;
@@ -341,7 +425,9 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     const previous = chars[primaryId];
     if (!picked || !previous || !isCrowdCharacter(id) || pending.has(id)) return null;
 
+    // Leaves its greeting or gathering (the sim lets the others carry on) and any combo it danced.
     sim.remove(id);
+    combos.stop(picked);
     picked.id = primaryId;
     previous.id = id;
     chars[primaryId] = picked;

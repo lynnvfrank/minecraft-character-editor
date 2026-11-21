@@ -78,5 +78,33 @@ describe('residentsStore', () => {
     assert.equal(s.get(), null);
     s.set(['b']);
     assert.deepEqual(s.get(), ['b']);
+    s.clear();
+    assert.equal(s.get(), null);
+  });
+
+  test('clear forgets the roster (random visitors again), notifies once, and stays cleared after a reload', () => {
+    const storage = memoryStorage();
+    const store = createResidentsStore(storage);
+    let calls = 0;
+    store.subscribe(() => calls++);
+    store.clear(); // nothing chosen yet: nothing to do
+    assert.equal(calls, 0);
+    store.set(['a', 'b']);
+    store.clear();
+    assert.equal(store.get(), null);
+    assert.equal(calls, 2);
+    assert.equal(createResidentsStore(storage).get(), null);
+    // The next choice starts a fresh roster.
+    store.set(['c']);
+    assert.deepEqual(createResidentsStore(storage).get(), ['c']);
+
+    // Storage with removeItem (the real localStorage) drops the key.
+    const real = { ...memoryStorage({ [RESIDENTS_KEY]: '["a"]' }), removed: [] as string[] };
+    const withRemove = { ...real, removeItem: (k: string) => void (real.removed.push(k), real.m.delete(k)) };
+    const s2 = createResidentsStore(withRemove);
+    assert.deepEqual(s2.get(), ['a']);
+    s2.clear();
+    assert.deepEqual(real.removed, [RESIDENTS_KEY]);
+    assert.equal(createResidentsStore(withRemove).get(), null);
   });
 });

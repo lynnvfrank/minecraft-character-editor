@@ -34,8 +34,13 @@ export function createBlockWorldController(scene: THREE.Scene) {
   const route = (from: { x: number; z: number }, to: { x: number; z: number }) =>
     findPath(world.nav, from, to, { radius: BODY_RADIUS });
 
+  const spots = walkableCellsWithin(world, halfSize - WANDER_MARGIN);
+  const isSpot = (p: { x: number; z: number }) => spots.some((s) => s.x === p.x && s.z === p.z);
   const crowdNav: CrowdNav = {
-    spots: walkableCellsWithin(world, halfSize - WANDER_MARGIN),
+    spots,
+    // Where gatherings meet, and where residents like to stand after dark (lamp posts, doorsteps).
+    plaza: world.plaza.filter(isSpot),
+    restSpots: [...world.lampSides, ...world.doorsteps].filter(isSpot),
     gates: world.gates,
     findPath: route,
     // A little under BODY_RADIUS so a sidestep along a wall isn't refused outright.

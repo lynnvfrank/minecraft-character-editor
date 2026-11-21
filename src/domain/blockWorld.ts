@@ -101,7 +101,16 @@ export type BlockWorld = {
   nav: NavGrid;
   /** Where characters walk in from and back out to: road ends at the edge of the map. */
   gates: GridXZ[];
+  /** Plaza cells well inside the stone square (room for a small group to stand around them). */
+  plaza: GridXZ[];
+  /** Walkable cells right next to a lamp post. */
+  lampSides: GridXZ[];
+  /** The walkable cell in front of each door block. */
+  doorsteps: GridXZ[];
 };
+
+/** A gathering's centre keeps this many plaza cells between itself and the plaza's edge. */
+const PLAZA_INSET = 2;
 
 const BLOCKED_TILES = new Set(['~', 'f', 'T', 'L', 'r']);
 const KNOWN_TILES = new Set(['.', ',', '=', 'o', 's', 'w', '~', 'f', 'T', 'L', 'r']);
@@ -274,7 +283,42 @@ export function buildBlockWorld(
     });
   }
 
-  return { cols, rows, originX, originZ, blocks, nav, gates };
+  // Social spots (after the houses, so their cells count as blocked).
+  const plaza: GridXZ[] = [];
+  const lampSides: GridXZ[] = [];
+  const near = (col: number, row: number, reach: number, test: (t: string | undefined) => boolean, all: boolean) => {
+    let any = false;
+    for (let dr = -reach; dr <= reach; dr++) {
+      for (let dc = -reach; dc <= reach; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const hit = test(tileAt(map, col + dc, row + dr));
+        if (all && !hit) return false;
+        any ||= hit;
+      }
+    }
+    return all || any;
+  };
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (!isCellWalkable(nav, col, row)) continue;
+      if (tileAt(map, col, row) === 'o' && near(col, row, PLAZA_INSET, (t) => t === 'o', true)) {
+        plaza.push(cellCenter(nav, col, row));
+      }
+      if (near(col, row, 1, (t) => t === 'L', false)) lampSides.push(cellCenter(nav, col, row));
+    }
+  }
+  const doorsteps: GridXZ[] = [];
+  for (const h of houses) {
+    for (const i of h.door.at) {
+      const [col, row] =
+        h.door.side === 'north' ? [i, h.row0 - 1] :
+        h.door.side === 'south' ? [i, h.row1 + 1] :
+        h.door.side === 'west' ? [h.col0 - 1, i] : [h.col1 + 1, i];
+      if (isCellWalkable(nav, col, row)) doorsteps.push(cellCenter(nav, col, row));
+    }
+  }
+
+  return { cols, rows, originX, originZ, blocks, nav, gates, plaza, lampSides, doorsteps };
 }
 
 /** Every walkable cell center within `radius` of the origin (where wandering characters may go). */
