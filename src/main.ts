@@ -112,6 +112,9 @@ import { createCreatorToWorld } from './controllers/creatorToWorld';
 import { outfitIdFromKey } from './domain/residents';
 import { createStudioPanel } from './ui/studioPanel';
 import { createStudioCapturePanel } from './ui/studioCapturePanel';
+import { createStudioBeatPanel } from './ui/studioBeatPanel';
+import { createStudioBeatController } from './controllers/studioBeatController';
+import { createBeatSaveSection, createStudioBeatStore } from './state/studioBeatStore';
 import { createStudioDancersPanel } from './ui/studioDancersPanel';
 import { createStudioDancersController } from './controllers/studioDancersController';
 import { createGroupDanceStore } from './state/groupDanceStore';
@@ -739,9 +742,13 @@ async function main(): Promise<void> {
     getSceneContext: () => sceneContext,
     getFacing: () => animationManager.getFacing(),
   }));
+  // Studio "Beat" section: synthesized music, snap-to-beat routines, bounce and record with sound.
+  const studioBeatStore = createStudioBeatStore(getLocalStorage());
+  const studioBeat = createStudioBeatController({ store: studioBeatStore, getLead: () => getCharacter(getPrimaryCharacterId()) });
   const studioPanel = createStudioPanel({
     studio,
     savedSequences,
+    routineBeat: { ...studioBeatStore, setSnap: (snap) => studioBeatStore.set({ snap }), nextBarStartMs: studioBeat.nextBarStartMs },
     onExit: () => {
       location.hash = '#/';
     },
@@ -754,7 +761,10 @@ async function main(): Promise<void> {
     getCanvas: () => sceneContext.renderer.domElement,
     takePhoto: (options) => captureStagePhoto(sceneContext, options),
     isOnStage: () => getRoute() === 'studio',
+    getAudioTrack: studioBeat.lendAudioTrack,
   });
+  createStudioBeatPanel({ mount: document.getElementById('studio-panel'), beat: studioBeat, settings: studioBeatStore });
+  saveRegistry.register(createBeatSaveSection(studioBeatStore));
   // Studio "Backdrop" and "Camera moves" sections; both apply on the studio route only.
   const studioBackdrop = createStudioBackdropStore(getLocalStorage());
   const studioStage = createStudioStageController({
@@ -992,6 +1002,7 @@ async function main(): Promise<void> {
   /** Crowd, selection and camera follow. The world stops while the creator is open. */
   function onWorldUpdate(delta: number, route: AppRoute): void {
     if (route === 'studio') studio.update(delta);
+    studioBeat.update(route); // after studio.update; stops the beat off the studio route
     studioStage.update(delta, route);
     blockWorld?.update(route);
     weather.update(delta, route); // before day/night, which lights the sky for it

@@ -2,7 +2,7 @@
  * Records a canvas to a video file with `canvas.captureStream()` + `MediaRecorder`. Pure rules
  * (mime preference, max length) live in lib/captureFiles.ts; this is the browser side.
  */
-import { MAX_RECORDING_MS, pickVideoMimeType, reachedMaxLength } from '../lib/captureFiles';
+import { MAX_RECORDING_MS, pickVideoMimeType, reachedMaxLength, videoMimePreference } from '../lib/captureFiles';
 
 export type CanvasRecorderDeps = {
   getCanvas: () => HTMLCanvasElement | null;
@@ -15,6 +15,8 @@ export type CanvasRecorderDeps = {
   onError?: (error: unknown) => void;
   fps?: number;
   maxMs?: number;
+  /** Optional sound for the video (e.g. the studio beat); the recorder stops the track when done. */
+  getAudioTrack?: () => MediaStreamTrack | null;
 };
 
 const TICK_MS = 250;
@@ -59,7 +61,9 @@ export function createCanvasRecorder(deps: CanvasRecorderDeps) {
     if (!canvas || !canRecordCanvas()) return false;
     try {
       const s = canvas.captureStream(fps);
-      const mime = pickVideoMimeType((m) => MediaRecorder.isTypeSupported(m));
+      const audio = deps.getAudioTrack?.() ?? null;
+      if (audio) s.addTrack(audio);
+      const mime = pickVideoMimeType((m) => MediaRecorder.isTypeSupported(m), videoMimePreference(!!audio));
       const r = mime ? new MediaRecorder(s, { mimeType: mime }) : new MediaRecorder(s);
       const chunks: Blob[] = [];
       r.ondataavailable = (e) => {

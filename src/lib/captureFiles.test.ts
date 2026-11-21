@@ -7,7 +7,9 @@ import {
   MAX_RECORDING_MS,
   pickVideoMimeType,
   reachedMaxLength,
+  VIDEO_AUDIO_MIME_PREFERENCE,
   VIDEO_MIME_PREFERENCE,
+  videoMimePreference,
 } from './captureFiles';
 
 describe('pickVideoMimeType', () => {
@@ -85,5 +87,17 @@ describe('reachedMaxLength', () => {
   test('custom limit', () => {
     assert.equal(reachedMaxLength(500, 1000), false);
     assert.equal(reachedMaxLength(1500, 1000), true);
+  });
+});
+
+describe('video mime with sound', () => {
+  test('prefers opus audio when there is a sound track', () => {
+    assert.equal(pickVideoMimeType(() => true, videoMimePreference(true)), 'video/webm;codecs=vp9,opus');
+    assert.equal(pickVideoMimeType((m) => !m.includes('vp9'), videoMimePreference(true)), 'video/webm;codecs=vp8,opus');
+    assert.equal(pickVideoMimeType((m) => !m.includes('opus'), videoMimePreference(true)), 'video/webm;codecs=vp9');
+  });
+  test('silent recordings keep the old list', () => {
+    assert.equal(videoMimePreference(false), VIDEO_MIME_PREFERENCE);
+    assert.equal(VIDEO_AUDIO_MIME_PREFERENCE.at(-1), 'video/mp4');
   });
 });

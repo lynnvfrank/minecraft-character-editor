@@ -1,0 +1,50 @@
+// "Beat" section of the dance studio panel (src/ui/studioBeatPanel.ts). Reuses the studio panel's
+// row, button, range and value classes; only the beat bits live here.
+
+.studio-beat {
+  flex: 0 0 auto;
+
+  .studio-slider-label {
+    flex: 0 0 3.6rem;
+    font-size: 0.78rem;
+    opacity: 0.75;
+  }
+
+  .studio-select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+.studio-beat-play {
+  flex: 0 0 auto;
+  min-width: 4.6rem;
+}
+
+.studio-beat-dots {
+  display: flex;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+}
+
+.studio-beat-dot {
+  --pulse: 0;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: rgba(var(--fg-rgb), 0.2);
+  transform: scale(calc(1 + var(--pulse) * 0.45));
+
+  &.on {
+    background: rgba(111, 140, 255, calc(0.45 + var(--pulse) * 0.55));
+  }
+
+  // The first beat of the bar is the big one.
+  &:first-child.on {
+    background: rgba(255, 170, 90, calc(0.45 + var(--pulse) * 0.55));
+  }
+}
+
+.studio-beat-length {
+  flex: 0 0 auto;
+}

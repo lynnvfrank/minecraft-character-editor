@@ -35,6 +35,8 @@ import {
   updateStep,
   type RoutineStep,
 } from '../animation/studioRoutine';
+import { rescaleRoutine, snapRoutine } from '../animation/routineBeat';
+import { beatLengthsFor, beatsToSeconds, formatBeats, nearestBeatLength } from '../lib/beatClock';
 import { MOVEMENT_CLIPS, moveEmoji, moveLabel } from './moveInfo';
 import { createCollapsibleSection, mountStudioSection } from './collapsibleSection';
 import { shareCombo } from './shareComboUi';
@@ -49,6 +51,8 @@ export type StudioPanelApi = {
     sweeping: boolean;
     sweepPeriodSec: number;
     routineIndex: number | null;
+    /** The routine is waiting for the beat's next bar line. */
+    routinePending?: boolean;
   };
   subscribe: (listener: () => void) => () => void;
   setLayer: (key: string, patch: Partial<StudioLayer>) => void;
@@ -58,7 +62,8 @@ export type StudioPanelApi = {
   reset: () => void;
   toBlendStep: (durationSec: number) => BlendStep | null;
   setMix: (mix: StudioMix) => void;
-  playRoutine: (steps: readonly RoutineStep[]) => boolean;
+  /** `startAtMs` (performance.now() time) delays the start, e.g. to the beat's next bar line. */
+  playRoutine: (steps: readonly RoutineStep[], startAtMs?: number | null) => boolean;
   stopRoutine: () => void;
 };
 
@@ -69,6 +74,14 @@ export type StudioPanelDeps = {
     add: (label: string, steps: SavedSequenceStep[]) => SavedSequence;
     remove: (id: string) => void;
     subscribe: (listener: () => void) => () => void;
+  };
+  /** Studio beat: "Snap to beat" step lengths, and starting a preview on the next bar line. */
+  routineBeat?: {
+    get: () => { snap: boolean; bpm: number };
+    setSnap: (on: boolean) => void;
+    subscribe: (listener: () => void) => () => void;
+    /** performance.now() time of the next bar line, or null when the beat isn't playing. */
+    nextBarStartMs: () => number | null;
   };
   /** Leave the studio (back to the home view). */
   onExit: () => void;
@@ -210,6 +223,20 @@ export function createStudioPanel(deps: StudioPanelDeps) {
     return b;
   }
 
+  const snapped = () => !!deps.routineBeat?.get().snap;
+  const bpmNow = () => deps.routineBeat?.get().bpm ?? 120;
+  /** A beat-length picker for a step length in seconds (used while "Snap to beat" is on). */
+  function beatSelect(sec: number, label: string): HTMLSelectElement {
+    const sel = el('select', 'studio-select studio-select--small studio-beat-length');
+    sel.title = label;
+    sel.setAttribute('aria-label', label);
+    const bpm = bpmNow();
+    for (const b of beatLengthsFor(bpm, MIN_STEP_SEC, MAX_STEP_SEC)) sel.append(new Option(formatBeats(b), String(b)));
+    sel.value = String(nearestBeatLength(sec, bpm, MIN_STEP_SEC, MAX_STEP_SEC));
+    return sel;
+  }
+  const beatSecs = (sel: HTMLSelectElement) => beatsToSeconds(Number(sel.value), bpmNow());
+
   const routineSection = createCollapsibleSection({
     id: 'routine',
     title: 'Routine',
@@ -232,7 +259,20 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   updateBtn.type = 'button';
   updateBtn.id = 'studio-update-step-btn';
   updateBtn.hidden = true;
-  addRow.append(durInput, el('span', 'studio-unit', 's'), addBtn, pauseBtn, updateBtn);
+  const durUnit = el('span', 'studio-unit', 's');
+  let durBeats = beatSelect(DEFAULT_STEP_SEC, 'Step length (beats)');
+  addRow.append(durInput, durUnit, durBeats, addBtn, pauseBtn, updateBtn);
+
+  const snapRow = el('div', 'studio-row');
+  const snapLabel = el('label', 'studio-check');
+  const snapBox = el('input');
+  snapBox.type = 'checkbox';
+  snapBox.id = 'studio-snap-beat';
+  snapLabel.append(snapBox, document.createTextNode(' Snap to beat'));
+  snapLabel.title = 'Step lengths in beats, timed from the Beat tempo';
+  snapRow.append(snapLabel);
+  snapRow.hidden = !deps.routineBeat;
+  snapBox.addEventListener('change', () => deps.routineBeat?.setSnap(snapBox.checked));
 
   const stepList = el('ol', 'studio-steps');
   stepList.id = 'studio-step-list';
@@ -259,10 +299,10 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   saveRow.append(nameInput, saveBtn);
   const saveMsg = el('p', 'studio-hint');
   saveMsg.setAttribute('role', 'status');
-  routine.append(addRow, stepList, playRow, saveRow, saveMsg);
+  routine.append(snapRow, addRow, stepList, playRow, saveRow, saveMsg);
 
   const stepText = (s: RoutineStep) => (s.type === 'blend' ? describeBlend(s, labelFor) : 'Pause');
-  const stepLength = () => clampStepDuration(Number(durInput.value || NaN));
+  const stepLength = () => (snapped() ? beatSecs(durBeats) : clampStepDuration(Number(durInput.value || NaN)));
   const say = (text: string) => {
     saveMsg.textContent = text;
   };
@@ -291,8 +331,11 @@ export function createStudioPanel(deps: StudioPanelDeps) {
           setDraft(draft, i);
           say(s.type === 'blend' ? `Step ${i + 1} is in the sliders. Tweak it, then Update step.` : '');
         });
-        const dur = numInput(s.duration, `Step ${i + 1} length (seconds)`);
-        dur.addEventListener('change', () => setDraft(setStepDuration(draft, i, Number(dur.value || NaN)), selected));
+        const dur = snapped() ? beatSelect(s.duration, `Step ${i + 1} length (beats)`) : numInput(s.duration, `Step ${i + 1} length (seconds)`);
+        dur.addEventListener('change', () => {
+          const sec = dur instanceof HTMLSelectElement ? beatSecs(dur) : Number(dur.value || NaN);
+          setDraft(setStepDuration(draft, i, sec), selected);
+        });
         const up = iconBtn('↑', `Move step ${i + 1} up`);
         up.disabled = i === 0;
         up.addEventListener('click', () =>
@@ -324,8 +367,9 @@ export function createStudioPanel(deps: StudioPanelDeps) {
 
   /** Runs on every studio notification (each frame while previewing), so it only flips classes. */
   function renderPreview() {
-    const index = studio.getSnapshot().routineIndex;
-    const playing = index != null;
+    const snap = studio.getSnapshot();
+    const index = snap.routineIndex;
+    const playing = index != null || !!snap.routinePending;
     playBtn.textContent = playing ? '■ Stop' : '▶ Play routine';
     playBtn.setAttribute('aria-pressed', String(playing));
     for (let i = 0; i < stepList.children.length; i++) {
@@ -359,9 +403,12 @@ export function createStudioPanel(deps: StudioPanelDeps) {
     say('');
   });
   playBtn.addEventListener('click', () => {
-    if (studio.getSnapshot().routineIndex != null) return studio.stopRoutine();
-    if (!studio.playRoutine(draft)) say('Add a step first.');
-    else say('');
+    const snap = studio.getSnapshot();
+    if (snap.routineIndex != null || snap.routinePending) return studio.stopRoutine();
+    // With the beat playing, start on the next bar line so the dance lands on the music.
+    const startAt = deps.routineBeat?.nextBarStartMs() ?? null;
+    if (!studio.playRoutine(draft, startAt)) say('Add a step first.');
+    else say(startAt != null ? 'Starting on the next bar…' : '');
   });
   saveBtn.addEventListener('click', () => {
     let steps: readonly RoutineStep[] = draft;
@@ -380,6 +427,35 @@ export function createStudioPanel(deps: StudioPanelDeps) {
     nameInput.value = '';
     say(`Saved “${seq.label}”. Play it from Home → All moves → My combos.`);
   });
+
+  // --- Snap to beat: keep the controls and the draft's lengths in step with the beat settings ---
+  let lastSnap = snapped();
+  let lastBpm = bpmNow();
+  let snapReady = false;
+  function syncSnap(): void {
+    const snap = snapped();
+    const bpm = bpmNow();
+    if (snapReady && snap === lastSnap && bpm === lastBpm) return; // e.g. a volume change
+    snapReady = true;
+    snapBox.checked = snap;
+    durInput.hidden = snap;
+    durUnit.hidden = snap;
+    const nextBeats = beatSelect(snap ? stepLength() : DEFAULT_STEP_SEC, 'Step length (beats)');
+    if (lastSnap && snap) nextBeats.value = String(nearestBeatLength(beatsToSeconds(Number(durBeats.value), bpm), bpm, MIN_STEP_SEC, MAX_STEP_SEC));
+    nextBeats.hidden = !snap;
+    durBeats.replaceWith(nextBeats);
+    durBeats = nextBeats;
+    if (snap === lastSnap && bpm === lastBpm) return;
+    // Turning snap on moves every step onto the grid; a tempo change keeps each step's beats.
+    const next = snap && !lastSnap ? snapRoutine(draft, bpm) : snap ? rescaleRoutine(draft, lastBpm, bpm) : draft;
+    const rerender = snap !== lastSnap;
+    lastSnap = snap;
+    lastBpm = bpm;
+    if (next !== draft) setDraft(next, selected);
+    else if (rerender) renderRoutine();
+  }
+  deps.routineBeat?.subscribe(syncSnap);
+  syncSnap();
 
   // --- Saved list ---
   const saved = createCollapsibleSection({

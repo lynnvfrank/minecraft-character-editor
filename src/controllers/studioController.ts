@@ -48,6 +48,8 @@ export type StudioSnapshot = {
   sweepPeriodSec: number;
   /** Step of the routine being previewed, or null when the live mix is in control. */
   routineIndex: number | null;
+  /** A routine is waiting for the next bar line of the beat before it starts. */
+  routinePending: boolean;
 };
 
 const EXIT_FADE_SEC = 0.3;
@@ -67,7 +69,7 @@ export function createStudioController(deps: StudioControllerDeps) {
    * over the mixer; the mix itself is left alone and takes over again when the preview ends.
    * Any edit to the mix ends the preview.
    */
-  let routine: { steps: readonly RoutineStep[]; time: number; total: number } | null = null;
+  let routine: { steps: readonly RoutineStep[]; time: number; total: number; startAt: number | null } | null = null;
 
   /** What a pause with nothing before it shows: the idle clip. */
   function restWeights(): Map<string, { weight: number; timeScale: number }> {
@@ -77,7 +79,7 @@ export function createStudioController(deps: StudioControllerDeps) {
   }
 
   function apply(): void {
-    applied = routine ? routineWeightsAt(routine.steps, routine.time, restWeights()) : resolveMixWeights(mix);
+    applied = routine && routine.time >= 0 ? routineWeightsAt(routine.steps, routine.time, restWeights()) : resolveMixWeights(mix);
     const char = deps.getCharacter();
     if (char && active) {
       appliedTo = char.actions;
@@ -174,7 +176,9 @@ export function createStudioController(deps: StudioControllerDeps) {
         if (first) frameCamera();
       }
       if (routine) {
-        routine.time += Math.min(delta, 0.1);
+        // Started on a beat: follow the clock, not frame deltas, so it stays with the music.
+        routine.time =
+          routine.startAt != null ? (performance.now() - routine.startAt) / 1000 : routine.time + Math.min(delta, 0.1);
         if (routine.time >= routine.total) routine = null; // finished: back to the live mix
         apply();
         return;
@@ -192,6 +196,7 @@ export function createStudioController(deps: StudioControllerDeps) {
       sweeping,
       sweepPeriodSec,
       routineIndex: routine ? stepAtTime(routine.steps, routine.time)?.index ?? null : null,
+      routinePending: !!routine && routine.time < 0,
     }),
     subscribe: (listener: () => void): Unsubscribe => slice.subscribe(listener),
 
@@ -239,11 +244,16 @@ export function createStudioController(deps: StudioControllerDeps) {
       routine = null;
       apply();
     },
-    /** Preview a routine from its first step; plays once. False if there is nothing to play. */
-    playRoutine(steps: readonly RoutineStep[]): boolean {
+    /**
+     * Preview a routine from its first step; plays once. False if there is nothing to play.
+     * `startAtMs` (a `performance.now()` time, e.g. the beat's next bar line) delays the start; the
+     * live mix keeps playing until then.
+     */
+    playRoutine(steps: readonly RoutineStep[], startAtMs?: number | null): boolean {
       const total = totalDuration(steps);
       if (!active || total <= 0) return false;
-      routine = { steps, time: 0, total };
+      const startAt = startAtMs != null && Number.isFinite(startAtMs) ? startAtMs : null;
+      routine = { steps, time: startAt != null ? (performance.now() - startAt) / 1000 : 0, total, startAt };
       apply();
       return true;
     },
