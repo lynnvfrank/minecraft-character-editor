@@ -99,6 +99,8 @@ body:not([data-route='viewer']) {
 
 .residents-actions {
   display: flex;
+  // Four actions: two rows on a narrow panel rather than squeezed labels.
+  flex-wrap: wrap;
   gap: 0.35rem;
   padding: 0 0.75rem;
 }

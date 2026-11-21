@@ -3,7 +3,7 @@
  *
  * A round button in the bottom-right corner (stacked above About and the theme toggle, so it is
  * there whether or not a character is selected; the top-left belongs to the Move panels) opens a
- * panel with one thumbnail tile per skin (pressed = lives here) and three quick actions.
+ * panel with one thumbnail tile per skin (pressed = lives here) and four quick actions.
  * The panel only edits the roster store; controllers/crowdController.ts applies it to the crowd.
  *
  * - Nothing stored yet: the tiles show whoever is in the world right now, and the first change
@@ -11,6 +11,11 @@
  * - The main character (the primary, i.e. whoever is or was last selected) can't be sent away:
  *   its tile is locked and says so. Select someone else to make them the main character.
  * - At most `cap` residents; a full village refuses more with a hint.
+ * - "Random visitors" forgets the roster, so the default come-and-go crowd returns; the hint
+ *   line says which of the two modes is on.
+ * - Escape closes the open panel. The listener runs in the capture phase and stops the event, so
+ *   the same keypress doesn't also deselect the character (selectionController listens for
+ *   Escape on the document too). The About overlay, when open, sits on top and gets Escape first.
  */
 import {
   effectiveRoster,
@@ -27,6 +32,8 @@ export type ResidentsPanelDeps = {
   store: {
     get: () => readonly string[] | null;
     set: (roster: readonly string[]) => void;
+    /** Forget the roster: random visitors again. */
+    clear: () => void;
     subscribe: (listener: () => void) => () => void;
   };
   /** Skins in the world right now (primary first). */
@@ -129,7 +136,9 @@ export function createResidentsPanel(deps: ResidentsPanelDeps) {
     }
     count.textContent = `${roster.length} of ${deps.cap}`;
     if (hintOverride == null) {
-      hint.textContent = chosen ? 'Tap a character to move them in or out.' : 'Visitors drop by at random. Tap to pick who lives here.';
+      hint.textContent = chosen
+        ? 'Only your picks live here. Tap to move someone in or out.'
+        : 'Visitors drop by at random. Tap to pick who lives here.';
     }
   }
 
@@ -213,7 +222,24 @@ export function createResidentsPanel(deps: ResidentsPanelDeps) {
     commit(randomRoster(available(), deps.cap, random, current().main), null);
   });
 
+  action('Random visitors', 'Forget your picks: anyone may drop by', () => {
+    hintOverride = current().chosen ? 'Random visitors are back. Anyone may drop by.' : null;
+    deps.store.clear();
+    refresh(true);
+  });
+
   openBtn.addEventListener('click', () => setOpen(panel.hidden));
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key !== 'Escape' || panel.hidden) return;
+      if (document.querySelector('.about-overlay:not([hidden])')) return;
+      setOpen(false);
+      e.stopPropagation();
+      openBtn.focus();
+    },
+    true
+  );
   closeBtn.addEventListener('click', () => setOpen(false));
   deps.store.subscribe(() => {
     if (!panel.hidden) refresh(true);

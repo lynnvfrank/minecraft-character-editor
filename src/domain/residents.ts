@@ -112,17 +112,30 @@ export function crowdSkinsFor(roster: readonly string[], primarySkin: string | n
 }
 
 /**
+ * A skin that isn't in the skin list: a design the user edited and never saved (e.g. a former
+ * main character back in the crowd). The roster can't name it, so it is never sent home for
+ * "not being on the list" and doesn't take a resident's place.
+ */
+export function isCustomSkin(skin: string | null, available: readonly string[]): skin is string {
+  return skin != null && !available.includes(skin);
+}
+
+/**
  * Current crowd vs the skins it should wear. One character per wanted skin stays (the first
- * found); everyone else goes; wanted skins nobody wears are added.
+ * found); everyone else goes; wanted skins nobody wears are added. Characters whose skin isn't
+ * in `available` (custom designs, see isCustomSkin) always stay; without `available` every skin
+ * is taken to be a listed one.
  */
 export function diffResidents(
   current: readonly { id: string; skin: string | null }[],
-  desired: readonly string[]
+  desired: readonly string[],
+  available?: readonly string[]
 ): { toAdd: string[]; toRemove: string[] } {
   const wanted = new Set(desired);
   const seen = new Set<string>();
   const toRemove: string[] = [];
   for (const c of current) {
+    if (available && isCustomSkin(c.skin, available)) continue;
     if (c.skin != null && wanted.has(c.skin) && !seen.has(c.skin)) seen.add(c.skin);
     else toRemove.push(c.id);
   }

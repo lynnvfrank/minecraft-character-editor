@@ -9,7 +9,11 @@ import { normalizeRoster, parseResidents } from '../domain/residents';
 export const RESIDENTS_KEY = 'world.residents';
 
 /** Minimal Storage shape so tests can pass a Map-backed fake (Node has no localStorage). */
-export type KeyValueStorage = { getItem(key: string): string | null; setItem(key: string, value: string): void };
+export type KeyValueStorage = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
+};
 
 const same = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((s, i) => s === b[i]);
 
@@ -49,6 +53,18 @@ export function createResidentsStore(storage: KeyValueStorage | null) {
     prune(available: readonly string[], cap: number): void {
       if (!roster || available.length === 0) return;
       commit(normalizeRoster(roster, available, cap));
+    },
+    /** Forget the choice: back to the default crowd of random visitors (get() returns null). */
+    clear(): void {
+      if (roster === null) return;
+      roster = null;
+      try {
+        if (storage?.removeItem) storage.removeItem(RESIDENTS_KEY);
+        else storage?.setItem(RESIDENTS_KEY, 'null'); // reads back as "nothing stored"
+      } catch {
+        /* storage blocked: the roster is still cleared for this visit */
+      }
+      slice.notify();
     },
     subscribe: (listener: () => void): Unsubscribe => slice.subscribe(listener),
   };
