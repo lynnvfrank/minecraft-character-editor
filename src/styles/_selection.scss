@@ -1,10 +1,9 @@
 // Home-view selection (see src/controllers/selectionController.ts).
-// body[data-selection] is "selected" or "none". The Move panels and the Design button only make
-// sense with a character picked, so they show (sliding in) once one is selected.
+// body[data-selection] is "selected" or "none". The Move panels only make sense with a character
+// picked, so they show (sliding in) once one is selected.
 
 body[data-route='viewer'][data-selection='none'] {
-  .move-panels,
-  #enter-creator-btn {
+  .move-panels {
     display: none;
   }
 }

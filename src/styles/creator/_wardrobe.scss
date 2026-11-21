@@ -235,60 +235,6 @@ body[data-route="preview"] .app-lower-left-panels {
   cursor: wait;
 }
 
-/* Rainbow + glow effect for Home and Design buttons */
-#enter-viewer-btn,
-#enter-creator-btn {
-  background: linear-gradient(
-    135deg,
-    rgba(72, 219, 251, 0.5),
-    rgba(0, 210, 211, 0.5),
-    rgba(84, 160, 255, 0.5),
-    rgba(72, 219, 251, 0.5)
-  );
-  background-size: 200% 200%;
-  animation: creator-home-rainbow 8s ease infinite, creator-home-glow 2.5s ease-in-out infinite;
-  border: 1px solid rgba(var(--fg-rgb), 0.4);
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(var(--shadow-rgb), 0.4);
-}
-#enter-creator-btn {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 159, 243, 0.5),
-    rgba(72, 219, 251, 0.5),
-    rgba(254, 202, 87, 0.5),
-    rgba(255, 159, 243, 0.5)
-  );
-  animation: creator-home-rainbow 6s ease infinite, creator-creator-glow 2.5s ease-in-out infinite;
-}
-#enter-viewer-btn:hover:not(:disabled),
-#enter-creator-btn:hover:not(:disabled) {
-  filter: brightness(1.1);
-  box-shadow: 0 0 20px rgba(var(--fg-rgb), 0.3);
-}
-#enter-viewer-btn:disabled,
-#enter-creator-btn:disabled {
-  animation: none !important;
-}
-@keyframes creator-home-rainbow {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-@keyframes creator-home-glow {
-  0%, 100% { box-shadow: 0 0 10px rgba(84, 160, 255, 0.4); }
-  50% { box-shadow: 0 0 18px rgba(0, 210, 211, 0.6); }
-}
-@keyframes creator-creator-glow {
-  0%, 100% { box-shadow: 0 0 10px rgba(255, 159, 243, 0.4); }
-  50% { box-shadow: 0 0 18px rgba(72, 219, 251, 0.6); }
-}
-@media (prefers-reduced-motion: reduce) {
-  #enter-viewer-btn,
-  #enter-creator-btn {
-    animation: none !important;
-  }
-}
-
 /* Arm width picker (Auto / Slim / Classic) */
 .creator-arm-model-panel {
   width: 100%;

@@ -30,9 +30,6 @@
         </div>
         <div id="creator-lower-left-panels" class="creator-lower-left-panels">
           <div class="creator-3d-preview-slot" id="creator-3d-preview-slot" aria-hidden="true"></div>
-          <div id="creator-home-panel" class="creator-home-panel" aria-label="Navigation">
-            <button type="button" id="enter-viewer-btn" class="creator-home-btn" aria-label="Return to home mode">Home</button>
-          </div>
         </div>
       </div>
       <div id="creator-upper-right-panels-root" class="creator-upper-right-panels-root">
@@ -41,12 +38,13 @@
           <div id="creator-skin-selector" class="creator-skin-selector" role="listbox" aria-label="Available skins"></div>
         </div>
       </div>
-      <div id="app-lower-left-panels" class="app-lower-left-panels">
-        <div class="creator-home-panel" aria-label="Navigation">
-          <button type="button" id="enter-creator-btn" class="creator-home-btn" aria-label="Enter character design mode">Design</button>
-          <button type="button" id="enter-studio-btn" class="creator-home-btn" aria-label="Open the dance studio">Studio</button>
-        </div>
-      </div>
+      <div id="app-lower-left-panels" class="app-lower-left-panels"></div>
+      <!-- Mode switcher (src/ui/routeButtons.ts): lower right; each mode shows the other two. -->
+      <nav id="mode-switcher" class="mode-switcher" aria-label="Switch mode">
+        <button type="button" id="enter-creator-btn" class="mode-btn" aria-label="Design your character">Design</button>
+        <button type="button" id="enter-studio-btn" class="mode-btn" aria-label="Open the dance studio">Studio</button>
+        <button type="button" id="enter-viewer-btn" class="mode-btn" aria-label="Go to the village">Home</button>
+      </nav>
       <div id="creator-top-center-panels" class="creator-top-center-panels" aria-label="Camera controls"></div>
       <div id="creator-bottom-center-panels" class="creator-bottom-center-panels" aria-label="Editor toolbar"></div>
       <div class="creator-canvas-area" id="creator-canvas-area">

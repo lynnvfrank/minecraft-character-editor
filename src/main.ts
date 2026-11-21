@@ -760,9 +760,6 @@ async function main(): Promise<void> {
     studio,
     savedSequences,
     routineBeat: { ...studioBeatStore, setSnap: (snap) => studioBeatStore.set({ snap }), nextBarStartMs: studioBeat.nextBarStartMs },
-    onExit: () => {
-      location.hash = '#/';
-    },
   });
   // The route may have been applied (e.g. a direct #/studio load) before the controller existed.
   if (getRoute() === 'studio') studio.enter();
@@ -1004,7 +1001,15 @@ async function main(): Promise<void> {
     CREATOR_EXIT_ANIMATION_MS
   });
   app.provide('transitions', { getTransitionInFlight: creatorTransitionHandler.getTransitionInFlight });
-  routeButtons.setup(creatorTransitionHandler);
+  routeButtons.setup({
+    getRoute,
+    enterCreator: creatorTransitionHandler.enterCreator,
+    exitCreator: creatorTransitionHandler.exitCreator,
+    // From the studio there is no home-view camera move to make: open the creator directly.
+    openCreator: () => {
+      location.hash = getCreatorHash(getEditMode());
+    },
+  });
   // Creator "Send to village" / "Dance in studio" (buttons in the creator's Keep/Save panel).
   createCreatorToWorld({
     getRoute,

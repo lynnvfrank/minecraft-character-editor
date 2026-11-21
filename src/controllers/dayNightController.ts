@@ -136,12 +136,14 @@ export function createDayNightController(deps: DayNightControllerDeps) {
 
   /** Per frame (after the block world's own update, so its visibility is current). */
   function update(delta: number, route: Route): void {
-    if (route !== 'viewer') {
+    // Design keeps the home view's time of day (the village is still around the character), but the
+    // clock only runs at home so the light doesn't change under the brush.
+    if (route !== 'viewer' && route !== 'creator') {
       release();
       return;
     }
     const { auto, time: before } = store.get();
-    if (auto && delta > 0) {
+    if (auto && delta > 0 && route === 'viewer') {
       store.setTime(advanceTimeOfDay(before, delta, dayLengthSeconds), false);
       sinceSave += delta;
       if (sinceSave >= AUTO_SAVE_SECONDS) {
