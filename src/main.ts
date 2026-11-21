@@ -1155,6 +1155,12 @@ async function main(): Promise<void> {
       outfitResidents.labelOf(path) ?? skinsList.find((s) => s.path === path)?.label ?? path.split('/').pop()?.replace(/[.]png$/i, '') ?? 'Character',
     roamRadius: blockWorld?.roamRadius ?? DEFAULT_CROWD_CONFIG.edgeRadius + 6,
     isClickSuppressed: () => villageEditor?.isBuilding() ?? false,
+    walkTo: (target) => {
+      app.tryGet('characterAI')?.userTookControl();
+      animationManager.stop();
+      animationManager.setLastActivity();
+      void animationManager.walkTo(target, 1);
+    },
   }));
   // Home view Build mode: paint the village; rebuilds and refreshes crowd, lamps and weather spots.
   const villageEditor = blockWorld && createVillageEditorController({

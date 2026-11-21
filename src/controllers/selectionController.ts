@@ -5,6 +5,8 @@
  *   (see crowdController.swapIntoPrimary), so the Move panel, Design button and creator all act
  *   on whoever is selected. The selected character stops what it's doing and idles.
  * - Click empty ground or press Escape to deselect; the character goes back to doing its own thing.
+ * - Right-click the ground (without dragging) to walk there. With nobody selected, the main
+ *   character is selected first. A small marker shows where they're headed.
  * - `body[data-selection]` is "selected" or "none"; CSS shows the Move panels and Design button
  *   only while something is selected.
  * - Camera: orbit/zoom/pan anywhere (no longer pinned to the middle). While a character is
@@ -41,6 +43,8 @@ export type SelectionControllerDeps = {
   roamRadius: number;
   /** True while clicks on the ground mean something else (Build mode paints): no select/deselect. */
   isClickSuppressed?: () => boolean;
+  /** Walk the main character to a point on the ground (taking control from the idle AI). */
+  walkTo?: (target: THREE.Vector3) => void;
 };
 
 /** Pointer travel (px) above which a press is a camera drag, not a click. */
@@ -54,6 +58,8 @@ const SELECT_MAX_DISTANCE = 7;
 const HOME_CAMERA_START = new THREE.Vector3(0, 4.5, 12);
 /** Don't let the home camera dip under the ground. */
 const HOME_MAX_POLAR = THREE.MathUtils.degToRad(84);
+/** How long the right-click walk marker takes to fade out. */
+const WALK_MARKER_SEC = 0.9;
 
 const PAN_KEYS: Record<string, [number, number]> = {
   ArrowUp: [0, 1], KeyW: [0, 1],
@@ -80,6 +86,9 @@ export function createSelectionController(deps: SelectionControllerDeps) {
 
   const ring = createSelectionRing();
   deps.getSceneContext().scene.add(ring);
+  const marker = createWalkMarker();
+  deps.getSceneContext().scene.add(marker);
+  let markerAge = Infinity;
   const pill = createPill(() => deselect());
 
   function primary(): CharacterState | undefined {
@@ -166,20 +175,53 @@ export function createSelectionController(deps: SelectionControllerDeps) {
 
   // --- Input ---
   const canvas = deps.getSceneContext().renderer.domElement;
-  let down: { x: number; y: number; id: number } | null = null;
+  let down: { x: number; y: number; id: number; button: number } | null = null;
   canvas.addEventListener('pointerdown', (e) => {
-    down = e.button === 0 ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null;
+    down = e.button === 0 || e.button === 2 ? { x: e.clientX, y: e.clientY, id: e.pointerId, button: e.button } : null;
   });
   canvas.addEventListener('pointerup', (e) => {
     const start = down;
     down = null;
-    if (!start || start.id !== e.pointerId) return;
+    if (!start || start.id !== e.pointerId || start.button !== e.button) return;
+    // Further than this is a camera drag (right-drag pans), not a click.
     if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_SLOP_PX) return;
     if (deps.getRoute() !== 'viewer' || deps.getTransitionInFlight() || deps.isClickSuppressed?.()) return;
+    if (start.button === 2) {
+      walkToScreenPoint(e.clientX, e.clientY);
+      return;
+    }
     const id = pick(e.clientX, e.clientY);
     if (id) select(id);
     else deselect();
   });
+  // No browser menu on the 3D view: right-click means "walk here".
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const raycaster = new THREE.Raycaster();
+
+  /** Where a screen point lands on the ground (y = 0), or null for the sky. */
+  function groundAt(clientX: number, clientY: number): THREE.Vector3 | null {
+    const { camera, renderer } = deps.getSceneContext();
+    const rect = renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    return raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
+  }
+
+  function walkToScreenPoint(clientX: number, clientY: number): void {
+    if (!deps.walkTo) return;
+    const target = groundAt(clientX, clientY);
+    if (!target) return;
+    if (!selected) {
+      const char = primary();
+      if (!char) return;
+      select(char.id);
+    }
+    marker.position.set(target.x, 0.02, target.z);
+    markerAge = 0;
+    deps.walkTo(target);
+  }
 
   const isTyping = (t: EventTarget | null) => {
     const el = t as HTMLElement | null;
@@ -221,6 +263,13 @@ export function createSelectionController(deps: SelectionControllerDeps) {
     const step = Math.min(dt, 0.1);
 
     ring.visible = home && selected && !!char;
+    markerAge += step;
+    const fade = home ? 1 - markerAge / WALK_MARKER_SEC : 0;
+    marker.visible = fade > 0;
+    if (marker.visible) {
+      (marker.material as THREE.MeshBasicMaterial).opacity = 0.9 * fade;
+      marker.scale.setScalar(0.6 + 0.4 * fade);
+    }
     if (char) ring.position.set(char.container.position.x, 0.015, char.container.position.z);
     if (!home) {
       controls.maxPolarAngle = Math.PI;
@@ -285,6 +334,18 @@ function createSelectionRing(): THREE.Mesh {
   ring.renderOrder = 2;
   ring.visible = false;
   return ring;
+}
+
+/** Where a right-click walk is headed: a small ring on the ground that shrinks and fades. */
+function createWalkMarker(): THREE.Mesh {
+  const geo = new THREE.RingGeometry(0.18, 0.3, 32);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+  const marker = new THREE.Mesh(geo, mat);
+  marker.name = 'walk-marker';
+  marker.rotation.x = -Math.PI / 2;
+  marker.renderOrder = 2;
+  marker.visible = false;
+  return marker;
 }
 
 /** Top-center hint: "Click a character" when nothing is selected, the selected name + ✕ otherwise. */
