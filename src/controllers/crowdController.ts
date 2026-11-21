@@ -9,9 +9,17 @@
  *
  * The world stops outside the home view: the simulation and crowd mixers pause and the crowd is
  * hidden (it would clutter the creator and the preview/thumbnail captures).
+ *
+ * Residents (optional `getRoster`): once the user has chosen who lives in the village, the crowd
+ * only wears those skins, one character each, and `syncRoster` applies changes live: characters
+ * whose skin was switched off are removed on the spot, new ones appear at a walkable spot.
+ * Residents still stroll out and come back like any visitor. The primary is never removed.
+ * With no roster (null) nothing changes: random visitors from every skin.
  */
 import * as THREE from 'three';
 import { createCrowdSim, DEFAULT_CROWD_CONFIG, type CrowdConfig, type CrowdEvent } from '../animation/crowd';
+import type { XZ } from '../animation/wander';
+import { crowdSkinsFor, diffResidents } from '../domain/residents';
 import { logger } from '../lib';
 import type { SkinEntry, AnimationEntry } from '../domain';
 import { buildCharacterConfig, type CharacterConfig, type CharacterState } from './characterTypes';
@@ -28,23 +36,32 @@ export type CrowdControllerDeps = {
   getAnimations: () => AnimationEntry[];
   /** Rig for a skin (slim or classic arms). */
   resolveModelPath: (skinPath: string) => Promise<string>;
+  /** Skins chosen to live in the village (primary included), or null for the default crowd. */
+  getRoster?: () => readonly string[] | null;
   config?: Partial<CrowdConfig>;
 };
 
 /** Give up on a crowd model that hasn't loaded after this long. */
 const LOAD_TIMEOUT_SEC = 30;
 const FADE_SEC = 0.35;
+/** After a roster change, missing residents appear one at a time this far apart (spreads the loads). */
+const QUICK_FILL_SEC = 0.4;
 
 export type CrowdController = ReturnType<typeof createCrowdController>;
 
 export function createCrowdController(deps: CrowdControllerDeps) {
   const config: CrowdConfig = { ...DEFAULT_CROWD_CONFIG, ...deps.config };
+  /** The sim reads config.maxAgents live; with a roster it shrinks to the residents still to host. */
+  const baseMaxAgents = config.maxAgents;
   const sim = createCrowdSim(config);
-  /** Agents whose model is still loading → seconds waited. */
-  const pending = new Map<string, number>();
+  /** Agents whose model is still loading → seconds waited and the skin on its way. */
+  const pending = new Map<string, { waited: number; skin: string }>();
   /** Timed-out loads: if the model shows up after all, remove it instead of leaving it orphaned. */
   const abandoned = new Set<string>();
   let started = false;
+  /** Roster just changed: bring missing residents in right away instead of waiting for the spawn timer. */
+  let quickFill = false;
+  let quickFillTimer = 0;
 
   const zoneRing = createZoneRing(config.zoneRadius);
   deps.getSceneContext().scene.add(zoneRing);
@@ -87,8 +104,33 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     }
   }
 
+  function primarySkin(): string | null {
+    return getChar(deps.getPrimaryCharacterId())?.currentSkin ?? null;
+  }
+
+  /** Skins the crowd should wear under the roster (null = no roster, anything goes). */
+  function wantedCrowdSkins(): string[] | null {
+    const roster = deps.getRoster?.() ?? null;
+    if (!roster) return null;
+    const known = new Set(deps.getSkins().map((s) => s.path));
+    return crowdSkinsFor(roster.filter((s) => known.has(s)), primarySkin());
+  }
+
+  /** Wanted skins nobody in the scene wears (or is loading) yet. */
+  function missingResidents(wanted: readonly string[]): string[] {
+    const worn = new Set(Object.values(deps.getSceneContext().characters).map((c) => c.currentSkin));
+    for (const p of pending.values()) worn.add(p.skin);
+    return wanted.filter((s) => !worn.has(s));
+  }
+
   /** Skins already worn by someone in the scene, so the crowd isn't full of twins. */
   function pickSkin(): string | null {
+    const wanted = wantedCrowdSkins();
+    if (wanted) {
+      // Residents: one character per chosen skin, never a twin.
+      const missing = missingResidents(wanted);
+      return missing.length > 0 ? missing[Math.floor(Math.random() * missing.length)]! : null;
+    }
     const skins = deps.getSkins();
     if (skins.length === 0) return null;
     const worn = new Set(Object.values(deps.getSceneContext().characters).map((c) => c.currentSkin));
@@ -97,12 +139,33 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     return pool[Math.floor(Math.random() * pool.length)]!.path;
   }
 
-  function spawn(): void {
-    const skin = pickSkin();
-    if (!skin) return;
-    const id = sim.reserve();
-    if (!id) return;
-    pending.set(id, 0);
+  /** A walkable spot with nobody standing on it (a new resident appears there). */
+  function pickSpot(): XZ {
+    const spots = config.nav?.spots ?? [];
+    const taken: XZ[] = sim.list().map((a) => ({ x: a.x, z: a.z }));
+    const primary = getChar(deps.getPrimaryCharacterId())?.container.position;
+    if (primary) taken.push({ x: primary.x, z: primary.z });
+    let spot: XZ = { x: 0, z: 0 };
+    for (let i = 0; i < 12; i++) {
+      if (spots.length > 0) {
+        spot = spots[Math.floor(Math.random() * spots.length)]!;
+      } else {
+        const r = config.zoneRadius * 0.85 * Math.sqrt(Math.random());
+        const a = Math.random() * Math.PI * 2;
+        spot = { x: Math.sin(a) * r, z: Math.cos(a) * r };
+      }
+      const p = spot;
+      if (taken.every((t) => Math.hypot(t.x - p.x, t.z - p.z) >= config.personalSpace * 2)) break;
+    }
+    return spot;
+  }
+
+  /** Start loading a crowd character. Walks in from the edge unless `at` says where it appears. */
+  function spawn(skin: string | null = pickSkin(), at?: XZ): boolean {
+    if (!skin) return false;
+    const id = sim.reserve(at);
+    if (!id) return false;
+    pending.set(id, { waited: 0, skin });
     const agent = sim.get(id)!;
     void deps.resolveModelPath(skin).then((modelPath) => {
       if (!sim.get(id)) return; // removed while resolving
@@ -112,6 +175,7 @@ export function createCrowdController(deps: CrowdControllerDeps) {
       deps.loadCharacter(cfg, deps.getSkins());
       logger.debug('general', 'Crowd spawn', { id, skin });
     });
+    return true;
   }
 
   function despawn(id: string): void {
@@ -150,20 +214,20 @@ export function createCrowdController(deps: CrowdControllerDeps) {
       abandoned.delete(id);
       despawn(id);
     }
-    for (const [id, waited] of pending) {
+    for (const [id, entry] of pending) {
       const char = getChar(id);
       if (char) {
         pending.delete(id);
         sim.activate(id);
         continue;
       }
-      if (waited + dt > LOAD_TIMEOUT_SEC) {
+      if (entry.waited + dt > LOAD_TIMEOUT_SEC) {
         pending.delete(id);
         sim.remove(id);
         abandoned.add(id);
         logger.warn('general', 'Crowd model never loaded; dropped', { id });
       } else {
-        pending.set(id, waited + dt);
+        entry.waited += dt;
       }
     }
   }
@@ -197,10 +261,73 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     if (route !== 'viewer' || !running) return;
     const step = Math.min(dt, 0.1); // a backgrounded tab returns with a huge delta
     checkPending(step);
+    applyRosterLimits(step);
     // The selected character isn't in the sim; the crowd keeps clear of it.
     const primary = getChar(deps.getPrimaryCharacterId())?.container.position;
     handleEvents(sim.tick(step, primary ? [{ x: primary.x, z: primary.z }] : []));
     applyTransforms();
+  }
+
+  /** Take a crowd character out of the world right now (its skin left the roster). */
+  function removeResident(id: string): void {
+    const stillLoading = pending.has(id) && !getChar(id);
+    sim.remove(id);
+    // Not in the scene yet: if the model shows up later, checkPending disposes of it.
+    if (stillLoading) abandoned.add(id);
+    despawn(id);
+  }
+
+  /** Per frame: with a roster, the crowd is only as big as the residents it still has to host. */
+  function applyRosterLimits(dt: number): void {
+    const wanted = wantedCrowdSkins();
+    config.maxAgents = wanted ? Math.min(baseMaxAgents, wanted.length) : baseMaxAgents;
+    if (!wanted) {
+      quickFill = false;
+      return;
+    }
+    if (!quickFill) return;
+    quickFillTimer -= dt;
+    if (quickFillTimer > 0) return;
+    const missing = missingResidents(wanted);
+    // Done, or no room (someone is still on their way out): the spawn timer takes it from here.
+    if (missing.length === 0 || !spawn(missing[0]!, pickSpot())) {
+      quickFill = false;
+      return;
+    }
+    quickFillTimer = QUICK_FILL_SEC;
+  }
+
+  /**
+   * The roster changed (Residents panel): remove crowd characters whose skin is no longer wanted
+   * (and twins), then let the missing ones appear. The primary is not in the sim, so it is never
+   * removed here. Does nothing without a roster.
+   */
+  function syncRoster(): void {
+    const wanted = wantedCrowdSkins();
+    if (!wanted || !started) return;
+    const current = sim.list().map((a) => ({
+      id: a.id,
+      skin: getChar(a.id)?.currentSkin ?? pending.get(a.id)?.skin ?? null,
+    }));
+    const { toAdd, toRemove } = diffResidents(current, wanted);
+    for (const id of toRemove) removeResident(id);
+    if (toAdd.length > 0) {
+      quickFill = true;
+      quickFillTimer = 0;
+    }
+    logger.debug('general', 'Crowd roster applied', { added: toAdd.length, removed: toRemove.length });
+  }
+
+  /** Skins in the world right now, the primary's first (crowd models still loading included). */
+  function presentSkins(): string[] {
+    const out: string[] = [];
+    const main = primarySkin();
+    if (main) out.push(main);
+    for (const a of sim.list()) {
+      const skin = getChar(a.id)?.currentSkin ?? pending.get(a.id)?.skin;
+      if (skin) out.push(skin);
+    }
+    return out;
   }
 
   /**
@@ -232,6 +359,11 @@ export function createCrowdController(deps: CrowdControllerDeps) {
     shouldUpdateCharacter,
     isCrowdCharacter,
     swapIntoPrimary,
+    syncRoster,
+    presentSkins,
+    primarySkin,
+    /** Most skins the village holds at once: the crowd's limit plus the primary. */
+    residentsCap: baseMaxAgents + 1,
     zoneRadius: config.zoneRadius,
     edgeRadius: config.edgeRadius,
     /** For tests and debugging. */

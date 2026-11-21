@@ -250,4 +250,15 @@ describe('crowd sim', () => {
     assert.notEqual(w.phase, 'walking', 'still pushing against the blocker');
     assert.ok(w.x < -0.5, 'never walked through the blocker');
   });
+
+  test('reserve(at) starts the agent at that spot and still respects maxAgents', () => {
+    const sim = makeSim({ maxAgents: 1 });
+    const id = sim.reserve({ x: 1.5, z: -2 });
+    assert.ok(id);
+    const a = sim.get(id)!;
+    assert.deepEqual([a.x, a.z, a.phase], [1.5, -2, 'loading']);
+    assert.equal(sim.reserve({ x: 0, z: 0 }), null);
+    sim.activate(id);
+    assert.equal(a.phase, 'entering');
+  });
 });

@@ -435,11 +435,13 @@ export function createCrowdSim(config: CrowdConfig = DEFAULT_CROWD_CONFIG) {
   /**
    * Claim a slot for a new agent at a random point on the edge. It stays put ('loading') until
    * `activate` is called, so slow model loads still count toward maxAgents.
+   * Pass `at` to start somewhere specific instead (a resident added from the Residents panel
+   * appears in the village rather than walking in from the edge).
    */
-  function reserve(): string | null {
+  function reserve(at?: XZ): string | null {
     if (agents.size >= config.maxAgents) return null;
     const id = `crowd-${nextId++}`;
-    const p = pickGate() ?? pointOnCircle(config.edgeRadius, random() * Math.PI * 2);
+    const p = at ?? pickGate() ?? pointOnCircle(config.edgeRadius, random() * Math.PI * 2);
     agents.set(id, {
       id,
       x: p.x,
