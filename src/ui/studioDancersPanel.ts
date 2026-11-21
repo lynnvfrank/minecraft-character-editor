@@ -2,12 +2,13 @@
  * "Dancers" section of the dance studio panel (`#/studio`): how many backup dancers join the
  * lead, how they stand, and whether they trail it a little (a canon).
  *
- * A separate module from studioPanel.ts, like the "Camera" section: it builds its own `<section>`
- * and inserts it into the panel. It only edits the settings store; the dancers themselves are
+ * A separate module from studioPanel.ts, like the "Camera" section: it builds its own collapsible
+ * section and mounts it at its place in the panel. It only edits the settings store; the dancers themselves are
  * controllers/studioDancersController.ts.
  */
 import { DANCE_OFFSETS_SEC, FORMATIONS, MAX_BACKUP_DANCERS, type Formation } from '../domain/groupDance';
 import type { GroupDanceStore } from '../state/groupDanceStore';
+import { createCollapsibleSection, mountStudioSection } from './collapsibleSection';
 
 export type StudioDancersPanelDeps = {
   /** The studio panel root (`#studio-panel`). */
@@ -40,9 +41,20 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, te
 
 export function createStudioDancersPanel(deps: StudioDancersPanelDeps) {
   const { store } = deps;
-  const root = el('section', 'studio-section studio-dancers');
-  root.id = 'studio-dancers';
-  root.append(el('h3', 'studio-section-title', 'Dancers'));
+  const section = createCollapsibleSection({
+    id: 'dancers',
+    title: 'Dancers',
+    className: 'studio-dancers',
+    domId: 'studio-dancers',
+    summary: () => {
+      const s = store.get();
+      if (s.count === 0) return COUNT_LABELS[0]!;
+      const parts = [COUNT_LABELS[s.count] ?? `+${s.count}`, FORMATION_LABELS[s.formation]];
+      if (s.offsetSec > 0) parts.push(`${offsetLabel(s.offsetSec)} behind`);
+      return parts.join(' · ');
+    },
+  });
+  const root = section.root;
 
   /** A labelled row of choice buttons; returns a function that marks the chosen one. */
   function choiceRow<T>(
@@ -97,12 +109,8 @@ export function createStudioDancersPanel(deps: StudioDancersPanelDeps) {
 
   const hint = el('p', 'studio-hint');
   hint.setAttribute('aria-live', 'polite');
-  root.append(countRow.row, formationRow.row, offsetRow.row, hint);
-
-  // Under the "Camera" section when it is there, else right under the header.
-  const anchor = deps.mount?.querySelector('#studio-capture') ?? deps.mount?.querySelector('.studio-header');
-  if (anchor) anchor.after(root);
-  else deps.mount?.prepend(root);
+  section.body.append(countRow.row, formationRow.row, offsetRow.row, hint);
+  mountStudioSection(deps.mount, root);
 
   function render(): void {
     const s = store.get();
@@ -115,6 +123,7 @@ export function createStudioDancersPanel(deps: StudioDancersPanelDeps) {
       : s.offsetSec > 0
         ? 'Your friends follow a beat behind, like a wave.'
         : 'Your friends copy every move.';
+    section.refresh();
   }
   store.subscribe(render);
   render();

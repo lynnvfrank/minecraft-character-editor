@@ -24,10 +24,15 @@ import { createSnapshotHistory } from '../lib/snapshotHistory';
 import {
   formationOffsets,
   groupFraming,
+  groupShot,
   MAX_DANCE_OFFSET_SEC,
   pickDancerSkins,
+  reframeDecision,
   stageToWorld,
+  type Formation,
   type GroupDanceSettings,
+  type GroupShot,
+  type PendingReframe,
 } from '../domain/groupDance';
 import type { SkinEntry, AnimationEntry } from '../domain';
 import { buildCharacterConfig, type CharacterConfig, type CharacterState } from './characterTypes';
@@ -56,6 +61,11 @@ export type StudioDancersDeps = {
   resolveModelPath: (skinPath: string) => Promise<string>;
   /** Skins chosen to live in the village, or null when the user never chose. */
   getRoster: () => readonly string[] | null;
+  /**
+   * How many times the user has taken the camera (drag, framing button, turntable). The group is
+   * framed again once its dancers have loaded, but only while this hasn't changed.
+   */
+  getCameraSerial?: () => number;
   random?: () => number;
 };
 
@@ -91,6 +101,8 @@ export function createStudioDancersController(deps: StudioDancersDeps) {
   /** A load failed or timed out: don't retry until the studio is opened again. */
   let loadFailed = false;
   let framedFor: string | null = null;
+  /** Set when the group changes: frame once more when the dancers are in (see reframeDecision). */
+  let pendingReframe: PendingReframe | null = null;
   let lastOffsetSec = 0;
 
   function dispose(char: CharacterState): void {
@@ -218,13 +230,13 @@ export function createStudioDancersController(deps: StudioDancersDeps) {
 
   /**
    * Frame the whole group the way the studio frames the lead alone, just centred on the group
-   * and further back. Only on entering the studio and when the group changes shape, so the user's
-   * own orbiting is otherwise left alone.
+   * and further back. Only on entering the studio, when the group changes shape and once more
+   * when its dancers have loaded, so the user's own orbiting is otherwise left alone.
    */
-  function frameCamera(lead: CharacterState, settings: GroupDanceSettings): void {
+  function frameCamera(lead: CharacterState, formation: Formation, count: number): void {
     const ctx = deps.getSceneContext();
     const yaw = deps.getFacing();
-    const framing = groupFraming(formationOffsets(settings.formation, settings.count));
+    const framing = groupFraming(formationOffsets(formation, count));
     const c = stageToWorld(framing.center, yaw);
     const p = lead.container.position;
     ctx.controls.target.set(p.x + c.x, p.y + CAMERA_TARGET_HEIGHT, p.z + c.z);
@@ -249,6 +261,7 @@ export function createStudioDancersController(deps: StudioDancersDeps) {
         onStage = false;
         loadFailed = false;
         framedFor = null;
+        pendingReframe = null;
         history.clear();
         clock = 0;
       }
@@ -268,8 +281,19 @@ export function createStudioDancersController(deps: StudioDancersDeps) {
 
     // Solo and never touched: leave the studio's own framing alone.
     const shape = settings.count > 0 ? `${settings.count}:${settings.formation}` : 'solo';
-    if (entered ? shape !== 'solo' : shape !== framedFor) frameCamera(lead, settings);
+    const cameraSerial = deps.getCameraSerial?.() ?? 0;
+    if (entered ? shape !== 'solo' : shape !== framedFor) {
+      frameCamera(lead, settings.formation, settings.count);
+      // The dancers are still loading: frame again when they are in, unless the user moves the camera first.
+      pendingReframe = settings.count > 0 ? { cameraSerial } : null;
+    }
     framedFor = shape;
+    // After a failed load nobody else is coming: the group is whoever made it.
+    const expected = loadFailed ? slots.length : settings.count;
+    const stillLoading = expected - slots.filter((s) => s.char).length;
+    const decision = reframeDecision(pendingReframe, stillLoading, cameraSerial);
+    if (decision === 'frame') frameCamera(lead, settings.formation, slots.length);
+    if (decision === 'frame' || decision === 'skip') pendingReframe = null;
 
     clock += delta;
     history.record(clock, deps.getLeadWeights());
@@ -300,6 +324,14 @@ export function createStudioDancersController(deps: StudioDancersDeps) {
     update,
     /** Dancers on stage right now (loaded ones only). */
     count: (): number => slots.filter((s) => s.char).length,
+    /**
+     * The lead and its backup dancers as one group, for the framing buttons and the turntable.
+     * Null when the lead dances alone (or the studio is closed).
+     */
+    groupShot: (): GroupShot | null => {
+      if (!onStage || slots.length === 0) return null;
+      return groupShot(formationOffsets(deps.getSettings().formation, slots.length), deps.getFacing());
+    },
   };
 }
 

@@ -95,3 +95,37 @@ export function framingPose(framing: CameraFraming, anchor: Point3 & { yaw: numb
     },
   };
 }
+
+/**
+ * The dancers as one group (see `groupShot` in domain/groupDance.ts, described here by shape): the
+ * XZ shift from the lead to the group's middle and how much further back the camera has to stand.
+ */
+export type GroupShift = { dx: number; dz: number; extraDistance: number };
+
+/**
+ * A framing placed for the whole group: aimed at the group's middle and pulled back to fit
+ * everyone. With no group (null) it is the plain framing at the lead.
+ */
+export function groupFramingPose(
+  framing: CameraFraming,
+  anchor: Point3 & { yaw: number },
+  group: GroupShift | null
+): { target: Point3; orbit: OrbitPose } {
+  if (!group) return framingPose(framing, anchor);
+  return framingPose(
+    { ...framing, distance: framing.distance + Math.max(0, group.extraDistance) },
+    { ...anchor, x: anchor.x + group.dx, z: anchor.z + group.dz }
+  );
+}
+
+/** Framings that show everyone on stage; the others stay on the lead. */
+export const GROUP_FRAMINGS: readonly CameraFramingId[] = ['fullBody', 'wide'];
+
+/**
+ * Move `current` toward `goal`, closing the gap smoothly whatever the frame rate (`rate` per
+ * second; about 95% of the way after 3 / rate seconds). Never overshoots.
+ */
+export function approach(current: number, goal: number, rate: number, delta: number): number {
+  if (!(delta > 0) || !(rate > 0)) return current;
+  return current + (goal - current) * (1 - Math.exp(-rate * delta));
+}

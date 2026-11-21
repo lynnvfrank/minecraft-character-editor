@@ -1,9 +1,13 @@
 /**
- * Dance studio panel (`#/studio`): an A↔B crossfade at the top, then every clip with
- * play/stop, a weight slider and a speed slider. The Routine section collects mixes as steps
- * (add, reorder, set lengths, preview) and saves them as one sequence in the saved-sequence
+ * Dance studio panel (`#/studio`). Sections read top-down in the order you work: Clips (every clip
+ * with play/stop, a weight slider and a speed slider; takes the height that is left and scrolls),
+ * the A↔B crossfade, the Routine, and the saved combos. The Routine section collects mixes as
+ * steps (add, reorder, set lengths, preview) and saves them as one sequence in the saved-sequence
  * store, which the Move panel lists under "My combos". With no steps, Save stores the current
  * mix as a one-step combo. Routine rules live in `animation/studioRoutine.ts`.
+ *
+ * Every section is a collapsible one from collapsibleSection.ts; the stage sections (Dancers,
+ * Backdrop, Camera moves, Camera) come from their own modules and mount themselves below these.
  *
  * Created once at startup (like the Move panel) and shown only on the studio route via CSS, so
  * its listeners don't stack up on re-entry.
@@ -32,6 +36,7 @@ import {
   type RoutineStep,
 } from '../animation/studioRoutine';
 import { MOVEMENT_CLIPS, moveEmoji, moveLabel } from './moveInfo';
+import { createCollapsibleSection, mountStudioSection } from './collapsibleSection';
 
 type AnimationEntry = { key: string; label: string };
 
@@ -110,9 +115,21 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   exitBtn.addEventListener('click', () => deps.onExit());
   header.append(title, exitBtn);
 
+  const labels = new Map<string, string>();
+  const labelFor = (key: string) => labels.get(key) ?? moveLabel(key);
+
   // --- A↔B crossfade ---
-  const xf = el('section', 'studio-section studio-crossfade');
-  xf.append(el('h3', 'studio-section-title', 'Crossfade A ↔ B'));
+  const xfSection = createCollapsibleSection({
+    id: 'crossfade',
+    title: 'Crossfade A ↔ B',
+    className: 'studio-crossfade',
+    summary: () => {
+      const { a, b, t } = studio.getSnapshot().mix.crossfade;
+      if (!a && !b) return 'Off';
+      return `${a ? labelFor(a) : '—'} ↔ ${b ? labelFor(b) : '—'} · ${pct(t)}`;
+    },
+  });
+  const xf = xfSection.body;
   const pickRow = el('div', 'studio-xf-picks');
   const selA = el('select', 'studio-select');
   selA.id = 'studio-xf-a';
@@ -154,8 +171,7 @@ export function createStudioPanel(deps: StudioPanelDeps) {
     studio.setCrossfade({ a: b, b: a, t: 1 - t });
   });
 
-  // --- Mix options ---
-  const opts = el('section', 'studio-section studio-options');
+  // --- Mix options (shown in the Clips section, above the list) ---
   const normLabel = el('label', 'studio-check');
   const normBox = el('input');
   normBox.type = 'checkbox';
@@ -166,12 +182,8 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   const resetBtn = el('button', 'studio-btn', 'Stop all');
   resetBtn.type = 'button';
   resetBtn.addEventListener('click', () => studio.reset());
-  const optRow = el('div', 'studio-row');
+  const optRow = el('div', 'studio-row studio-options');
   optRow.append(normLabel, resetBtn);
-  opts.append(optRow);
-
-  const labels = new Map<string, string>();
-  const labelFor = (key: string) => labels.get(key) ?? moveLabel(key);
 
   // --- Routine: a list of mixes played one after another ---
   let draft: readonly RoutineStep[] = [];
@@ -197,8 +209,13 @@ export function createStudioPanel(deps: StudioPanelDeps) {
     return b;
   }
 
-  const routine = el('section', 'studio-section studio-routine');
-  routine.append(el('h3', 'studio-section-title', 'Routine'));
+  const routineSection = createCollapsibleSection({
+    id: 'routine',
+    title: 'Routine',
+    className: 'studio-routine',
+    summary: () => (draft.length === 0 ? 'No steps yet' : describeRoutineLength(draft)),
+  });
+  const routine = routineSection.body;
   const addRow = el('div', 'studio-row');
   const durInput = numInput(DEFAULT_STEP_SEC, 'Step length (seconds)');
   durInput.id = 'studio-step-duration';
@@ -300,6 +317,7 @@ export function createStudioPanel(deps: StudioPanelDeps) {
     updateBtn.textContent = selected == null ? 'Update step' : `Update step ${selected + 1}`;
     saveBtn.textContent = empty ? 'Save combo' : 'Save routine';
     saveBtn.title = empty ? 'Save the current mix as a combo' : 'Save every step as one combo';
+    routineSection.refresh();
     renderPreview();
   }
 
@@ -363,11 +381,16 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   });
 
   // --- Saved list ---
-  const savedSection = el('section', 'studio-section');
-  const savedTitle = el('h3', 'studio-section-title', 'Saved sequences');
+  const saved = createCollapsibleSection({
+    id: 'saved',
+    title: 'My combos',
+    className: 'studio-saved-section',
+    summary: () => `${deps.savedSequences.list().length} saved`,
+  });
+  const savedSection = saved.root;
   const savedList = el('ul', 'studio-saved');
   savedList.id = 'studio-saved-list';
-  savedSection.append(savedTitle, savedList);
+  saved.body.append(savedList);
   function renderSaved() {
     const items = deps.savedSequences.list();
     savedSection.hidden = items.length === 0;
@@ -393,7 +416,16 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   }
 
   // --- Clip list ---
-  const clipsSection = el('section', 'studio-section studio-clips-section');
+  const clips = createCollapsibleSection({
+    id: 'clips',
+    title: 'Clips',
+    className: 'studio-clips-section',
+    summary: () => {
+      let playing = 0;
+      for (const r of studio.getSnapshot().applied.values()) if (r.weight > 0) playing++;
+      return playing === 0 ? 'Nothing playing' : playing === 1 ? '1 playing' : `${playing} playing`;
+    },
+  });
   const clipsHead = el('div', 'studio-row');
   const filter = el('input', 'studio-input');
   filter.type = 'search';
@@ -407,7 +439,7 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   clipsHead.append(filter, showAll);
   const clipList = el('ul', 'studio-clips');
   clipList.id = 'studio-clip-list';
-  clipsSection.append(el('h3', 'studio-section-title', 'Clips'), clipsHead, clipList);
+  clips.body.append(clipsHead, optRow, clipList);
 
   type Row = {
     key: string;
@@ -466,7 +498,8 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   filter.addEventListener('input', applyFilter);
   showAllBox.addEventListener('change', applyFilter);
 
-  root.append(header, xf, opts, routine, savedSection, clipsSection);
+  root.append(header);
+  for (const section of [clips, xfSection, routineSection, saved]) mountStudioSection(root, section.root);
 
   // --- Sync from state ---
   function render() {
@@ -500,10 +533,13 @@ export function createStudioPanel(deps: StudioPanelDeps) {
       r.li.classList.toggle('audible', w > 0);
       r.li.classList.toggle('in-crossfade', r.key === a || r.key === b);
     }
+    clips.refresh();
+    xfSection.refresh();
     renderPreview();
   }
   studio.subscribe(render);
   deps.savedSequences.subscribe(renderSaved);
+  deps.savedSequences.subscribe(saved.refresh);
 
   /** Build the clip rows and A/B options once the animation list is known. */
   function setAnimations(animations: AnimationEntry[]) {

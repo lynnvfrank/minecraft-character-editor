@@ -2,14 +2,19 @@
  * "Camera" section of the dance studio panel (`#/studio`): save a photo of the stage (optionally
  * with a transparent background) or record a short video of it.
  *
- * A separate module from studioPanel.ts: it builds its own `<section>` and inserts it under the
- * panel header. Created once at startup, like the studio panel itself.
+ * A separate module from studioPanel.ts: it builds its own collapsible section and mounts it at
+ * its place in the panel (last: shooting comes after mixing and dressing the stage). Created once
+ * at startup, like the studio panel itself.
+ *
+ * While recording, a small "REC m:ss" badge sits over the stage (DOM, so it is not in the video)
+ * and the section header shows the same when the section is collapsed.
  */
 import { captureFileName, extensionForMimeType, formatElapsed, MAX_RECORDING_MS } from '../lib/captureFiles';
 import { canRecordCanvas, createCanvasRecorder } from './canvasRecorder';
+import { createCollapsibleSection, mountStudioSection } from './collapsibleSection';
 
 export type StudioCapturePanelDeps = {
-  /** The studio panel root (`#studio-panel`); the section goes right under its header. */
+  /** The studio panel root (`#studio-panel`); the REC badge goes next to it, over the stage. */
   mount: HTMLElement | null;
   /** The stage's WebGL canvas (recorded as-is). */
   getCanvas: () => HTMLCanvasElement | null;
@@ -40,9 +45,18 @@ function download(blob: Blob, fileName: string): void {
 }
 
 export function createStudioCapturePanel(deps: StudioCapturePanelDeps) {
-  const root = el('section', 'studio-section studio-capture');
-  root.id = 'studio-capture';
-  root.append(el('h3', 'studio-section-title', 'Camera'));
+  const canRecord = canRecordCanvas();
+  /** Elapsed time of the running recording, or null when not recording. */
+  let recordingMs: number | null = null;
+  const section = createCollapsibleSection({
+    id: 'capture',
+    title: 'Camera',
+    className: 'studio-capture',
+    domId: 'studio-capture',
+    summary: () =>
+      recordingMs != null ? `● REC ${formatElapsed(recordingMs)}` : canRecord ? 'Photo · Video' : 'Photo',
+  });
+  const root = section.root;
 
   const row = el('div', 'studio-row');
   const photoBtn = el('button', 'studio-btn studio-capture-btn', '📷 Photo');
@@ -66,11 +80,16 @@ export function createStudioCapturePanel(deps: StudioCapturePanelDeps) {
 
   const hint = el('p', 'studio-hint');
   hint.setAttribute('aria-live', 'polite');
-  root.append(row, optRow, hint);
+  section.body.append(row, optRow, hint);
+  mountStudioSection(deps.mount, root);
 
-  const header = deps.mount?.querySelector('.studio-header');
-  if (header) header.after(root);
-  else deps.mount?.prepend(root);
+  // Over the stage's top-left corner while recording. Plain DOM: the video only records the canvas.
+  const badge = el('div', 'studio-rec-badge');
+  badge.id = 'studio-rec-badge';
+  badge.hidden = true;
+  badge.setAttribute('role', 'status');
+  badge.setAttribute('aria-label', 'Recording');
+  deps.mount?.parentElement?.append(badge);
 
   // --- Photo ---
   photoBtn.addEventListener('click', () => {
@@ -101,7 +120,11 @@ export function createStudioCapturePanel(deps: StudioCapturePanelDeps) {
     getCanvas: deps.getCanvas,
     shouldContinue: deps.isOnStage,
     onTick: (elapsedMs, recording) => {
+      recordingMs = recording ? elapsedMs : null;
       root.classList.toggle('recording', recording);
+      badge.hidden = !recording;
+      if (recording) badge.textContent = `REC ${formatElapsed(elapsedMs)}`;
+      section.refresh();
       recordBtn.setAttribute('aria-pressed', String(recording));
       recordBtn.textContent = recording ? `■ Stop ${formatElapsed(elapsedMs)}` : '● Record';
       if (recording) hint.textContent = `Recording… stops by itself at ${maxLabel}.`;
@@ -117,7 +140,7 @@ export function createStudioCapturePanel(deps: StudioCapturePanelDeps) {
     },
   });
 
-  if (canRecordCanvas()) {
+  if (canRecord) {
     recordBtn.title = `Record a video of the stage (up to ${maxLabel})`;
     recordBtn.addEventListener('click', () => {
       if (recorder.isRecording()) recorder.stop();
