@@ -60,6 +60,12 @@ describe('captureFileName', () => {
   test('accepts an extension with a leading dot', () => {
     assert.equal(captureFileName(new Date(2026, 5, 1, 0, 0, 0), '.mp4'), 'blockygotchi-dance-20260601-000000.mp4');
   });
+
+  test('takes a prefix for other places (cleaned for a file name)', () => {
+    assert.equal(captureFileName(new Date(2026, 0, 5, 7, 8, 9), 'png', 'village'), 'blockygotchi-village-20260105-070809.png');
+    assert.equal(captureFileName(new Date(2026, 0, 5, 7, 8, 9), 'png', ' My Village! '), 'blockygotchi-my-village-20260105-070809.png');
+    assert.equal(captureFileName(new Date(2026, 0, 5, 7, 8, 9), 'png', '///'), 'blockygotchi-dance-20260105-070809.png');
+  });
 });
 
 describe('formatElapsed', () => {
