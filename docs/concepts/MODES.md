@@ -112,8 +112,8 @@ flowchart LR
 | **Hash** | `#/studio` |
 | **`body` attribute** | `data-route="studio"` |
 | **Primary trigger** | **Studio** button under Design on the home view; **Home** in the studio panel goes back to `#/` |
-| **Behavior notes** | Its own stage: the block village and the crowd are hidden (and the crowd doesn't spawn), the idle AI doesn't run, and play commands from the bus/socket are ignored. The primary character's `AnimationMixer` is driven directly from a mix of per-clip weights plus an A↔B crossfade. "Save as sequence" stores a `blend` step that the Move panel replays under **My combos**. |
-| **Core code** | `src/controllers/studioController.ts` (applies the mix; updated from `onWorldUpdate`), `src/animation/studioMix.ts` (pure weight/crossfade math), `src/ui/studioPanel.ts`, `src/state/savedSequences.ts` (localStorage), `blend` steps in `src/animation/manager.ts` |
+| **Behavior notes** | Its own stage: the block village and the crowd are hidden (and the crowd doesn't spawn), the idle AI doesn't run, and play commands from the bus/socket are ignored. The primary character's `AnimationMixer` is driven directly from a mix of per-clip weights plus an A↔B crossfade. The **Routine** section collects mixes as steps (plus pauses) with a length each; "Play routine" previews them on the stage (the controller applies the routine weights instead of the mix until it ends, is stopped, the mix is edited, or the route is left) and "Save routine" stores them as one sequence of `blend`/`pause` steps that the Move panel replays under **My combos**. With no steps, "Save combo" stores the current mix as a single `blend` step. |
+| **Core code** | `src/controllers/studioController.ts` (applies the mix; updated from `onWorldUpdate`), `src/animation/studioMix.ts` (pure weight/crossfade math), `src/animation/studioRoutine.ts` (pure routine edits, timing and preview weights), `src/ui/studioPanel.ts`, `src/state/savedSequences.ts` (localStorage), `blend` steps in `src/animation/manager.ts` |
 | **Styles** | `src/styles/_studio.scss`; `body[data-route="studio"]` shares the viewer layout rules in `_routes.scss` |
 
 ---

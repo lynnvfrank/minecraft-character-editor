@@ -1,7 +1,8 @@
 /**
  * Dance studio (`#/studio`): drives the primary character's AnimationMixer directly from a
  * StudioMix (per-clip weights + A↔B crossfade). The math lives in `animation/studioMix.ts`;
- * this module only applies it to actions and owns enter/exit.
+ * this module only applies it to actions and owns enter/exit. It also previews a routine
+ * (`animation/studioRoutine.ts`) by applying the routine's weights instead of the mix's.
  *
  * The studio is its own stage: it is updated from the main loop's `onWorldUpdate` hook
  * (auto-sweep), the home world (block village, crowd) is hidden on this route, and the idle AI
@@ -25,6 +26,7 @@ import {
   type StudioLayer,
   type StudioMix,
 } from '../animation/studioMix';
+import { routineWeightsAt, stepAtTime, totalDuration, type RoutineStep } from '../animation/studioRoutine';
 import type { BlendStep } from '../domain/sequences';
 import type { CharacterState } from './characterTypes';
 
@@ -44,6 +46,8 @@ export type StudioSnapshot = {
   applied: Map<string, { weight: number; timeScale: number }>;
   sweeping: boolean;
   sweepPeriodSec: number;
+  /** Step of the routine being previewed, or null when the live mix is in control. */
+  routineIndex: number | null;
 };
 
 const EXIT_FADE_SEC = 0.3;
@@ -58,9 +62,22 @@ export function createStudioController(deps: StudioControllerDeps) {
   const slice = createSubscribable();
   /** Action set the mix was last applied to; changes when the character loads or its rig swaps. */
   let appliedTo: Record<string, THREE.AnimationAction> | null = null;
+  /**
+   * Routine preview. While set, it (not the mix) decides the weights, so the two never fight
+   * over the mixer; the mix itself is left alone and takes over again when the preview ends.
+   * Any edit to the mix ends the preview.
+   */
+  let routine: { steps: readonly RoutineStep[]; time: number; total: number } | null = null;
+
+  /** What a pause with nothing before it shows: the idle clip. */
+  function restWeights(): Map<string, { weight: number; timeScale: number }> {
+    const char = deps.getCharacter();
+    const idleKey = char && Object.entries(char.actions).find(([, a]) => a === char.idleAction)?.[0];
+    return new Map(idleKey ? [[idleKey, { weight: 1, timeScale: 1 }]] : []);
+  }
 
   function apply(): void {
-    applied = resolveMixWeights(mix);
+    applied = routine ? routineWeightsAt(routine.steps, routine.time, restWeights()) : resolveMixWeights(mix);
     const char = deps.getCharacter();
     if (char && active) {
       appliedTo = char.actions;
@@ -132,6 +149,7 @@ export function createStudioController(deps: StudioControllerDeps) {
       active = false;
       appliedTo = null;
       sweeping = false;
+      routine = null;
       const char = deps.getCharacter();
       if (char) {
         for (const action of Object.values(char.actions)) {
@@ -155,6 +173,12 @@ export function createStudioController(deps: StudioControllerDeps) {
         apply();
         if (first) frameCamera();
       }
+      if (routine) {
+        routine.time += Math.min(delta, 0.1);
+        if (routine.time >= routine.total) routine = null; // finished: back to the live mix
+        apply();
+        return;
+      }
       if (!sweeping) return;
       if (!mix.crossfade.a || !mix.crossfade.b) return;
       const next = stepSweep(mix.crossfade.t, sweepDir, Math.min(delta, 0.1), sweepPeriodSec);
@@ -162,7 +186,13 @@ export function createStudioController(deps: StudioControllerDeps) {
       mix = { ...mix, crossfade: { ...mix.crossfade, t: next.t } };
       apply();
     },
-    getSnapshot: (): StudioSnapshot => ({ mix, applied, sweeping, sweepPeriodSec }),
+    getSnapshot: (): StudioSnapshot => ({
+      mix,
+      applied,
+      sweeping,
+      sweepPeriodSec,
+      routineIndex: routine ? stepAtTime(routine.steps, routine.time)?.index ?? null : null,
+    }),
     subscribe: (listener: () => void): Unsubscribe => slice.subscribe(listener),
 
     setLayer(key: string, patch: Partial<StudioLayer>): void {
@@ -173,6 +203,7 @@ export function createStudioController(deps: StudioControllerDeps) {
         timeScale: clamp(patch.timeScale ?? prev.timeScale, MIN_TIME_SCALE, MAX_TIME_SCALE),
       };
       mix = { ...mix, layers: { ...mix.layers, [key]: next } };
+      routine = null;
       apply();
     },
     setCrossfade(patch: Partial<StudioCrossfade>): void {
@@ -181,10 +212,12 @@ export function createStudioController(deps: StudioControllerDeps) {
       mix = { ...mix, crossfade: cf };
       // Dragging the slider takes over from the auto-sweep.
       if (patch.t != null) sweeping = false;
+      routine = null;
       apply();
     },
     setNormalize(on: boolean): void {
       mix = { ...mix, normalize: on };
+      routine = null;
       apply();
     },
     setSweeping(on: boolean, periodSec?: number): void {
@@ -196,6 +229,28 @@ export function createStudioController(deps: StudioControllerDeps) {
     reset(): void {
       mix = { ...createEmptyMix(), normalize: mix.normalize };
       sweeping = false;
+      routine = null;
+      apply();
+    },
+    /** Replace the whole mix (e.g. load a routine step back into the sliders). */
+    setMix(next: StudioMix): void {
+      mix = next;
+      sweeping = false;
+      routine = null;
+      apply();
+    },
+    /** Preview a routine from its first step; plays once. False if there is nothing to play. */
+    playRoutine(steps: readonly RoutineStep[]): boolean {
+      const total = totalDuration(steps);
+      if (!active || total <= 0) return false;
+      routine = { steps, time: 0, total };
+      apply();
+      return true;
+    },
+    /** End the preview and hand the character back to the live mix. */
+    stopRoutine(): void {
+      if (!routine) return;
+      routine = null;
       apply();
     },
     /** The current mix as one blend step (null when nothing plays). */

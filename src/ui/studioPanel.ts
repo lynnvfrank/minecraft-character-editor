@@ -1,7 +1,9 @@
 /**
  * Dance studio panel (`#/studio`): an A↔B crossfade at the top, then every clip with
- * play/stop, a weight slider and a speed slider. "Save as sequence" snapshots the mix into the
- * saved-sequence store, which the Move panel lists under "My combos".
+ * play/stop, a weight slider and a speed slider. The Routine section collects mixes as steps
+ * (add, reorder, set lengths, preview) and saves them as one sequence in the saved-sequence
+ * store, which the Move panel lists under "My combos". With no steps, Save stores the current
+ * mix as a one-step combo. Routine rules live in `animation/studioRoutine.ts`.
  *
  * Created once at startup (like the Move panel) and shown only on the studio route via CSS, so
  * its listeners don't stack up on re-entry.
@@ -9,6 +11,26 @@
 import type { StudioCrossfade, StudioLayer, StudioMix } from '../animation/studioMix';
 import type { BlendStep, SavedSequence, SavedSequenceStep } from '../domain/sequences';
 import { describeBlend } from '../animation/studioMix';
+import {
+  addPause,
+  addStep,
+  blendStepToMix,
+  clampStepDuration,
+  DEFAULT_STEP_SEC,
+  describeRoutineLength,
+  formatSeconds,
+  hasBlend,
+  MAX_STEP_SEC,
+  MIN_STEP_SEC,
+  moveStep,
+  removeStep,
+  selectionAfterMove,
+  selectionAfterRemove,
+  setStepDuration,
+  toSavedSteps,
+  updateStep,
+  type RoutineStep,
+} from '../animation/studioRoutine';
 import { MOVEMENT_CLIPS, moveEmoji, moveLabel } from './moveInfo';
 
 type AnimationEntry = { key: string; label: string };
@@ -20,6 +42,7 @@ export type StudioPanelApi = {
     applied: Map<string, { weight: number; timeScale: number }>;
     sweeping: boolean;
     sweepPeriodSec: number;
+    routineIndex: number | null;
   };
   subscribe: (listener: () => void) => () => void;
   setLayer: (key: string, patch: Partial<StudioLayer>) => void;
@@ -28,6 +51,9 @@ export type StudioPanelApi = {
   setSweeping: (on: boolean, periodSec?: number) => void;
   reset: () => void;
   toBlendStep: (durationSec: number) => BlendStep | null;
+  setMix: (mix: StudioMix) => void;
+  playRoutine: (steps: readonly RoutineStep[]) => boolean;
+  stopRoutine: () => void;
 };
 
 export type StudioPanelDeps = {
@@ -128,7 +154,7 @@ export function createStudioPanel(deps: StudioPanelDeps) {
     studio.setCrossfade({ a: b, b: a, t: 1 - t });
   });
 
-  // --- Mix options + save ---
+  // --- Mix options ---
   const opts = el('section', 'studio-section studio-options');
   const normLabel = el('label', 'studio-check');
   const normBox = el('input');
@@ -142,6 +168,65 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   resetBtn.addEventListener('click', () => studio.reset());
   const optRow = el('div', 'studio-row');
   optRow.append(normLabel, resetBtn);
+  opts.append(optRow);
+
+  const labels = new Map<string, string>();
+  const labelFor = (key: string) => labels.get(key) ?? moveLabel(key);
+
+  // --- Routine: a list of mixes played one after another ---
+  let draft: readonly RoutineStep[] = [];
+  /** Step whose mix is loaded in the sliders ("Update step" writes back to it). */
+  let selected: number | null = null;
+
+  function numInput(value: number, label: string): HTMLInputElement {
+    const n = el('input', 'studio-input studio-input--num');
+    n.type = 'number';
+    n.min = String(MIN_STEP_SEC);
+    n.max = String(MAX_STEP_SEC);
+    n.step = '0.25';
+    n.value = String(value);
+    n.title = label;
+    n.setAttribute('aria-label', label);
+    return n;
+  }
+  function iconBtn(text: string, label: string): HTMLButtonElement {
+    const b = el('button', 'studio-btn studio-btn--icon', text);
+    b.type = 'button';
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    return b;
+  }
+
+  const routine = el('section', 'studio-section studio-routine');
+  routine.append(el('h3', 'studio-section-title', 'Routine'));
+  const addRow = el('div', 'studio-row');
+  const durInput = numInput(DEFAULT_STEP_SEC, 'Step length (seconds)');
+  durInput.id = 'studio-step-duration';
+  const addBtn = el('button', 'studio-btn', 'Add step');
+  addBtn.type = 'button';
+  addBtn.id = 'studio-add-step-btn';
+  addBtn.title = 'Add the current mix as a step';
+  const pauseBtn = el('button', 'studio-btn', 'Add pause');
+  pauseBtn.type = 'button';
+  pauseBtn.id = 'studio-add-pause-btn';
+  pauseBtn.title = 'Hold the last step a little longer';
+  const updateBtn = el('button', 'studio-btn', 'Update step');
+  updateBtn.type = 'button';
+  updateBtn.id = 'studio-update-step-btn';
+  updateBtn.hidden = true;
+  addRow.append(durInput, el('span', 'studio-unit', 's'), addBtn, pauseBtn, updateBtn);
+
+  const stepList = el('ol', 'studio-steps');
+  stepList.id = 'studio-step-list';
+
+  const playRow = el('div', 'studio-row studio-routine-foot');
+  const totalLabel = el('span', 'studio-routine-total');
+  const clearBtn = el('button', 'studio-btn', 'Clear');
+  clearBtn.type = 'button';
+  const playBtn = el('button', 'studio-btn', '▶ Play routine');
+  playBtn.type = 'button';
+  playBtn.id = 'studio-play-routine-btn';
+  playRow.append(totalLabel, clearBtn, playBtn);
 
   const saveRow = el('div', 'studio-row studio-save');
   const nameInput = el('input', 'studio-input');
@@ -149,35 +234,132 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   nameInput.id = 'studio-save-name';
   nameInput.placeholder = 'Name (optional)';
   nameInput.maxLength = 40;
-  nameInput.setAttribute('aria-label', 'Sequence name');
-  const durInput = el('input', 'studio-input studio-input--num');
-  durInput.type = 'number';
-  durInput.id = 'studio-save-duration';
-  durInput.min = '0.5';
-  durInput.max = '60';
-  durInput.step = '0.5';
-  durInput.value = '4';
-  durInput.title = 'How long the combo plays (seconds)';
-  durInput.setAttribute('aria-label', 'Duration in seconds');
-  const saveBtn = el('button', 'studio-btn studio-btn--primary', 'Save as sequence');
+  nameInput.setAttribute('aria-label', 'Combo name');
+  const saveBtn = el('button', 'studio-btn studio-btn--save', 'Save combo');
   saveBtn.type = 'button';
   saveBtn.id = 'studio-save-btn';
+  saveRow.append(nameInput, saveBtn);
   const saveMsg = el('p', 'studio-hint');
   saveMsg.setAttribute('role', 'status');
-  saveRow.append(nameInput, durInput, el('span', 'studio-unit', 's'));
-  opts.append(optRow, saveRow, saveBtn, saveMsg);
+  routine.append(addRow, stepList, playRow, saveRow, saveMsg);
 
-  const labels = new Map<string, string>();
-  const labelFor = (key: string) => labels.get(key) ?? moveLabel(key);
-  saveBtn.addEventListener('click', () => {
-    const step = studio.toBlendStep(Number(durInput.value) || 4);
-    if (!step) {
-      saveMsg.textContent = 'Play a clip or pick A/B first.';
-      return;
+  const stepText = (s: RoutineStep) => (s.type === 'blend' ? describeBlend(s, labelFor) : 'Pause');
+  const stepLength = () => clampStepDuration(Number(durInput.value || NaN));
+  const say = (text: string) => {
+    saveMsg.textContent = text;
+  };
+  const NOTHING_PLAYING = 'Play a clip or pick A/B first.';
+
+  /** Every change to the draft goes through here: it ends a running preview and redraws. */
+  function setDraft(next: readonly RoutineStep[], nextSelected: number | null) {
+    if (next !== draft) studio.stopRoutine();
+    draft = next;
+    selected = nextSelected != null && nextSelected < draft.length ? nextSelected : null;
+    renderRoutine();
+  }
+
+  function renderRoutine() {
+    stepList.replaceChildren(
+      ...draft.map((s, i) => {
+        const li = el('li', 'studio-step');
+        li.classList.toggle('selected', i === selected);
+        const pick = el('button', 'studio-step-name', `${i + 1}. ${stepText(s)}`);
+        pick.type = 'button';
+        pick.title = s.type === 'blend' ? 'Load this step into the sliders' : 'Pause';
+        pick.setAttribute('aria-pressed', String(i === selected));
+        pick.addEventListener('click', () => {
+          if (s.type === 'blend') studio.setMix(blendStepToMix(s));
+          else studio.stopRoutine();
+          setDraft(draft, i);
+          say(s.type === 'blend' ? `Step ${i + 1} is in the sliders. Tweak it, then Update step.` : '');
+        });
+        const dur = numInput(s.duration, `Step ${i + 1} length (seconds)`);
+        dur.addEventListener('change', () => setDraft(setStepDuration(draft, i, Number(dur.value || NaN)), selected));
+        const up = iconBtn('↑', `Move step ${i + 1} up`);
+        up.disabled = i === 0;
+        up.addEventListener('click', () =>
+          setDraft(moveStep(draft, i, -1), selectionAfterMove(selected, i, -1, draft.length))
+        );
+        const down = iconBtn('↓', `Move step ${i + 1} down`);
+        down.disabled = i === draft.length - 1;
+        down.addEventListener('click', () =>
+          setDraft(moveStep(draft, i, 1), selectionAfterMove(selected, i, 1, draft.length))
+        );
+        const del = iconBtn('✕', `Remove step ${i + 1}`);
+        del.addEventListener('click', () => setDraft(removeStep(draft, i), selectionAfterRemove(selected, i)));
+        li.append(pick, dur, up, down, del);
+        return li;
+      })
+    );
+    const empty = draft.length === 0;
+    stepList.hidden = empty;
+    playRow.hidden = empty;
+    pauseBtn.disabled = empty;
+    totalLabel.textContent = describeRoutineLength(draft);
+    updateBtn.hidden = selected == null;
+    updateBtn.textContent = selected == null ? 'Update step' : `Update step ${selected + 1}`;
+    saveBtn.textContent = empty ? 'Save combo' : 'Save routine';
+    saveBtn.title = empty ? 'Save the current mix as a combo' : 'Save every step as one combo';
+    renderPreview();
+  }
+
+  /** Runs on every studio notification (each frame while previewing), so it only flips classes. */
+  function renderPreview() {
+    const index = studio.getSnapshot().routineIndex;
+    const playing = index != null;
+    playBtn.textContent = playing ? '■ Stop' : '▶ Play routine';
+    playBtn.setAttribute('aria-pressed', String(playing));
+    for (let i = 0; i < stepList.children.length; i++) {
+      stepList.children[i]!.classList.toggle('active', i === index);
     }
-    const seq = deps.savedSequences.add(nameInput.value.trim() || describeBlend(step, labelFor), [step]);
+  }
+
+  addBtn.addEventListener('click', () => {
+    const step = studio.toBlendStep(stepLength());
+    if (!step) return say(NOTHING_PLAYING);
+    setDraft(addStep(draft, step, stepLength()), selected);
+    say('');
+  });
+  pauseBtn.addEventListener('click', () => {
+    setDraft(addPause(draft, stepLength()), selected);
+    say('');
+  });
+  updateBtn.addEventListener('click', () => {
+    if (selected == null) return;
+    const step = studio.toBlendStep(DEFAULT_STEP_SEC);
+    if (!step) return say(NOTHING_PLAYING);
+    const n = selected + 1;
+    setDraft(updateStep(draft, selected, step), selected);
+    say(`Step ${n} updated.`);
+  });
+  durInput.addEventListener('change', () => {
+    durInput.value = String(stepLength());
+  });
+  clearBtn.addEventListener('click', () => {
+    setDraft([], null);
+    say('');
+  });
+  playBtn.addEventListener('click', () => {
+    if (studio.getSnapshot().routineIndex != null) return studio.stopRoutine();
+    if (!studio.playRoutine(draft)) say('Add a step first.');
+    else say('');
+  });
+  saveBtn.addEventListener('click', () => {
+    let steps: readonly RoutineStep[] = draft;
+    if (steps.length === 0) {
+      // No routine yet: save the current mix as a one-step combo.
+      const step = studio.toBlendStep(stepLength());
+      if (!step) return say(NOTHING_PLAYING);
+      steps = addStep([], step, stepLength());
+    } else if (!hasBlend(steps)) {
+      return say('Add a step with a clip first.');
+    }
+    const first = steps.find((s) => s.type === 'blend');
+    const fallback =
+      steps.length === 1 && first?.type === 'blend' ? describeBlend(first, labelFor) : `${steps.length}-step routine`;
+    const seq = deps.savedSequences.add(nameInput.value.trim() || fallback, toSavedSteps(steps));
     nameInput.value = '';
-    saveMsg.textContent = `Saved “${seq.label}”. Play it from Home → All moves → My combos.`;
+    say(`Saved “${seq.label}”. Play it from Home → All moves → My combos.`);
   });
 
   // --- Saved list ---
@@ -194,7 +376,10 @@ export function createStudioPanel(deps: StudioPanelDeps) {
         const li = el('li', 'studio-saved-item');
         const name = el('span', 'studio-saved-name', sq.label);
         name.title = sq.steps
-          .map((s) => (s.type === 'blend' ? describeBlend(s, labelFor) : s.type === 'animation' ? labelFor(s.name) : 'pause'))
+          .map((s) => {
+            const text = s.type === 'blend' ? describeBlend(s, labelFor) : s.type === 'animation' ? labelFor(s.name) : 'pause';
+            return sq.steps.length > 1 && s.duration != null ? `${text} (${formatSeconds(s.duration)})` : text;
+          })
           .join(' → ');
         const del = el('button', 'studio-btn studio-btn--icon', '✕');
         del.type = 'button';
@@ -281,7 +466,7 @@ export function createStudioPanel(deps: StudioPanelDeps) {
   filter.addEventListener('input', applyFilter);
   showAllBox.addEventListener('change', applyFilter);
 
-  root.append(header, xf, opts, savedSection, clipsSection);
+  root.append(header, xf, opts, routine, savedSection, clipsSection);
 
   // --- Sync from state ---
   function render() {
@@ -315,6 +500,7 @@ export function createStudioPanel(deps: StudioPanelDeps) {
       r.li.classList.toggle('audible', w > 0);
       r.li.classList.toggle('in-crossfade', r.key === a || r.key === b);
     }
+    renderPreview();
   }
   studio.subscribe(render);
   deps.savedSequences.subscribe(renderSaved);
@@ -336,10 +522,12 @@ export function createStudioPanel(deps: StudioPanelDeps) {
     }
     applyFilter();
     render();
+    renderRoutine();
     renderSaved();
   }
 
   renderSaved();
+  renderRoutine();
   render();
   return { setAnimations };
 }
